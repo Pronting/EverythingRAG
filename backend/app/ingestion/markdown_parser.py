@@ -1,7 +1,8 @@
-"""ingestion：Markdown 解析 —— 标题树 + 归一化正文（MVP 任务 2）。
+"""ingestion：Markdown 解析 —— 块级结构 + 标题树 + 归一化正文（MVP 任务 2/3）。
 
 用 markdown-it-py 的 token 流（不经过 HTML 渲染）把 Markdown 文档解析为
-「标题树 + 归一化正文」，供任务 3 语义切块使用。纯内存文本操作，零出网。
+有序块级结构 ``blocks``（单一数据源），标题树与归一化正文均由 blocks 派生，
+供任务 3 语义切块使用。纯内存文本操作，零出网。
 """
 
 from __future__ import annotations
@@ -34,12 +35,23 @@ class HeadingNode:
 
 
 @dataclass(frozen=True)
+class MDBlock:
+    """Markdown 块级结构单元：kind + 归一化文本（heading 另带 level/anchor）。"""
+
+    kind: str  # "heading" | "paragraph" | "code" | "list" | "table" | "quote" | "hr" | "image" | "frontmatter"
+    text: str  # 归一化文本（heading 即标题文本；hr/frontmatter 为空）
+    level: int | None = None  # 仅 heading：1-6
+    anchor: str | None = None  # 仅 heading：文档唯一，与 heading_tree 一致
+
+
+@dataclass(frozen=True)
 class ParsedMarkdown:
-    """Markdown 解析结果：标题 + 标题树 + 归一化正文。"""
+    """Markdown 解析结果：标题 + 标题树 + 归一化正文 + 有序块级结构。"""
 
     title: str | None  # frontmatter title 或首个 H1（无则 None）
     heading_tree: tuple[HeadingNode, ...]
     normalized_text: str
+    blocks: tuple[MDBlock, ...]  # 单一数据源：文档顺序块级结构
 
 
 @dataclass
@@ -53,14 +65,20 @@ class _MutableNode:
 
 
 def parse_markdown(text: str) -> ParsedMarkdown:
-    """把 Markdown 文本解析为标题树 + 归一化正文（纯函数，零出网）。"""
+    """把 Markdown 文本解析为块结构 + 标题树 + 归一化正文（纯函数，零出网）。
+
+    ``_build_blocks`` 是主 pass：按 token 流产出有序 MDBlock；标题树与
+    归一化正文均由 blocks 派生，保证单一数据源。
+    """
     text = _to_lf(text).lstrip("﻿")
     meta, body = _split_frontmatter(text)
     tokens = _MD.parse(body)
+    blocks = _build_blocks(tokens, has_frontmatter=body is not text)
     return ParsedMarkdown(
         title=_resolve_title(meta, tokens),
-        heading_tree=_build_heading_tree(tokens),
-        normalized_text=_build_normalized_text(tokens),
+        heading_tree=_heading_tree_from_blocks(blocks),
+        normalized_text=_normalized_text_from_blocks(blocks),
+        blocks=blocks,
     )
 
 
@@ -115,14 +133,70 @@ def _resolve_title(meta: dict[str, str], tokens: list[Token]) -> str | None:
     return None
 
 
-def _build_heading_tree(tokens: list[Token]) -> tuple[HeadingNode, ...]:
-    """由 token 流组装嵌套标题树：子标题挂在最近前驱上级下。"""
+def _build_blocks(tokens: list[Token], has_frontmatter: bool) -> tuple[MDBlock, ...]:
+    """按 token 流产出文档顺序的块级结构（单一数据源，主 pass）。
+
+    每个非标题 inline 文本为独立块（list/table/quote 内同理，保持块级粒度
+    以可靠区分代码块与段落边界）；代码块（fence/code_block）永远独立成块；
+    标题块的 level/anchor 与旧标题树使用同一 ``_make_anchor`` + ``seen``
+    序列，保证锚点一致。
+    """
+    blocks: list[MDBlock] = []
+    if has_frontmatter:
+        blocks.append(MDBlock(kind="frontmatter", text=""))
+    seen: set[str] = set()
+    context: list[str] = []  # 容器栈：list / quote / table，决定 inline 的 kind
+    i = 0
+    n = len(tokens)
+    while i < n:
+        tok = tokens[i]
+        t = tok.type
+        if t == "heading_open":
+            text = ""
+            if i + 1 < n and tokens[i + 1].type == "inline":
+                text = _inline_token_text(tokens[i + 1])
+                i += 1  # 跳过该标题的 inline，避免重复
+            blocks.append(
+                MDBlock(kind="heading", text=text, level=int(tok.tag[1:]), anchor=_make_anchor(text, seen))
+            )
+        elif t == "inline":
+            text = _inline_token_text(tok)
+            if text:
+                kind = "image" if _is_pure_image(tok) else (context[-1] if context else "paragraph")
+                blocks.append(MDBlock(kind=kind, text=text))
+        elif t in ("fence", "code_block"):
+            text = _normalize_text(tok.content.rstrip("\n"))
+            if text:
+                blocks.append(MDBlock(kind="code", text=text))
+        elif t == "hr":
+            blocks.append(MDBlock(kind="hr", text=""))
+        elif t in ("bullet_list_open", "ordered_list_open"):
+            context.append("list")
+        elif t == "blockquote_open":
+            context.append("quote")
+        elif t == "table_open":
+            context.append("table")
+        elif t in ("bullet_list_close", "ordered_list_close", "blockquote_close", "table_close"):
+            if context:
+                context.pop()
+        i += 1
+    return tuple(blocks)
+
+
+def _is_pure_image(tok: Token) -> bool:
+    """inline token 只含图片子节点（无文本）时为纯图片段落。"""
+    return bool(tok.children) and all(c.type == "image" for c in tok.children)
+
+
+def _heading_tree_from_blocks(blocks: tuple[MDBlock, ...]) -> tuple[HeadingNode, ...]:
+    """由 heading blocks 重建嵌套标题树：子标题挂在最近前驱上级下。"""
     roots: list[_MutableNode] = []
     stack: list[_MutableNode] = []
-    seen: set[str] = set()
-    for level, text in _iter_headings(tokens):
-        node = _MutableNode(level=level, text=text, anchor=_make_anchor(text, seen))
-        while stack and stack[-1].level >= level:
+    for block in blocks:
+        if block.kind != "heading" or block.level is None:
+            continue
+        node = _MutableNode(level=block.level, text=block.text, anchor=block.anchor or "")
+        while stack and stack[-1].level >= block.level:
             stack.pop()
         if stack:
             stack[-1].children.append(node)
@@ -130,6 +204,11 @@ def _build_heading_tree(tokens: list[Token]) -> tuple[HeadingNode, ...]:
             roots.append(node)
         stack.append(node)
     return _freeze_nodes(roots)
+
+
+def _normalized_text_from_blocks(blocks: tuple[MDBlock, ...]) -> str:
+    """由 blocks 的文本以单个空行连接派生归一化正文（标题文本含在内）。"""
+    return _normalize_text("\n\n".join(b.text for b in blocks if b.text))
 
 
 def _make_anchor(text: str, seen: set[str]) -> str:
@@ -158,35 +237,6 @@ def _freeze_nodes(nodes: list[_MutableNode]) -> tuple[HeadingNode, ...]:
         HeadingNode(level=n.level, text=n.text, anchor=n.anchor, children=_freeze_nodes(n.children))
         for n in nodes
     )
-
-
-def _build_normalized_text(tokens: list[Token]) -> str:
-    """拼接非标题块为归一化正文；标题文本单独成块保证可检索。
-
-    每个源块为一个块条目，块之间以单个空行（\\n\\n）分隔，保留段落边界；
-    块内部多余空行在 _normalize_text 中折叠。
-    """
-    blocks: list[str] = []
-    i = 0
-    n = len(tokens)
-    while i < n:
-        tok = tokens[i]
-        if tok.type == "heading_open":
-            if i + 1 < n and tokens[i + 1].type == "inline":
-                text = _inline_token_text(tokens[i + 1])
-                if text:
-                    blocks.append(text)
-                i += 1  # 跳过该标题的 inline token，避免正文重复
-        elif tok.type == "inline":
-            text = _inline_token_text(tok)
-            if text:
-                blocks.append(text)
-        elif tok.type in ("fence", "code_block"):
-            text = tok.content.rstrip("\n")
-            if text:
-                blocks.append(text)
-        i += 1
-    return _normalize_text("\n\n".join(blocks))
 
 
 def _inline_token_text(tok: Token) -> str:
