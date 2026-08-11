@@ -18,9 +18,13 @@ class VectorStore(Protocol):
     - 单一 collection（名称含嵌入模型指纹），余弦距离。
     """
 
-    def upsert(self, blocks: list[tuple[str, list[float], BlockMetadata]]) -> None:
+    def upsert(
+        self,
+        blocks: list[tuple[str, str, list[float], BlockMetadata]],
+    ) -> None:
         """按 block_id 幂等写入「向量 + 块文本 + 元数据 + 来源」。
-        blocks: (block_id, vector, metadata) 列表。
+        blocks: (block_id, text, vector, metadata) 列表；text 为块原文
+        （Chroma 存储必须包含文本，检索返回带文本的块）。
         """
         ...
 
@@ -43,7 +47,11 @@ class VectorStore(Protocol):
 
 
 def create_vector_store(**kwargs: Any) -> VectorStore:
-    """工厂：MVP 返回 ChromaVectorStore；后续可替换为 LanceDB/Qdrant。"""
-    from app.vectorstore.chroma_store import ChromaVectorStore
+    """工厂：MVP 返回 ChromaVectorStore；后续可替换为 LanceDB/Qdrant。
 
-    return ChromaVectorStore(**kwargs)
+    参数透传给 chroma 工厂（persist_dir / collection_name / embedder）：
+    collection_name 缺省 = chunks__bge-m3__v1，embedder 缺省惰性 FastEmbedEmbedder。
+    """
+    from app.vectorstore.chroma_store import create_vector_store as _chroma_factory
+
+    return _chroma_factory(**kwargs)
