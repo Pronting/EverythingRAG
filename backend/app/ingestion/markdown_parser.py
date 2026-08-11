@@ -3,15 +3,14 @@
 用 markdown-it-py 的 token 流（不经过 HTML 渲染）把 Markdown 文档解析为
 「标题树 + 归一化正文」，供任务 3 语义切块使用。纯内存文本操作，零出网。
 """
+
 from __future__ import annotations
 
-import logging
 import re
 from dataclasses import dataclass, field
 
 from markdown_it import MarkdownIt
-
-logger = logging.getLogger(__name__)
+from markdown_it.token import Token
 
 #: 使用 js-default 预设：启用 GFM 表格 / 删除线，不启用 linkify（无需额外依赖）。
 _MD = MarkdownIt("default")
@@ -91,7 +90,7 @@ def _split_frontmatter(text: str) -> tuple[dict[str, str], str]:
     return {}, text
 
 
-def _iter_headings(tokens: list) -> list[tuple[int, str]]:
+def _iter_headings(tokens: list[Token]) -> list[tuple[int, str]]:
     """按文档顺序收集 (level, 归一化标题文本)；空标题文本为 ""。"""
     headings: list[tuple[int, str]] = []
     for i, tok in enumerate(tokens):
@@ -105,7 +104,7 @@ def _iter_headings(tokens: list) -> list[tuple[int, str]]:
     return headings
 
 
-def _resolve_title(meta: dict[str, str], tokens: list) -> str | None:
+def _resolve_title(meta: dict[str, str], tokens: list[Token]) -> str | None:
     """标题优先级：frontmatter title > 首个非空 H1；均无则 None。"""
     fm_title = meta.get("title")
     if fm_title is not None and fm_title.strip():
@@ -116,11 +115,11 @@ def _resolve_title(meta: dict[str, str], tokens: list) -> str | None:
     return None
 
 
-def _build_heading_tree(tokens: list) -> tuple[HeadingNode, ...]:
+def _build_heading_tree(tokens: list[Token]) -> tuple[HeadingNode, ...]:
     """由 token 流组装嵌套标题树：子标题挂在最近前驱上级下。"""
     roots: list[_MutableNode] = []
     stack: list[_MutableNode] = []
-    seen: dict[str, int] = {}
+    seen: set[str] = set()
     for level, text in _iter_headings(tokens):
         node = _MutableNode(level=level, text=text, anchor=_make_anchor(text, seen))
         while stack and stack[-1].level >= level:
@@ -133,12 +132,16 @@ def _build_heading_tree(tokens: list) -> tuple[HeadingNode, ...]:
     return _freeze_nodes(roots)
 
 
-def _make_anchor(text: str, seen: dict[str, int]) -> str:
-    """生成稳定唯一锚点：slug 为基址，同级/全局重复加 -1/-2 后缀。"""
+def _make_anchor(text: str, seen: set[str]) -> str:
+    """生成稳定唯一锚点：slug 为基址，撞车则递增后缀直到全局唯一。"""
     base = _slugify(text) or _PLACEHOLDER_ANCHOR
-    count = seen.get(base, 0)
-    seen[base] = count + 1
-    return base if count == 0 else f"{base}-{count}"
+    candidate = base
+    n = 1
+    while candidate in seen:
+        candidate = f"{base}-{n}"
+        n += 1
+    seen.add(candidate)
+    return candidate
 
 
 def _slugify(text: str) -> str:
@@ -157,8 +160,12 @@ def _freeze_nodes(nodes: list[_MutableNode]) -> tuple[HeadingNode, ...]:
     )
 
 
-def _build_normalized_text(tokens: list) -> str:
-    """拼接非标题块为归一化正文；标题文本单独成块保证可检索。"""
+def _build_normalized_text(tokens: list[Token]) -> str:
+    """拼接非标题块为归一化正文；标题文本单独成块保证可检索。
+
+    每个源块为一个块条目，块之间以单个空行（\\n\\n）分隔，保留段落边界；
+    块内部多余空行在 _normalize_text 中折叠。
+    """
     blocks: list[str] = []
     i = 0
     n = len(tokens)
@@ -179,13 +186,13 @@ def _build_normalized_text(tokens: list) -> str:
             if text:
                 blocks.append(text)
         i += 1
-    return _normalize_text("\n".join(blocks))
+    return _normalize_text("\n\n".join(blocks))
 
 
-def _inline_token_text(tok: object) -> str:
+def _inline_token_text(tok: Token) -> str:
     """从 inline token 的子 token 提取纯文本：去标记、保可读内容。"""
     parts: list[str] = []
-    for child in tok.children or []:  # type: ignore[attr-defined]
+    for child in tok.children or []:
         if child.type in ("text", "code_inline"):
             parts.append(child.content)
         elif child.type == "image":
@@ -197,11 +204,11 @@ def _inline_token_text(tok: object) -> str:
     return _INLINE_SPACES_RE.sub(" ", "".join(parts)).strip()
 
 
-def _image_alt(tok: object) -> str:
+def _image_alt(tok: Token) -> str:
     """图片 token 的 alt 文本（无 alt 返回空串）。"""
-    if tok.children:  # type: ignore[attr-defined]
-        return "".join(c.content for c in tok.children)  # type: ignore[attr-defined]
-    return tok.content  # type: ignore[attr-defined]
+    if tok.children:
+        return "".join(c.content for c in tok.children)
+    return tok.content
 
 
 def _normalize_text(text: str) -> str:

@@ -2,6 +2,7 @@
 
 验收断言对应任务规格 7 条；全部为纯内存字符串操作，不产生文件读写与出网。
 """
+
 from __future__ import annotations
 
 import socket
@@ -95,6 +96,19 @@ def test_duplicate_headings_get_unique_anchors() -> None:
     assert len(set(anchors)) == len(anchors)
 
 
+def test_anchor_slug_collision_gets_unique_suffixes() -> None:
+    """slug 基址与自然 slug 碰撞时，后缀逐个递增直到全局唯一。"""
+    md = "# a-b\n\n# a b\n\n# a b 1"
+    anchors = [n.anchor for n in _flatten(parse_markdown(md).heading_tree)]
+    assert len(anchors) == len(set(anchors)) == 3
+    assert anchors == ["a-b", "a-b-1", "a-b-1-1"]
+
+    md2 = "# !!!\n\n# Section\n\n# Section 1"
+    anchors2 = [n.anchor for n in _flatten(parse_markdown(md2).heading_tree)]
+    assert len(anchors2) == len(set(anchors2)) == 3
+    assert anchors2 == ["section", "section-1", "section-1-1"]
+
+
 def test_heading_node_is_frozen() -> None:
     """标题节点为 frozen dataclass，不可原地修改。"""
     node = HeadingNode(level=1, text="t", anchor="t")
@@ -112,7 +126,13 @@ def test_inline_markup_stripped_text_kept() -> None:
     body = parsed.normalized_text
     for token in ("加粗", "斜体", "链接", "code"):
         assert token in body
-    for raw in ("**加粗**", "*斜体*", "[链接](https://example.com)", "https://example.com", "`code`"):
+    for raw in (
+        "**加粗**",
+        "*斜体*",
+        "[链接](https://example.com)",
+        "https://example.com",
+        "`code`",
+    ):
         assert raw not in body
 
 
@@ -128,7 +148,7 @@ def test_image_alt_kept_bare_image_dropped() -> None:
 
 def test_code_blocks_preserved_as_text() -> None:
     """围栏代码块与缩进代码块内容保留为正文文本。"""
-    md = "```python\nprint(\"hi\")\n```\n\n缩进块：\n\n    indent line\n"
+    md = '```python\nprint("hi")\n```\n\n缩进块：\n\n    indent line\n'
     body = parse_markdown(md).normalized_text
     assert 'print("hi")' in body
     assert "indent line" in body
@@ -157,13 +177,22 @@ def test_lists_and_blockquote_content_kept() -> None:
 
 
 def test_line_endings_and_blank_lines_normalized() -> None:
-    """CRLF→LF、连续空行折叠、行尾空白去除。"""
+    """CRLF→LF、连续空行折叠、行尾空白去除；相邻块间保留一个空行边界。"""
     md = "# T\r\n\r\npara one\r\nsecond line\r\n\r\n\r\n\r\n\r\nafter\r\n\r\n```\r\ncode\r\n```\r\n"
     body = parse_markdown(md).normalized_text
     assert "\r" not in body
     assert "para one second line" in body  # softbreak → 单个空格
     assert "after" in body
-    assert "\n\n\n" not in body  # 最多保留一个空行
+    assert "\n\n\n" not in body  # 块内多余空行折叠：最多保留一个空行
+    # 段落边界可分辨：相邻顶层块之间恰好一个空行
+    assert "para one second line\n\nafter" in body
+    assert "after\n\ncode" in body
+
+
+def test_paragraph_boundaries_preserved() -> None:
+    """相邻段落保留一个空行分隔（不合并），供任务 3 按段落切块。"""
+    assert parse_markdown("para one\n\npara two").normalized_text == "para one\n\npara two"
+    assert parse_markdown("a\n\n\n\nb").normalized_text == "a\n\nb"
 
 
 # ---------------------------------------------------------------- 3. frontmatter
@@ -258,6 +287,7 @@ def test_malformed_specific_cases() -> None:
 
 def test_parse_is_pure_local_no_network(monkeypatch) -> None:
     """解析过程零出网：若发起任何网络连接立即失败。"""
+
     def deny_connect(*args: object, **kwargs: object) -> None:
         raise AssertionError("解析过程中发起了网络连接")
 

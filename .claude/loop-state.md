@@ -12,7 +12,7 @@
 | # | 任务 | 验收标准（可执行断言） | 依赖 | Gate | 状态 |
 |---|---|---|---|---|---|
 | 1 | ingestion：目录扫描 + MD 发现 | pytest：fixture 目录（嵌套 .md / 非 md / 隐藏目录）→ 返回正确 md 文档 + 元数据（路径/文件名/mtime/xxhash 指纹）；隐藏与无关文件被忽略 | - | 无 | ✅ |
-| 2 | ingestion：MD 解析（markdown-it-py） | pytest：fixture MD → 标题树 + 归一化正文；空/畸形文档不崩（返回空结构，不抛异常） | 1 | 无 | 🔄 |
+| 2 | ingestion：MD 解析（markdown-it-py） | pytest：fixture MD → 标题树 + 归一化正文；空/畸形文档不崩（返回空结构，不抛异常） | 1 | 无 | ❌ |
 | 3 | ingestion：语义切块（防边界漂移） | pytest：长文按标题层级切块，块长 ≤ 上限、标题边界不漂移、块带来源路径与锚点 | 2 | 无 | ⬜ |
 | 4 | vectorstore：Chroma 适配 + bge-m3 嵌入 | 单测用 fake embedder：upsert + query top-k 返回带元数据块；collection 命名 `chunks__bge-m3__v1`；真模型**惰性加载** | 3 | ⚠️ 首次需下载 bge-m3 ONNX（~600MB，属显式 opt-in 出网，**需人工确认**） | ⬜ |
 | 5 | retrieval：检索管线 | pytest：mock vectorstore，query → top-k 带来源块；空查询 / 未建索引返回清晰错误而非崩溃 | 3,4 | 无 | ⬜ |
@@ -24,6 +24,7 @@
 ## 任务执行摘要（每轮完成后控制器留痕）
 
 - **任务 1 ✅ 2026-08-11**：`scan_directory` → `DiscoveredFile`（path/filename/mtime/size/content_hash=xxh64）；隐藏目录/文件跳过、失败容错不中断、确定性排序、零出网。**11 passed**，ruff 全绿，commit `d00bc97`。评审 APPROVE。遗留 MEDIUM（不阻塞，留待后续）：① 跳过日志为 debug——评审建议升 warning，但 PRD 日志脱敏红线「日志不得含文件路径」，保持 debug 正确 ② 目录不可读分支 `_on_walk_error` 缺单测 ③ `.md` 大小写敏感（`NOTE.MD` 忽略）④ 符号链接可能产生重复条目（增量同步去重任务需注意）。
+- **任务 2 🔄 首轮 34 passed（commit `8e5c973`）→ 评审 REVISE（第 1 次打回）**：HIGH = 锚点唯一性不成立（`_make_anchor` 按 slug 基址计数，`# a-b/# a b/# a b 1` 产生重复 `a-b-1`，可复现）；MEDIUM = 段落边界折叠丢失（影响任务 3 切块，需块间保留一个空行）。已按评审方案重派修复实施器。
 
 ## 半自动 / 需人工（设计决策 Gate，见 docs/loop/loop-workflow.md §5）
 
