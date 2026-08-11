@@ -45,6 +45,10 @@ class VectorStore(Protocol):
         """余弦检索 top_k，返回含 metadata / 相似度的块；where 支持平台/来源/时间过滤。"""
         ...
 
+    def count(self) -> int:
+        """返回库中块总数；0 = 尚未建立索引（检索层据此判定「未建索引」）。"""
+        ...
+
 
 def create_vector_store(**kwargs: Any) -> VectorStore:
     """工厂：MVP 返回 ChromaVectorStore；后续可替换为 LanceDB/Qdrant。

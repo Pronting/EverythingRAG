@@ -122,6 +122,10 @@ class ChromaVectorStore:
             )
         return hits
 
+    def count(self) -> int:
+        """返回库中块总数；0 = 尚未建立索引。"""
+        return self._collection.count()
+
 
 def create_vector_store(
     persist_dir: Path,
