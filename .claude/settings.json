@@ -1,0 +1,43 @@
+{
+  "enabledPlugins": {
+    "playwright@claude-plugins-official": true
+  },
+  "autoMemoryEnabled": true,
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"C:/Users/22331/Desktop/everything-rag/.claude/hooks/session_start.py\"",
+            "statusMessage": "加载项目状态与阶段验收点…"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"C:/Users/22331/Desktop/everything-rag/.claude/hooks/test_gate.py\"",
+            "timeout": 180,
+            "statusMessage": "测试门：运行相关测试…"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"C:/Users/22331/Desktop/everything-rag/.claude/hooks/stop_check.py\"",
+            "statusMessage": "阶段验收检查…"
+          }
+        ]
+      }
+    ]
+  }
+}
