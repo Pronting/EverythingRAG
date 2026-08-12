@@ -172,10 +172,23 @@ def create_chat_model(
         missing.append("EVERYTHING_RAG_CHAT_MODEL")
     if missing:
         raise ChatProviderError(f"对话 provider 未配置，缺少环境变量: {', '.join(missing)}")
-    api_key = os.environ.get(settings.chat_api_key_env)
+    api_key = _resolve_api_key(settings)
     return OpenAICompatChatModel(
         base_url=settings.chat_base_url,
         model=settings.chat_model,
         api_key=api_key,
         outbound=outbound,
     )
+
+
+def _resolve_api_key(settings: Settings) -> str | None:
+    """解析 API key：优先 Settings.chat_api_key（.env / 环境变量，SecretStr）；
+    其次回退 chat_api_key_env 指定的自定义环境变量名（真实 os.environ）。
+
+    pydantic-settings 会把 .env 里的值填进 Settings 字段，但不会注入
+    os.environ——因此 key 必须走 Settings 字段而非 os.environ.get，否则
+    .env 里配置的 key 永远读不到（会用 "local" 占位导致云端 401）。
+    """
+    if settings.chat_api_key is not None:
+        return settings.chat_api_key.get_secret_value()
+    return os.environ.get(settings.chat_api_key_env)

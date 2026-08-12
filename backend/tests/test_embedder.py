@@ -6,6 +6,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import numpy as np
 import pytest
 
@@ -14,13 +16,16 @@ from app.vectorstore.embedder import FastEmbedEmbedder
 
 
 class FakeTextEmbedding:
-    """记录实例化次数；embed 返回 dim=1024 的伪向量。"""
+    """记录实例化次数与最近 cache_dir；embed 返回 dim=1024 的伪向量。"""
 
     instances = 0
+    last_cache_dir: str | None = None
 
-    def __init__(self, model_name: str) -> None:
+    def __init__(self, model_name: str, cache_dir: str | None = None) -> None:
         type(self).instances += 1
         self.model_name = model_name
+        self.cache_dir = cache_dir
+        type(self).last_cache_dir = cache_dir
 
     def embed(self, texts: list[str]) -> list[np.ndarray]:
         return [np.zeros(FastEmbedEmbedder.dim, dtype=np.float32) for _ in texts]
@@ -59,11 +64,12 @@ class FakeUnregisteredTextEmbedding:
     instances = 0
     registered = False
 
-    def __init__(self, model_name: str) -> None:
+    def __init__(self, model_name: str, cache_dir: str | None = None) -> None:
         type(self).instances += 1
         if not type(self).registered:
             raise ValueError(f"Model {model_name} is not supported")
         self.model_name = model_name
+        self.cache_dir = cache_dir
 
     def embed(self, texts: list[str]) -> list[np.ndarray]:
         return [np.zeros(FastEmbedEmbedder.dim, dtype=np.float32) for _ in texts]
@@ -86,3 +92,27 @@ def test_register_fallback_when_model_not_bundled(monkeypatch: pytest.MonkeyPatc
     assert FakeUnregisteredTextEmbedding.registered is True
     assert len(vectors) == 1
     assert len(vectors[0]) == FastEmbedEmbedder.dim
+
+
+def test_cache_dir_defaults_to_persistent_data_dir(monkeypatch: pytest.MonkeyPatch) -> None:
+    """缺省缓存目录落到 data_dir/models（持久），不落在系统临时目录。
+
+    修复：fastembed 默认把模型下载进 tempfile.gettempdir()/fastembed_cache，
+    Windows 会定期清理 Temp 导致 2GB+ 模型反复重下。
+    """
+    import app.core.config as config_mod
+
+    class _FakeSettings:
+        embed_cache_dir = None
+        data_dir = Path("C:/fake-data")
+
+    monkeypatch.setattr(config_mod, "get_settings", lambda: _FakeSettings())
+    assert embedder_mod._default_cache_dir() == str(Path("C:/fake-data") / "models")
+
+
+def test_cache_dir_passed_through_to_model(monkeypatch: pytest.MonkeyPatch) -> None:
+    """显式 cache_dir 透传给底层 TextEmbedding。"""
+    monkeypatch.setattr(embedder_mod, "TextEmbedding", FakeTextEmbedding)
+    embedder = FastEmbedEmbedder(cache_dir="C:/persistent/models")
+    embedder.embed_texts(["text"])
+    assert FakeTextEmbedding.last_cache_dir == "C:/persistent/models"

@@ -10,6 +10,7 @@ import socket
 from typing import Any
 
 import pytest
+from pydantic import SecretStr
 
 from app.core.config import Settings
 from app.generation import providers
@@ -22,11 +23,16 @@ from app.generation.providers import (
 
 
 def _settings(**overrides: Any) -> Settings:
-    """构造带对话 provider 字段的 Settings；overrides 优先。"""
+    """构造带对话 provider 字段的 Settings；overrides 优先。
+
+    chat_api_key 默认显式 None：隔离磁盘 .env 的真实 key，让测试聚焦
+    各自指定的来源（环境变量回退 / Settings 字段直传）。
+    """
     base: dict[str, Any] = {
         "chat_provider_type": "openai_compatible",
         "chat_base_url": None,
         "chat_model": None,
+        "chat_api_key": None,
         "chat_api_key_env": "EVERYTHING_RAG_CHAT_API_KEY",
     }
     base.update(overrides)
@@ -92,6 +98,41 @@ def test_key_read_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
     )
     assert captured["base_url"] == "http://localhost:9999/v1"
     assert captured["api_key"] == "sk-123"
+
+
+def test_key_read_from_settings_chat_api_key(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """key 从 Settings.chat_api_key（.env 来源，SecretStr）读取，优先于 os.environ 回退。"""
+    captured: dict[str, Any] = {}
+    monkeypatch.setattr(
+        providers,
+        "AsyncOpenAI",
+        lambda base_url, api_key, **kwargs: captured.update(base_url=base_url, api_key=api_key),
+    )
+    monkeypatch.delenv("EVERYTHING_RAG_CHAT_API_KEY", raising=False)  # .env 场景：os.environ 无此变量
+    create_chat_model(
+        _settings(
+            chat_base_url="http://localhost:9999/v1",
+            chat_model="gpt-4o-mini",
+            chat_api_key=SecretStr("sk-from-dotenv"),
+        )
+    )
+    assert captured["api_key"] == "sk-from-dotenv"
+
+
+def test_settings_populates_chat_api_key_from_env(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """pydantic-settings 把 EVERYTHING_RAG_CHAT_API_KEY 填进 chat_api_key（SecretStr）。
+
+    直接用 Settings() 而非 _settings()：后者显式传 chat_api_key=None 会屏蔽环境变量；
+    此处验证「不显式传值」时环境变量被正确读入（env 优先于 .env 文件）。
+    """
+    monkeypatch.setenv("EVERYTHING_RAG_CHAT_API_KEY", "sk-123")
+    s = Settings()
+    assert s.chat_api_key is not None
+    assert s.chat_api_key.get_secret_value() == "sk-123"
 
 
 def test_key_absent_uses_local_placeholder(monkeypatch: pytest.MonkeyPatch) -> None:

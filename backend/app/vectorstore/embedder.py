@@ -33,8 +33,9 @@ class FastEmbedEmbedder:
     fingerprint = "bge-m3"
     dim = _BGE_M3_DIM
 
-    def __init__(self, model_name: str = "BAAI/bge-m3") -> None:
+    def __init__(self, model_name: str = "BAAI/bge-m3", cache_dir: str | None = None) -> None:
         self.model_name = model_name
+        self._cache_dir = cache_dir
         self._model: TextEmbedding | None = None
 
     def embed_texts(self, texts: list[str]) -> list[list[float]]:
@@ -44,20 +45,32 @@ class FastEmbedEmbedder:
     def _ensure_model(self) -> TextEmbedding:
         """首次调用才加载模型（触发 bge-m3 下载，已授权）；之后缓存复用。"""
         if self._model is None:
-            self._model = _load_text_embedding(self.model_name)
+            self._model = _load_text_embedding(self.model_name, self._cache_dir)
         return self._model
 
 
-def _load_text_embedding(model_name: str) -> TextEmbedding:
+def _load_text_embedding(model_name: str, cache_dir: str | None = None) -> TextEmbedding:
     """构造 fastembed TextEmbedding；模型未内置时先注册再构造。
 
     首次调用触发 bge-m3 的 HF 下载；已缓存则本地直读，不重复下载。
+    cache_dir 缺省落到持久目录（data_dir/models），避免模型被下载进
+    Windows 临时目录——Temp 会被系统定期清理，2GB+ 模型会被反复重下。
     """
+    resolved = cache_dir or _default_cache_dir()
     try:
-        return TextEmbedding(model_name=model_name)
+        return TextEmbedding(model_name=model_name, cache_dir=resolved)
     except ValueError:
         _register_bge_m3_custom(model_name)
-        return TextEmbedding(model_name=model_name)
+        return TextEmbedding(model_name=model_name, cache_dir=resolved)
+
+
+def _default_cache_dir() -> str:
+    """缺省嵌入缓存目录：settings.embed_cache_dir 或 data_dir/models（持久）。"""
+    from app.core.config import get_settings
+
+    settings = get_settings()
+    embed_dir = settings.embed_cache_dir or settings.data_dir / "models"
+    return str(embed_dir)
 
 
 def _register_bge_m3_custom(model_name: str) -> None:
