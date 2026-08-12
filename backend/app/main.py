@@ -7,14 +7,18 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
+from app.api.deps import get_import_task_store, get_vector_store
 from app.api.routes.audit import router as audit_router
 from app.api.routes.chat import router as chat_router
+from app.api.routes.imports import router as import_router
 from app.core.config import settings
 from app.core.outbound import outbound_client
+from app.ingestion.import_task import ImportTaskStore
+from app.vectorstore.base import VectorStore
 
 app = FastAPI(
     title="Everything RAG",
@@ -25,6 +29,7 @@ app = FastAPI(
 # 业务路由
 app.include_router(chat_router)
 app.include_router(audit_router)
+app.include_router(import_router)
 
 # 同源部署（前端静态资源由本服务托管），MVP 无需跨域；保留可配置位
 if settings.enable_cors:
@@ -38,8 +43,15 @@ if settings.enable_cors:
 
 
 @app.get("/api/status")
-async def status() -> dict:
-    """健康检查 + 基础状态：供前端判断启动完成 / 向导入口 / 空库判断。"""
+async def status(
+    vectorstore: VectorStore = Depends(get_vector_store),  # noqa: B008
+    task_store: ImportTaskStore = Depends(get_import_task_store),  # noqa: B008
+) -> dict:
+    """健康检查 + 基础状态：供前端判断启动完成 / 向导入口 / 空库判断。
+
+    知识计数来自真实向量库（块数 / 去重文件数）与最近成功导入时间。
+    """
+    last_sync = task_store.last_success_at
     return {
         "app": {
             "name": "everything-rag",
@@ -47,16 +59,18 @@ async def status() -> dict:
         },
         "config": {
             "wizard_completed": settings.wizard_completed,
-            "embed_configured": False,
-            "chat_configured": False,
+            # 嵌入：本地 bge-m3 自动可用（首次真实嵌入惰性下载），无需配置
+            "embed_configured": True,
+            # 对话：base_url 与 model 都配好才算就绪（key 走 SecretStr，不在此回显）
+            "chat_configured": bool(settings.chat_base_url and settings.chat_model),
             "vision_configured": False,
             "vision_enabled": settings.vision_enabled,
         },
         "knowledge": {
-            "file_count": 0,
-            "chunk_count": 0,
+            "file_count": vectorstore.count_files(),
+            "chunk_count": vectorstore.count(),
             "image_count": 0,
-            "last_sync_at": None,
+            "last_sync_at": last_sync.isoformat() if last_sync is not None else None,
             "needs_rebuild": False,
         },
         "privacy": {

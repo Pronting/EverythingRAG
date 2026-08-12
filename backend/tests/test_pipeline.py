@@ -212,3 +212,43 @@ def test_single_file_failure_skips_and_sanitizes(tmp_path: Path) -> None:
     # good.md 的块正常入库
     (block_id,) = store.blocks
     assert store.blocks[block_id][2].source_file == str(good.resolve())
+
+
+# ---------------------------------------------------------------- 7. 进度回调
+
+
+def test_ingest_progress_callback_increments(tmp_path: Path) -> None:
+    """ingest(on_progress=...) 逐文件回调：快照递增，终值等于报告计数。"""
+    root = tmp_path / "docs"
+    root.mkdir()
+    _write(root, "a.md", "# A\n\n内容 A\n")
+    _write(root, "b.md", "# B\n\n内容 B\n")
+
+    snapshots: list[object] = []
+    pipeline, _, _ = _pipeline()
+    report = pipeline.ingest(root, on_progress=snapshots.append)
+
+    # 每成功/失败处理一个文件回调一次
+    assert len(snapshots) == 2
+    first = snapshots[0]
+    last = snapshots[-1]
+    # files_scanned 在扫描阶段已确定
+    assert first.files_scanned == 2
+    # 首个文件处理后 parsed=1
+    assert first.files_parsed == 1
+    # 终值等于报告
+    assert last.files_parsed == report.files_parsed
+    assert last.files_skipped == report.files_skipped
+    assert last.chunks == report.chunks
+
+
+def test_ingest_progress_default_none_unchanged(tmp_path: Path) -> None:
+    """on_progress 缺省 None：行为不变、零回调（向后兼容）。"""
+    root = tmp_path / "docs"
+    root.mkdir()
+    _write(root, "a.md", "# A\n\n内容 A\n")
+
+    pipeline, _, _ = _pipeline()
+    report = pipeline.ingest(root)  # 不传 on_progress
+    assert report.files_parsed == 1
+    assert report.chunks == 1

@@ -17,8 +17,51 @@ export type SSEFrame =
   | { type: "done" }
   | { type: "error"; message: string };
 
-/** /api/status 响应中前端关心的字段（app 元信息 + 隐私基线）。 */
+/** /api/status 响应中前端关心的字段（app 元信息 + 配置 + 知识计数 + 隐私基线）。 */
 export interface StatusResponse {
   app: { name: string; version: string };
+  config: {
+    wizard_completed: boolean;
+    embed_configured: boolean;
+    chat_configured: boolean;
+    vision_configured: boolean;
+    vision_enabled: boolean;
+  };
+  knowledge: {
+    file_count: number;
+    chunk_count: number;
+    image_count: number;
+    last_sync_at: string | null;
+    needs_rebuild: boolean;
+  };
   privacy: { outbound_state: string };
+}
+
+/** 导入任务轮询状态：对齐后端 /api/import/status 响应。 */
+export type ImportTaskStatusValue = "running" | "done" | "error";
+
+export interface ImportProgress {
+  files_scanned: number;
+  files_parsed: number;
+  files_skipped: number;
+  chunks: number;
+}
+
+export interface ImportReport {
+  files_scanned: number;
+  files_parsed: number;
+  files_skipped: number;
+  chunks: number;
+  blocks_upserted: number;
+  errors: string[];
+}
+
+export interface ImportStatus {
+  task_id: string;
+  status: ImportTaskStatusValue;
+  progress: ImportProgress;
+  report: ImportReport | null;
+  error: string | null;
+  created_at: string;
+  updated_at: string;
 }

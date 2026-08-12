@@ -230,3 +230,20 @@ def test_zero_outbound_full_flow(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 
 def _raise_outbound(*args: object, **kwargs: object) -> None:
     raise AssertionError("Unexpected outbound network call")
+
+
+# ---------------------------------------------------------------- 10. 文件级计数
+
+
+def test_count_files_distinct_source(tmp_path: Path) -> None:
+    """count_files 返回去重后的 source_file 数（同一文件多块只算 1）。"""
+    store = _store(tmp_path)
+    _seed(store)  # a.md x2 块、b.md x1 块
+    assert store.count() == 3
+    assert store.count_files() == 2
+
+
+def test_count_files_empty(tmp_path: Path) -> None:
+    """空库 count_files = 0。"""
+    store = _store(tmp_path)
+    assert store.count_files() == 0

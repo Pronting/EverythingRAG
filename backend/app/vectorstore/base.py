@@ -49,6 +49,10 @@ class VectorStore(Protocol):
         """返回库中块总数；0 = 尚未建立索引（检索层据此判定「未建索引」）。"""
         ...
 
+    def count_files(self) -> int:
+        """返回库中去重后的源文件数（同一文件多块只算 1；/api/status 展示用）。"""
+        ...
+
 
 def create_vector_store(**kwargs: Any) -> VectorStore:
     """工厂：MVP 返回 ChromaVectorStore；后续可替换为 LanceDB/Qdrant。

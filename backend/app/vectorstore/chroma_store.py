@@ -126,6 +126,20 @@ class ChromaVectorStore:
         """返回库中块总数；0 = 尚未建立索引。"""
         return self._collection.count()
 
+    def count_files(self) -> int:
+        """返回库中去重后的源文件数（读取全量元数据按 source_file 去重）。
+
+        MVP 文件级计数：单个 collection 规模为百级文档，全量 get 元数据可接受。
+        """
+        result = self._collection.get(include=["metadatas"])
+        files = {
+            metadata.get("source_file")
+            for metadata in (result.get("metadatas") or [])
+            if isinstance(metadata, dict)
+        }
+        files.discard(None)
+        return len(files)
+
 
 def create_vector_store(
     persist_dir: Path,

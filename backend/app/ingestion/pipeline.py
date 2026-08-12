@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -44,6 +45,16 @@ class IngestReport:
     errors: tuple[str, ...] = ()
 
 
+@dataclass(frozen=True)
+class ProgressSnapshot:
+    """导入进行中的运行计数快照（每处理一个文件回调一次）。"""
+
+    files_scanned: int
+    files_parsed: int
+    files_skipped: int
+    chunks: int
+
+
 class IngestionPipeline:
     """编排层：把扫描 → 解析 → 切块 → 嵌入 → 入库串成一条管线。
 
@@ -55,8 +66,16 @@ class IngestionPipeline:
         self._embedder = embedder
         self._vectorstore = vectorstore
 
-    def ingest(self, root_dir: Path) -> IngestReport:
-        """导入 ``root_dir`` 下全部 MD，返回汇总报告（空目录返回全 0，不抛错）。"""
+    def ingest(
+        self,
+        root_dir: Path,
+        on_progress: Callable[[ProgressSnapshot], None] | None = None,
+    ) -> IngestReport:
+        """导入 ``root_dir`` 下全部 MD，返回汇总报告（空目录返回全 0，不抛错）。
+
+        on_progress 可选：每处理一个文件后回调一次运行计数快照（含成功与跳过），
+        供调用方展示实时进度；缺省 None 时零回调、行为不变。
+        """
         discovered = scan_directory(root_dir)
         errors: list[str] = []
         files_parsed = 0
@@ -69,10 +88,19 @@ class IngestionPipeline:
             except Exception as exc:  # noqa: BLE001 -- 单文件失败不中断整体导入
                 files_skipped += 1
                 self._record_error(exc, errors)
-                continue
-            files_parsed += 1
-            chunks_total += len(chunks)
-            upserted_total += upserted
+            else:
+                files_parsed += 1
+                chunks_total += len(chunks)
+                upserted_total += upserted
+            if on_progress is not None:
+                on_progress(
+                    ProgressSnapshot(
+                        files_scanned=len(discovered),
+                        files_parsed=files_parsed,
+                        files_skipped=files_skipped,
+                        chunks=chunks_total,
+                    )
+                )
         return IngestReport(
             files_scanned=len(discovered),
             files_parsed=files_parsed,
