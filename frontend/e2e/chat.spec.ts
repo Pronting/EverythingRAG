@@ -78,8 +78,8 @@ test("发消息后流式渲染完整回答与来源块", async ({ page }) => {
 
   await page.goto("/");
 
-  // 1. 页头渲染 + 输入框可见
-  await expect(page.getByText("Everything RAG — 个人知识第二大脑")).toBeVisible();
+  // 1. 侧边栏品牌渲染 + 输入框可见
+  await expect(page.getByRole("heading", { name: "Everything RAG" })).toBeVisible();
   const input = page.getByRole("textbox", { name: "消息输入框" });
   await expect(input).toBeVisible();
 
@@ -102,7 +102,7 @@ test("error 帧渲染错误消息且不白屏", async ({ page }) => {
   await stubBackend(page, encodeSse(ERROR_SSE_FRAMES));
 
   await page.goto("/");
-  await expect(page.getByText("Everything RAG — 个人知识第二大脑")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Everything RAG" })).toBeVisible();
 
   const input = page.getByRole("textbox", { name: "消息输入框" });
   await input.fill("测试错误路径");

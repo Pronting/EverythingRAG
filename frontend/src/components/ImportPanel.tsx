@@ -109,10 +109,35 @@ export default function ImportPanel({ onImported }: ImportPanelProps) {
       )}
 
       {task !== null && task.status === "running" && progress !== undefined && (
-        <p className="import-progress" role="status">
-          扫描 {progress.files_scanned} · 解析 {progress.files_parsed} · 跳过{" "}
-          {progress.files_skipped} · 块 {progress.chunks}
-        </p>
+        <div className="import-progress" role="status">
+          <div className="import-progress-track">
+            <div
+              className="import-progress-fill"
+              style={{
+                width: `${
+                  progress.files_scanned > 0
+                    ? Math.min(100, Math.round((progress.files_parsed / progress.files_scanned) * 100))
+                    : 0
+                }%`,
+              }}
+            />
+          </div>
+          <div className="import-progress-meta">
+            <span>
+              解析 {progress.files_parsed} / {progress.files_scanned}
+            </span>
+            <span>
+              {progress.files_scanned > 0
+                ? Math.min(100, Math.round((progress.files_parsed / progress.files_scanned) * 100))
+                : 0}
+              %
+            </span>
+          </div>
+          <p className="import-progress-line">
+            扫描 {progress.files_scanned} · 解析 {progress.files_parsed} · 跳过{" "}
+            {progress.files_skipped} · 块 {progress.chunks}
+          </p>
+        </div>
       )}
 
       {task !== null && task.status === "done" && report != null && (

@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useState } from "react";
 import Chat from "./components/Chat";
-import ImportPanel from "./components/ImportPanel";
+import Sidebar from "./components/Sidebar";
 import type { StatusResponse } from "./types";
 import "./App.css";
 
-/** 应用外壳：页头（标题 + 隐私/知识状态）+ 导入面板 + 问答界面。 */
+/** 应用外壳（ChatGPT 风格）：左侧边栏（知识库/导入）+ 主聊天区。 */
 export default function App() {
   const [status, setStatus] = useState<StatusResponse | null>(null);
   const [statusError, setStatusError] = useState<string | null>(null);
+  const [sessionId, setSessionId] = useState(0);
 
   const loadStatus = useCallback((): void => {
     fetch("/api/status")
@@ -25,33 +26,20 @@ export default function App() {
     loadStatus();
   }, [loadStatus]);
 
-  const knowledge = status?.knowledge;
+  const handleNewChat = useCallback((): void => {
+    setSessionId((current) => current + 1);
+  }, []);
 
   return (
     <div className="app">
-      <header className="app-header">
-        <div>
-          <h1 className="app-title">Everything RAG — 个人知识第二大脑</h1>
-          <p className="app-subtitle">纯本地运行 · 答案永远带来源</p>
-        </div>
-        <div className="status-pill">
-          {statusError !== null && <span className="status-error">后端未连接</span>}
-          {status !== null && (
-            <span>
-              隐私基线：<strong>{status.privacy.outbound_state}</strong>
-              {knowledge !== undefined && (
-                <>
-                  {" · "}知识库：<strong>{knowledge.file_count}</strong> 文档 /{" "}
-                  <strong>{knowledge.chunk_count}</strong> 块
-                </>
-              )}
-            </span>
-          )}
-        </div>
-      </header>
-      <ImportPanel onImported={loadStatus} />
+      <Sidebar
+        status={status}
+        statusError={statusError}
+        onNewChat={handleNewChat}
+        onImported={loadStatus}
+      />
       <main className="app-main">
-        <Chat />
+        <Chat sessionId={sessionId} onChatComplete={loadStatus} />
       </main>
     </div>
   );

@@ -91,7 +91,7 @@ test("选择文件夹上传导入：显示进度与报告，导入后知识库�
     await page.goto("/");
 
     // 初始状态：知识库为空
-    await expect(page.getByText(/知识库：0 文档 \/ 0 块/)).toBeVisible();
+    await expect(page.getByText("共 0 个语义块 · 尚未导入")).toBeVisible();
 
     // 通过文件夹选择触发上传导入
     await page.locator('input[type="file"]').setInputFiles(corpus);
@@ -106,8 +106,9 @@ test("选择文件夹上传导入：显示进度与报告，导入后知识库�
     await expect(page.getByText("导入完成")).toBeVisible();
     await expect(page.getByText(/块 3 · 写入 3/)).toBeVisible();
 
-    // 导入后 /api/status 刷新：知识库计数变为 2 文档 / 3 块
-    await expect(page.getByText(/知识库：2 文档 \/ 3 块/)).toBeVisible();
+    // 导入后 /api/status 刷新：侧边栏知识库计数更新
+    await expect(page.getByText("共 3 个语义块 · 已导入")).toBeVisible();
+    await expect(page.getByText("2 文档")).toBeVisible();
   } finally {
     rmSync(corpus, { recursive: true, force: true });
   }
