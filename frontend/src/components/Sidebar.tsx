@@ -1,19 +1,25 @@
-import type { StatusResponse } from "../types";
+import type { ConversationSummary, StatusResponse } from "../types";
 import ImportPanel from "./ImportPanel";
 
 interface SidebarProps {
   status: StatusResponse | null;
   statusError: string | null;
+  conversations: ConversationSummary[];
+  activeConversationId: string | null;
   onNewChat: () => void;
+  onSelectConversation: (id: string) => void;
   onImported: () => void;
   onOpenSettings: () => void;
 }
 
-/** ChatGPT 风格左侧边栏：品牌 + 新对话 + 知识库管理（导入）+ 设置入口 + 隐私状态。 */
+/** ChatGPT 风格左侧边栏：品牌 + 新对话 + 会话历史 + 知识库管理 + 设置入口 + 隐私状态。 */
 export default function Sidebar({
   status,
   statusError,
+  conversations,
+  activeConversationId,
   onNewChat,
+  onSelectConversation,
   onImported,
   onOpenSettings,
 }: SidebarProps) {
@@ -39,6 +45,23 @@ export default function Sidebar({
         </svg>
         新对话
       </button>
+
+      <nav className="conversation-list" aria-label="会话历史">
+        {conversations.map((conversation) => (
+          <button
+            key={conversation.id}
+            type="button"
+            className={`conversation-item${conversation.id === activeConversationId ? " active" : ""}`}
+            onClick={() => onSelectConversation(conversation.id)}
+            title={conversation.title}
+          >
+            <span className="conversation-item-title">{conversation.title}</span>
+          </button>
+        ))}
+        {conversations.length === 0 && (
+          <p className="conversation-empty">暂无会话，点击「新对话」开始</p>
+        )}
+      </nav>
 
       <div className="kb-card">
         <div className="kb-card-header">

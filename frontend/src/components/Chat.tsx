@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { streamChat } from "../api/sse";
-import type { Source } from "../types";
+import type { ConversationMessage, Source } from "../types";
 import { MarkdownContent } from "./MarkdownContent";
 import { SourceCard } from "./SourceCard";
 
@@ -15,9 +15,13 @@ interface ChatMessage {
 }
 
 interface ChatProps {
-  /** 会话 id：变化时清空消息（侧边栏「新对话」触发）。 */
-  sessionId: number;
-  /** 一次问答结束（含 done/error/中断）后回调：父级刷新 /api/status（隐私审计状态）。 */
+  /** 当前会话 id：变化时加载该会话的历史消息。 */
+  conversationId: string | null;
+  /** 当前会话的已持久化消息（切换会话时由父级传入）。 */
+  initialMessages: ConversationMessage[];
+  /** 一轮问答完成（非错误）后回调，供父级持久化 + AI 标题。 */
+  onExchangeComplete: (userContent: string, assistantContent: string, sources: Source[] | null) => void;
+  /** 问答结束（含错误/中断）后回调：父级刷新 /api/status（隐私审计状态）。 */
   onChatComplete?: () => void;
 }
 
@@ -42,20 +46,45 @@ function AssistantAvatar() {
   );
 }
 
+function toChatMessages(messages: ConversationMessage[]): ChatMessage[] {
+  return messages.map((message, index) => ({
+    id: index + 1,
+    role: message.role,
+    content: message.content,
+    sources: message.sources,
+    done: true,
+    error: null,
+  }));
+}
+
 /** 问答界面（ChatGPT 风格）：空态建议 → 消息流（头像+内容）→ 底部圆角输入条。 */
-export default function Chat({ sessionId, onChatComplete }: ChatProps) {
+export default function Chat({
+  conversationId,
+  initialMessages,
+  onExchangeComplete,
+  onChatComplete,
+}: ChatProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [isSending, setIsSending] = useState(false);
   const nextIdRef = useRef(1);
   const streamMessageIdRef = useRef<number | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const chatMessagesRef = useRef<HTMLDivElement>(null);
+  const exchangeRef = useRef<{ user: string; assistant: string; sources: Source[] | null; error: boolean } | null>(null);
 
-  // 新对话：清空消息、重置 id
+  // 切换会话：加载历史消息、重置 id
   useEffect(() => {
-    setMessages([]);
-    nextIdRef.current = 1;
-  }, [sessionId]);
+    setMessages(toChatMessages(initialMessages));
+    nextIdRef.current = initialMessages.length + 1;
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 仅在切换会话时加载
+  }, [conversationId]);
+
+  // 消息变化（新消息/流式 token 追加）时滚动到底部，避免后续轮次被折叠区截断
+  useEffect(() => {
+    const el = chatMessagesRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [messages]);
 
   // 卸载时中断进行中的流
   useEffect(() => {
@@ -94,6 +123,7 @@ export default function Chat({ sessionId, onChatComplete }: ChatProps) {
     setInput("");
     setIsSending(true);
     streamMessageIdRef.current = assistantId;
+    exchangeRef.current = { user: message, assistant: "", sources: null, error: false };
 
     const controller = new AbortController();
     abortRef.current = controller;
@@ -104,10 +134,12 @@ export default function Chat({ sessionId, onChatComplete }: ChatProps) {
         {
           onMeta: (sources) => {
             if (streamMessageIdRef.current !== assistantId) return;
+            if (exchangeRef.current) exchangeRef.current.sources = sources;
             updateMessage(assistantId, (m) => ({ ...m, sources }));
           },
           onToken: (text) => {
             if (streamMessageIdRef.current !== assistantId) return;
+            if (exchangeRef.current) exchangeRef.current.assistant += text;
             updateMessage(assistantId, (m) => ({ ...m, content: m.content + text }));
           },
           onDone: () => {
@@ -121,6 +153,7 @@ export default function Chat({ sessionId, onChatComplete }: ChatProps) {
             if (streamMessageIdRef.current !== assistantId) return;
             streamMessageIdRef.current = null;
             abortRef.current = null;
+            if (exchangeRef.current) exchangeRef.current.error = true;
             updateMessage(assistantId, (m) => ({ ...m, done: true, error: errorMessage }));
             setIsSending(false);
           },
@@ -137,6 +170,10 @@ export default function Chat({ sessionId, onChatComplete }: ChatProps) {
         ),
       );
       setIsSending(false);
+      if (exchangeRef.current && !exchangeRef.current.error) {
+        const exchange = exchangeRef.current;
+        onExchangeComplete(exchange.user, exchange.assistant, exchange.sources);
+      }
       onChatComplete?.(); // 问答结束刷新 status（隐私审计状态跟随）
     }
   };
@@ -161,13 +198,10 @@ export default function Chat({ sessionId, onChatComplete }: ChatProps) {
           </div>
         </div>
       ) : (
-        <div className="chat-messages" role="log" aria-live="polite">
+        <div className="chat-messages" role="log" aria-live="polite" ref={chatMessagesRef}>
           {messages.map((msg) => (
             <div key={msg.id} className={`message-row message-${msg.role}`}>
-              <div
-                className={`message-avatar ${msg.role}`}
-                aria-hidden="true"
-              >
+              <div className={`message-avatar ${msg.role}`} aria-hidden="true">
                 {msg.role === "user" ? <UserAvatar /> : <AssistantAvatar />}
               </div>
               <div className="message-body">

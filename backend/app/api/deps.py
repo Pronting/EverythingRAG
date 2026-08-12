@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 from app.core.config import settings
+from app.core.conversation_store import ConversationStore
 from app.core.settings_store import get_settings_store
 from app.ingestion.import_task import ImportTaskStore
 from app.vectorstore.base import VectorStore
@@ -18,6 +19,9 @@ from app.vectorstore.embedder import create_embedder_from_config
 
 #: 全局唯一导入任务存储（进程内，重启丢失）
 import_task_store = ImportTaskStore()
+
+#: 全局唯一会话存储（持久化到 data_dir/conversations.json）
+conversation_store = ConversationStore(settings.data_dir)
 
 #: 按嵌入 fingerprint 分 key 的向量库注册表（进程内缓存，避免每次新建 Chroma client）
 _vector_store_registry: dict[str, VectorStore] = {}

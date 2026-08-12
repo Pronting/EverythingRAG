@@ -101,3 +101,29 @@ export interface SettingsUpdate {
   };
   system_prompt?: string;
 }
+
+/** 持久化的对话消息（含检索来源快照）。 */
+export interface ConversationMessage {
+  role: "user" | "assistant";
+  content: string;
+  sources: Source[] | null;
+  created_at: string;
+}
+
+/** 会话摘要（侧边栏列表项）。 */
+export interface ConversationSummary {
+  id: string;
+  title: string;
+  created_at: string;
+  updated_at: string;
+  message_count: number;
+}
+
+/** 完整会话（含消息列表）。 */
+export interface Conversation {
+  id: string;
+  title: string;
+  created_at: string;
+  updated_at: string;
+  messages: ConversationMessage[];
+}

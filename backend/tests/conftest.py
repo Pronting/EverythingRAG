@@ -18,7 +18,7 @@ from tests.fakes import FakeVectorStore
 
 @pytest.fixture(autouse=True)
 def _isolate_local_deps(tmp_path: Path) -> None:
-    """每测试：注入空向量库替身 + 清空任务存储 + 隔离设置存储（tmp 目录）；
+    """每测试：注入空向量库替身 + 清空任务存储 + 隔离设置/会话存储（tmp 目录）；
     结束后清空全部 overrides。"""
     deps.import_task_store.clear()
     app.dependency_overrides[deps.get_vector_store] = lambda: FakeVectorStore()
@@ -26,5 +26,11 @@ def _isolate_local_deps(tmp_path: Path) -> None:
 
     tmp_store = settings_store_mod.SettingsStore(tmp_path / "data")
     app.dependency_overrides[settings_store_mod.get_settings_store] = lambda: tmp_store
+    from app.api.routes import conversations as conversations_mod
+    from app.core.conversation_store import ConversationStore
+
+    app.dependency_overrides[conversations_mod.get_conversation_store] = lambda: ConversationStore(
+        tmp_path / "conv-data"
+    )
     yield
     app.dependency_overrides.clear()

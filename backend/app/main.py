@@ -14,6 +14,7 @@ from fastapi.staticfiles import StaticFiles
 from app.api.deps import get_import_task_store, get_vector_store
 from app.api.routes.audit import router as audit_router
 from app.api.routes.chat import router as chat_router
+from app.api.routes.conversations import router as conversations_router
 from app.api.routes.imports import router as import_router
 from app.api.routes.settings import router as settings_router
 from app.core.config import settings
@@ -32,6 +33,7 @@ app.include_router(chat_router)
 app.include_router(audit_router)
 app.include_router(import_router)
 app.include_router(settings_router)
+app.include_router(conversations_router)
 
 # 同源部署（前端静态资源由本服务托管），MVP 无需跨域；保留可配置位
 if settings.enable_cors:
