@@ -9,6 +9,8 @@ export default defineConfig({
   plugins: [react()],
   build: { outDir: "dist" },
   server: {
+    // 仅绑定本机回环地址（隐私红线：不开放远程访问；Playwright E2E 与 /api 代理均走 127.0.0.1）
+    host: "127.0.0.1",
     proxy: {
       "/api": { target: backendUrl, changeOrigin: true },
     },

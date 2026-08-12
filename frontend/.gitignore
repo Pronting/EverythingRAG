@@ -1,0 +1,3 @@
+# Playwright 测试产物（不进版本库）
+test-results/
+playwright-report/

@@ -1,39 +1,44 @@
 import { useEffect, useState } from "react";
+import Chat from "./components/Chat";
+import type { StatusResponse } from "./types";
+import "./App.css";
 
-interface Status {
-  app: { name: string; version: string };
-  privacy: { outbound_state: string };
-}
-
-/** MVP 占位页：显示后端 /api/status，验证前后端链路。 */
+/** 应用外壳：页头（标题 + 隐私基线）+ 问答界面。status 拉取失败不阻塞 Chat。 */
 export default function App() {
-  const [status, setStatus] = useState<Status | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [status, setStatus] = useState<StatusResponse | null>(null);
+  const [statusError, setStatusError] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/api/status")
-      .then((r) => r.json())
-      .then((d: Status) => setStatus(d))
-      .catch((e) => setError(String(e)));
+      .then((response) => {
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        return response.json() as Promise<StatusResponse>;
+      })
+      .then((data) => setStatus(data))
+      .catch((error: unknown) =>
+        setStatusError(error instanceof Error ? error.message : String(error)),
+      );
   }, []);
 
   return (
-    <main style={{ fontFamily: "system-ui", padding: 24, maxWidth: 720 }}>
-      <h1>Everything RAG — 个人知识第二大脑</h1>
-      <p>纯本地运行 · 答案永远带来源</p>
-      <h2>后端状态</h2>
-      {error && <p style={{ color: "#c00" }}>连接后端失败：{error}</p>}
-      {status && (
-        <>
-          <p>
-            应用 <strong>{status.app.name}</strong> v{status.app.version}
-            ｜隐私基线：<strong>{status.privacy.outbound_state}</strong>
-          </p>
-          <pre style={{ background: "#f5f5f5", padding: 12, borderRadius: 8 }}>
-            {JSON.stringify(status, null, 2)}
-          </pre>
-        </>
-      )}
-    </main>
+    <div className="app">
+      <header className="app-header">
+        <div>
+          <h1 className="app-title">Everything RAG — 个人知识第二大脑</h1>
+          <p className="app-subtitle">纯本地运行 · 答案永远带来源</p>
+        </div>
+        <div className="status-pill">
+          {statusError !== null && <span className="status-error">后端未连接</span>}
+          {status !== null && (
+            <span>
+              隐私基线：<strong>{status.privacy.outbound_state}</strong>
+            </span>
+          )}
+        </div>
+      </header>
+      <main className="app-main">
+        <Chat />
+      </main>
+    </div>
   );
 }
