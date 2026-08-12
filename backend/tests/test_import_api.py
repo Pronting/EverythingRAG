@@ -246,3 +246,30 @@ def test_upload_without_files_422(client: TestClient) -> None:
     """不带文件字段 -> 422（FastAPI 必填校验）。"""
     resp = client.post("/api/import/upload")
     assert resp.status_code == 422
+
+
+def test_upload_dedupes_colliding_filenames(client: TestClient) -> None:
+    """多选上传同名文件（来自不同文件夹）-> 不互相覆盖，存为去重路径。
+
+    浏览器多选文件夹/文件时可能出现同名（如两个不同目录都有 readme.md）；
+    后端须按文件名加序号去重，保证每个文件独立入库。
+    """
+    import shutil
+
+    from app.core.config import settings
+
+    resp = _upload_files(
+        client,
+        [("a.md", b"# A1\n"), ("a.md", b"# A2\n")],
+    )
+    assert resp.status_code == 202
+    task_id = resp.json()["task_id"]
+    try:
+        data = _wait_done(client, task_id)
+        assert data["status"] == "done"
+        doc_dir = settings.data_dir / "documents" / task_id
+        # 两个同名文件都保留，第二个加序号
+        assert (doc_dir / "a.md").is_file()
+        assert (doc_dir / "a (1).md").is_file()
+    finally:
+        shutil.rmtree(settings.data_dir / "documents" / task_id, ignore_errors=True)

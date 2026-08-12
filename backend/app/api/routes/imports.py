@@ -152,12 +152,16 @@ async def _save_uploads(files: list[UploadFile], staging_root: Path) -> int:
     """把上传文件按净化后的相对路径写入暂存目录，返回写入文件数。
 
     严格防穿越：拒绝绝对路径、包含 ``..`` 或空段、含盘符的路径。
+    多选上传可能同名（不同文件夹都有 readme.md）-> 后者加序号去重，不互相覆盖。
     """
     written = 0
+    used: set[Path] = set()
     for upload in files:
         relative = _safe_relative_path(upload.filename or "")
         if not relative.name.lower().endswith(".md"):
             continue  # MVP 只认 Markdown，其余类型丢弃（不写入暂存）
+        relative = _dedupe_path(relative, used)
+        used.add(relative)
         target = staging_root / relative
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(await upload.read())
@@ -165,6 +169,19 @@ async def _save_uploads(files: list[UploadFile], staging_root: Path) -> int:
     if written == 0:
         raise ValueError("所选内容中没有 Markdown 文件")
     return written
+
+
+def _dedupe_path(relative: Path, used: set[Path]) -> Path:
+    """同名冲突时给 stem 加序号（a.md -> a (1).md），返回唯一路径。"""
+    if relative not in used:
+        return relative
+    stem, suffix, parent = relative.stem, relative.suffix, relative.parent
+    index = 1
+    candidate = parent / f"{stem} ({index}){suffix}"
+    while candidate in used:
+        index += 1
+        candidate = parent / f"{stem} ({index}){suffix}"
+    return candidate
 
 
 def _safe_relative_path(raw_name: str) -> Path:

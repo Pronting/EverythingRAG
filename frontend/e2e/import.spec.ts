@@ -84,7 +84,7 @@ function makeCorpus(): string {
   return dir;
 }
 
-test("选择文件夹上传导入：显示进度与报告，导入后知识库计数刷新", async ({ page }) => {
+test("多选文件夹/文件积累待导入清单，开始导入后显示进度与报告", async ({ page }) => {
   const corpus = makeCorpus();
   try {
     await stubBackend(page);
@@ -93,18 +93,25 @@ test("选择文件夹上传导入：显示进度与报告，导入后知识库�
     // 初始状态：知识库为空
     await expect(page.getByText("共 0 个语义块 · 尚未导入")).toBeVisible();
 
-    // 通过文件夹选择触发上传导入
-    await page.locator('input[type="file"]').setInputFiles(corpus);
+    // 选一个文件夹（含子目录 2 个 .md）-> 进入待导入清单
+    await page.locator('input[webkitdirectory]').setInputFiles(corpus);
+    await expect(page.getByText("待导入 2 个文件")).toBeVisible();
 
-    // 按钮进入导入中
+    // 再单独追加一个文件
+    await page.getByLabel("选择知识库文件（可多选）").setInputFiles([
+      { name: "extra.md", mimeType: "text/markdown", buffer: Buffer.from("# Extra\n\n内容\n") },
+    ]);
+    await expect(page.getByText("待导入 3 个文件")).toBeVisible();
+
+    // 开始导入 -> 导入中 -> 进度
+    await page.getByRole("button", { name: "开始导入" }).click();
     await expect(page.getByRole("button", { name: "导入中…" })).toBeVisible();
-
-    // 实时进度（running 快照）
     await expect(page.getByText(/扫描 2 · 解析 1 · 跳过 0 · 块 1/)).toBeVisible();
 
-    // 完成报告
+    // 完成报告 + 待导入清单清空
     await expect(page.getByText("导入完成")).toBeVisible();
     await expect(page.getByText(/块 3 · 写入 3/)).toBeVisible();
+    await expect(page.getByText(/待导入/)).not.toBeVisible();
 
     // 导入后 /api/status 刷新：侧边栏知识库计数更新
     await expect(page.getByText("共 3 个语义块 · 已导入")).toBeVisible();
@@ -114,17 +121,18 @@ test("选择文件夹上传导入：显示进度与报告，导入后知识库�
   }
 });
 
-test("所选文件夹内没有 Markdown 时提示", async ({ page }) => {
+test("所选内容中没有 Markdown 时提示", async ({ page }) => {
   const dir = mkdtempSync(join(tmpdir(), "erag-e2e-"));
   try {
     writeFileSync(join(dir, "note.txt"), "hello");
     await stubBackend(page);
     await page.goto("/");
 
-    await page.locator('input[type="file"]').setInputFiles(dir);
+    await page.locator('input[webkitdirectory]').setInputFiles(dir);
 
-    await expect(page.getByText("所选文件夹内没有 Markdown 文件")).toBeVisible();
-    await expect(page.getByRole("button", { name: "选择文件夹" })).toBeEnabled();
+    await expect(page.getByText("所选内容中没有 Markdown 文件")).toBeVisible();
+    // 无可导入内容 -> 开始导入按钮禁用
+    await expect(page.getByRole("button", { name: "开始导入" })).toBeDisabled();
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -145,10 +153,11 @@ test("上传失败：后端 400 展示可读错误", async ({ page }) => {
   const corpus = makeCorpus();
   try {
     await page.goto("/");
-    await page.locator('input[type="file"]').setInputFiles(corpus);
+    await page.locator('input[webkitdirectory]').setInputFiles(corpus);
+    await page.getByRole("button", { name: "开始导入" }).click();
 
     await expect(page.getByText("所选内容中没有 Markdown 文件")).toBeVisible();
-    await expect(page.getByRole("button", { name: "选择文件夹" })).toBeEnabled();
+    await expect(page.getByRole("button", { name: "开始导入" })).toBeEnabled();
   } finally {
     rmSync(corpus, { recursive: true, force: true });
   }

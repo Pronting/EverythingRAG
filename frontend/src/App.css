@@ -185,6 +185,89 @@ body {
   color: var(--text-tertiary);
 }
 
+/* 选择来源（多选文件夹 / 多选文件） */
+.import-source-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+.import-source-btn {
+  flex: 1;
+  padding: 7px 8px;
+  font-size: 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--text);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.import-source-btn:hover:not(:disabled) {
+  background: var(--sidebar-bg);
+  border-color: var(--text-tertiary);
+}
+
+.import-source-btn:disabled {
+  color: var(--text-tertiary);
+  cursor: not-allowed;
+}
+
+.import-pending {
+  margin-top: 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: var(--sidebar-bg);
+}
+
+.import-pending-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.import-pending-count {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.import-pending-clear {
+  border: none;
+  background: transparent;
+  color: var(--text-tertiary);
+  font-size: 11px;
+  cursor: pointer;
+  padding: 0;
+}
+
+.import-pending-clear:hover {
+  color: var(--danger);
+  text-decoration: underline;
+}
+
+.import-pending-list {
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+  max-height: 90px;
+  overflow-y: auto;
+}
+
+.import-pending-list li {
+  font-size: 11px;
+  color: var(--text-secondary);
+  padding: 2px 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.import-pending-more {
+  color: var(--text-tertiary);
+}
+
 /* 进度条 */
 .import-progress {
   margin-top: 10px;

@@ -9,11 +9,21 @@ interface ImportPanelProps {
   onImported: () => void;
 }
 
-/** 知识库导入面板：选择文件夹 -> 上传 .md 到本地后端 -> 异步导入 -> 轮询进度 -> 展示报告。 */
+/** 文件相对路径（webkitRelativePath 优先，普通文件用 basename）。 */
+function fileRelPath(file: File): string {
+  return file.webkitRelativePath || file.name;
+}
+
+/**
+ * 选择式导入面板：可多选多个子文件夹 / 单个文件，先积累「待导入清单」，
+ * 确认后再统一上传导入（敏感目录/文件不选即可排除）。
+ */
 export default function ImportPanel({ onImported }: ImportPanelProps) {
+  const [pending, setPending] = useState<File[]>([]);
   const [busy, setBusy] = useState(false);
   const [task, setTask] = useState<ImportStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const folderInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const timerRef = useRef<number | null>(null);
 
@@ -30,7 +40,7 @@ export default function ImportPanel({ onImported }: ImportPanelProps) {
     }
   };
 
-  /** 轮询任务状态，terminal 状态（done/error）时停止并刷新计数。 */
+  /** 轮询任务状态，terminal（done/error）时停止并刷新计数。 */
   const poll = (taskId: string): void => {
     const tick = async (): Promise<void> => {
       let status: ImportStatus;
@@ -46,34 +56,58 @@ export default function ImportPanel({ onImported }: ImportPanelProps) {
       if (status.status === "running") return;
       stopPolling();
       setBusy(false);
-      if (status.status === "done") onImported();
+      if (status.status === "done") {
+        setPending([]); // 导入成功，清空待导入清单
+        onImported();
+      }
     };
     stopPolling();
     timerRef.current = window.setInterval(() => void tick(), POLL_INTERVAL_MS);
-    void tick(); // 立即查一次，避免小任务延迟一整轮
+    void tick();
   };
 
-  const handleFolderSelected = async (event: ChangeEvent<HTMLInputElement>): Promise<void> => {
-    const input = event.target;
-    const files = Array.from(input.files ?? []).filter((file) =>
-      file.name.toLowerCase().endsWith(".md"),
-    );
-    input.value = ""; // 允许再次选择同一文件夹时触发 change
-    if (busy) return;
-    if (files.length === 0) {
-      setError("所选文件夹内没有 Markdown 文件");
+  /** 把选中的文件（筛选 .md）追加到待导入清单。 */
+  const addFiles = (files: File[]): void => {
+    const markdown = files.filter((file) => file.name.toLowerCase().endsWith(".md"));
+    if (markdown.length === 0) {
+      setError("所选内容中没有 Markdown 文件");
       return;
     }
+    setError(null);
+    setPending((prev) => [...prev, ...markdown]);
+  };
+
+  const handleFolderSelected = (event: ChangeEvent<HTMLInputElement>): void => {
+    const input = event.target;
+    addFiles(Array.from(input.files ?? []));
+    input.value = ""; // 允许再次选择同一文件夹
+  };
+
+  const handleFileSelected = (event: ChangeEvent<HTMLInputElement>): void => {
+    const input = event.target;
+    addFiles(Array.from(input.files ?? []));
+    input.value = "";
+  };
+
+  const handleImport = async (): Promise<void> => {
+    if (pending.length === 0 || busy) return;
     setBusy(true);
     setError(null);
     setTask(null);
     try {
-      const { task_id } = await uploadFolder(files);
+      const { task_id } = await uploadFolder(pending);
       poll(task_id);
-    } catch (uploadError) {
+    } catch (importError) {
       setBusy(false);
-      setError(uploadError instanceof Error ? uploadError.message : String(uploadError));
+      setError(importError instanceof Error ? importError.message : String(importError));
     }
+  };
+
+  const clearPending = (): void => {
+    if (busy) return;
+    setPending([]);
+    setError(null);
+    setTask(null);
   };
 
   const progress = task?.progress;
@@ -81,26 +115,74 @@ export default function ImportPanel({ onImported }: ImportPanelProps) {
 
   return (
     <section className="import-panel">
-      <div className="import-controls">
+      <div className="import-source-buttons">
         <button
-          className="import-start"
           type="button"
+          className="import-source-btn"
+          disabled={busy}
+          onClick={() => folderInputRef.current?.click()}
+          title="可按住 Ctrl/Shift 多选多个子文件夹"
+        >
+          选择文件夹
+        </button>
+        <button
+          type="button"
+          className="import-source-btn"
           disabled={busy}
           onClick={() => fileInputRef.current?.click()}
+          title="选择单个或多个 Markdown 文件"
         >
-          {busy ? "导入中…" : "选择文件夹"}
+          选择文件
         </button>
+        <input
+          type="file"
+          ref={folderInputRef}
+          multiple
+          hidden
+          {...({ webkitdirectory: "" } as object)}
+          onChange={handleFolderSelected}
+          aria-label="选择知识库文件夹（可多选）"
+        />
         <input
           type="file"
           ref={fileInputRef}
           multiple
+          accept=".md"
           hidden
-          {...({ webkitdirectory: "" } as object)}
-          onChange={(event) => void handleFolderSelected(event)}
-          aria-label="选择知识库文件夹"
+          onChange={handleFileSelected}
+          aria-label="选择知识库文件（可多选）"
         />
-        <span className="import-hint">选择文件夹后，其中的 Markdown 文件会被复制到本地知识库并导入</span>
       </div>
+
+      <p className="import-hint">可多选重点子文件夹 / 单个文件；敏感目录不选即可排除。</p>
+
+      {pending.length > 0 && (
+        <div className="import-pending">
+          <div className="import-pending-head">
+            <span className="import-pending-count">待导入 {pending.length} 个文件</span>
+            <button type="button" className="import-pending-clear" onClick={clearPending}>
+              清空
+            </button>
+          </div>
+          <ul className="import-pending-list">
+            {pending.slice(0, 4).map((file, index) => (
+              <li key={`${fileRelPath(file)}-${index}`} title={fileRelPath(file)}>
+                {fileRelPath(file)}
+              </li>
+            ))}
+            {pending.length > 4 && <li className="import-pending-more">…还有 {pending.length - 4} 个</li>}
+          </ul>
+        </div>
+      )}
+
+      <button
+        type="button"
+        className="import-btn"
+        onClick={() => void handleImport()}
+        disabled={busy || pending.length === 0}
+      >
+        {busy ? "导入中…" : pending.length > 0 ? `开始导入（${pending.length}）` : "开始导入"}
+      </button>
 
       {error !== null && (
         <p className="import-error" role="alert">
