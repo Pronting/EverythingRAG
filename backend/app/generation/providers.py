@@ -17,7 +17,7 @@ from urllib.parse import urlsplit
 from openai import AsyncOpenAI
 
 from app.core.config import Settings
-from app.core.outbound import OutboundClient, OutboundEvent
+from app.core.outbound import OutboundClient, OutboundEvent, outbound_client
 from app.generation.base import ChatModel
 
 
@@ -58,7 +58,8 @@ class OpenAICompatChatModel:
     ) -> AsyncIterator[str]:
         """流式调用云端 chat/completions；逐 chunk 提取 delta.content，空内容跳过。
 
-        MEDIUM-1：上游收尾可能发 usage-only chunk（choices 为空），跳过不报错。
+        MEDIUM-1：上游收尾可能发 usage-only chunk（choices 为空），跳过不报错；
+        MEDIUM-3：空 choices 同时带 error（流式中途报错）-> 抛 ChatProviderError。
         出网审计：仅当注入 outbound 时记录一条事件（成功 status=200 / 异常
         status=None）；异常照常向上抛，不吞。
         """
@@ -72,11 +73,16 @@ class OpenAICompatChatModel:
             )
             async for chunk in response:
                 if not chunk.choices:  # usage-only 收尾 chunk（MEDIUM-1）
+                    error = getattr(chunk, "error", None)
+                    if error is not None:  # MEDIUM-3：流式中途报错
+                        message = getattr(error, "message", None) or str(error)
+                        raise ChatProviderError(f"对话服务流式中止: {message}")
                     continue
                 token = chunk.choices[0].delta.content or ""
                 if token:
                     yield token
-        except Exception:
+        except BaseException:
+            # 异常含 GeneratorExit（SSE 客户端断开触发 aclose）：已发生出网也要记审计
             self._record_outbound(started_at, status=None)
             raise
         else:
@@ -149,10 +155,15 @@ def _elapsed_ms(started_at: datetime) -> float:
     return max(0.0, elapsed.total_seconds() * 1000.0)
 
 
-def create_chat_model(settings: Settings) -> ChatModel:
+def create_chat_model(
+    settings: Settings,
+    outbound: OutboundClient | None = outbound_client,  # 缺省接全局单例，生产审计不静默失效
+) -> ChatModel:
     """从 settings 构造对话模型；配置缺失 raise ChatProviderError（零联网）。
 
     缺失项消息列出对应的环境变量名（base_url / model），便于用户补齐配置。
+    outbound 缺省为全局 outbound_client：真实出网自动进入网络审计（/api/audit、
+    /api/status.privacy.outbound_state 才如实上报，而非恒为 local-only）。
     """
     missing: list[str] = []
     if not settings.chat_base_url:
@@ -166,4 +177,5 @@ def create_chat_model(settings: Settings) -> ChatModel:
         base_url=settings.chat_base_url,
         model=settings.chat_model,
         api_key=api_key,
+        outbound=outbound,
     )

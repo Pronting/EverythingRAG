@@ -15,10 +15,11 @@ from typing import Any
 
 import pytest
 
+from app.core.config import Settings
 from app.core.outbound import OutboundClient, OutboundEvent, outbound_client
 from app.generation import providers
 from app.generation.chat_service import ChatService
-from app.generation.providers import OpenAICompatChatModel
+from app.generation.providers import ChatProviderError, OpenAICompatChatModel, create_chat_model
 from app.ingestion.chunker import Chunk, chunk_document
 from app.ingestion.markdown_parser import parse_markdown
 from app.ingestion.scanner import scan_directory
@@ -49,6 +50,21 @@ class _UsageOnlyChunk:
 
     def __init__(self) -> None:
         self.choices = []
+
+
+class _ErrorPayload:
+    """上游 error 对象（含受控 message 字段）。"""
+
+    def __init__(self, message: str) -> None:
+        self.message = message
+
+
+class _ErrorChunk:
+    """choices 为空但带 error 的 chunk（流式中途报错，MEDIUM-3 回归）。"""
+
+    def __init__(self, message: str) -> None:
+        self.choices = []
+        self.error = _ErrorPayload(message)
 
 
 class _AsyncChunks:
@@ -359,6 +375,70 @@ async def test_provider_without_outbound_records_nothing(
     model = OpenAICompatChatModel(base_url="http://localhost:9999/v1", model="m")
     tokens = [token async for token in model.stream_chat([{"role": "user", "content": "q"}])]
     assert tokens == ["a"]
+
+
+async def test_create_chat_model_wires_global_outbound(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """CRITICAL 回归：create_chat_model 缺省接全局 outbound_client（生产审计不静默失效）。
+
+    生产链路 get_chat_service -> create_chat_model 不传 outbound，须默认接全局
+    单例；真实出网后 /api/audit 与 /api/status 才能如实上报 has-outbound。
+    """
+    outbound_client.clear()
+    completions = _FakeCompletions([_FakeChunk("你")])
+    monkeypatch.setattr(providers, "AsyncOpenAI", lambda **kwargs: _FakeClient(completions))
+    settings = Settings(chat_base_url="https://api.deepseek.com/v1", chat_model="deepseek-chat")
+    model = create_chat_model(settings)
+    assert model._outbound is outbound_client  # 缺省已接全局单例
+    tokens = [token async for token in model.stream_chat([{"role": "user", "content": "q"}])]
+    assert tokens == ["你"]
+    entries = outbound_client.entries()
+    assert len(entries) == 1  # 生产接线后真实出网确实进审计
+    assert entries[0].status == 200
+    assert entries[0].destination == "api.deepseek.com"
+    outbound_client.clear()
+
+
+async def test_provider_records_event_on_aclose(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """MEDIUM-2：流式中途 aclose()（SSE 客户端断开）-> 仍记恰 1 条 status=None 事件。"""
+    outbound = OutboundClient(max_entries=10)
+    completions = _FakeCompletions([_FakeChunk("a"), _FakeChunk("b")])
+    monkeypatch.setattr(providers, "AsyncOpenAI", lambda **kwargs: _FakeClient(completions))
+    model = OpenAICompatChatModel(
+        base_url="https://api.deepseek.com/v1",
+        model="m",
+        outbound=outbound,
+    )
+    stream = model.stream_chat([{"role": "user", "content": "q"}])
+    first = await anext(stream)
+    assert first == "a"
+    await stream.aclose()
+    entries = outbound.entries()
+    assert len(entries) == 1  # create() 已发生的出网不因 aclose 漏记
+    assert entries[0].status is None
+
+
+async def test_provider_records_error_on_chunk_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """MEDIUM-3：空 choices + error chunk -> ChatProviderError 传播 + 审计 status=None。"""
+    outbound = OutboundClient(max_entries=10)
+    completions = _FakeCompletions([_FakeChunk("a"), _ErrorChunk("上游过载")])
+    monkeypatch.setattr(providers, "AsyncOpenAI", lambda **kwargs: _FakeClient(completions))
+    model = OpenAICompatChatModel(
+        base_url="https://api.deepseek.com/v1",
+        model="m",
+        outbound=outbound,
+    )
+    with pytest.raises(ChatProviderError, match="上游过载"):
+        async for _token in model.stream_chat([{"role": "user", "content": "q"}]):
+            pass
+    entries = outbound.entries()
+    assert len(entries) == 1
+    assert entries[0].status is None
 
 
 # ---------------------------------------------------------------- 3. 纯文本链路零出网（核心）
