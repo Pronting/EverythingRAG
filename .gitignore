@@ -21,8 +21,25 @@ data/
 *.gguf
 models/
 
+# ---- 施工/内部开发过程（不进公开仓库）----
+.claude/
+docs/loop/
+
+# ---- 敏感信息（环境变量/凭据/密钥，禁止入库）----
+.env
+.env.*
+!.env.example
+*.pem
+*.p12
+*.pfx
+*.key
+!*.pub
+*secret*
+*credential*
+credentials.json
+config.local.*
+
 # ---- 个人/工具 ----
-.claude/settings.local.json
 .playwright-mcp/
 
 # ---- IDE / OS ----
