@@ -40,6 +40,26 @@ export async function getImportStatus(taskId: string): Promise<ImportStatus> {
   return (await response.json()) as ImportStatus;
 }
 
+/** 上传式导入：把选中的文件夹文件（.md）multipart 上传到本地后端并异步导入。 */
+export async function uploadFolder(files: File[]): Promise<StartImportResult> {
+  const formData = new FormData();
+  for (const file of files) {
+    // webkitRelativePath 携带相对路径（如 subdir/a.md），供后端按原结构暂存
+    const relativePath = file.webkitRelativePath || file.name;
+    formData.append("files", file, relativePath);
+  }
+  let response: Response;
+  try {
+    response = await fetch(`${IMPORT_ENDPOINT}/upload`, { method: "POST", body: formData });
+  } catch {
+    throw new Error("无法连接本地服务，请确认后端已启动");
+  }
+  if (!response.ok) {
+    throw new Error(await readErrorDetail(response));
+  }
+  return (await response.json()) as StartImportResult;
+}
+
 /** 尝试从错误响应体提取 detail 字符串；失败回退通用消息。 */
 async function readErrorDetail(response: Response): Promise<string> {
   try {

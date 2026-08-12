@@ -183,3 +183,66 @@ def test_status_last_sync_at_after_import(client: TestClient, tmp_path: Path) ->
 
     data = client.get("/api/status").json()
     assert data["knowledge"]["last_sync_at"] is not None
+
+
+# ---------------------------------------------------------------- 4. 上传式导入
+
+
+def _upload_files(
+    client: TestClient,
+    entries: list[tuple[str, bytes]],
+) -> dict:
+    """用 multipart 上传一组文件（filename 携带相对路径），返回响应。"""
+    files = [("files", (name, content, "text/markdown")) for name, content in entries]
+    return client.post("/api/import/upload", files=files)
+
+
+def test_upload_import_returns_task_and_completes(client: TestClient) -> None:
+    """上传 2 个 .md（含子目录相对路径）-> 202 + task_id；轮询到 done，报告齐全。"""
+    resp = _upload_files(
+        client,
+        [("a.md", "# A\n\n内容\n".encode()), ("sub/b.md", "# B\n\n内容\n".encode())],
+    )
+    assert resp.status_code == 202
+    task_id = resp.json()["task_id"]
+
+    try:
+        data = _wait_done(client, task_id)
+        assert data["status"] == "done"
+        assert data["report"]["files_scanned"] == 2
+        assert data["report"]["files_parsed"] == 2
+        assert data["report"]["chunks"] == 3
+    finally:
+        # 上传文档持久在 data_dir/documents/<task_id>，测试后清理避免污染真实数据目录
+        import shutil
+
+        from app.core.config import settings
+
+        shutil.rmtree(settings.data_dir / "documents" / task_id, ignore_errors=True)
+
+
+def test_upload_rejects_path_traversal(client: TestClient) -> None:
+    """filename 含 ../ 穿越 -> 400，不启动任务。"""
+    resp = _upload_files(client, [("../evil.md", b"# x\n")])
+    assert resp.status_code == 400
+    assert "非法文件路径" in resp.json()["detail"]
+
+
+def test_upload_rejects_absolute_path(client: TestClient) -> None:
+    """filename 为绝对路径（盘符/根）-> 400。"""
+    resp = _upload_files(client, [("C:/Users/me/x.md", b"# x\n")])
+    assert resp.status_code == 400
+    assert "非法文件路径" in resp.json()["detail"]
+
+
+def test_upload_requires_markdown(client: TestClient) -> None:
+    """只上传非 .md 文件 -> 400「没有 Markdown」。"""
+    resp = _upload_files(client, [("note.txt", b"hello")])
+    assert resp.status_code == 400
+    assert "Markdown" in resp.json()["detail"]
+
+
+def test_upload_without_files_422(client: TestClient) -> None:
+    """不带文件字段 -> 422（FastAPI 必填校验）。"""
+    resp = client.post("/api/import/upload")
+    assert resp.status_code == 422

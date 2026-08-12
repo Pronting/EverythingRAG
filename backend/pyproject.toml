@@ -21,6 +21,8 @@ dependencies = [
     "chromadb>=0.5",
     # 模型调用（OpenAI 兼容）
     "openai>=1.54",
+    # 文件上传表单解析（/api/import/upload multipart）
+    "python-multipart>=0.0.9",
     # 增量同步指纹 / 编码 / 图片
     "xxhash>=3.5",
     "charset-normalizer>=3.4",

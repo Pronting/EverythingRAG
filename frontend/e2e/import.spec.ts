@@ -1,4 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 const TASK_ID = "task-123";
 
@@ -51,6 +54,7 @@ function taskBody(running: boolean): string {
   });
 }
 
+/** 拦截 /api/status 与 /api/import/upload、/api/import/status。 */
 async function stubBackend(page: Page): Promise<void> {
   let imported = false;
 
@@ -58,7 +62,7 @@ async function stubBackend(page: Page): Promise<void> {
     route.fulfill({ status: 200, contentType: "application/json", body: statusBody(imported) }),
   );
 
-  await page.route("**/api/import", (route) =>
+  await page.route("**/api/import/upload", (route) =>
     route.fulfill({ status: 202, contentType: "application/json", body: JSON.stringify({ task_id: TASK_ID }) }),
   );
 
@@ -71,49 +75,80 @@ async function stubBackend(page: Page): Promise<void> {
   });
 }
 
-test("导入目录：显示进度与报告，导入后知识库计数刷新", async ({ page }) => {
-  await stubBackend(page);
+/** 建一个含 2 个 .md（含子目录）的临时文件夹。 */
+function makeCorpus(): string {
+  const dir = mkdtempSync(join(tmpdir(), "erag-e2e-"));
+  mkdirSync(join(dir, "sub"));
+  writeFileSync(join(dir, "a.md"), "# A\n\n内容 A\n");
+  writeFileSync(join(dir, "sub", "b.md"), "# B\n\n内容 B\n");
+  return dir;
+}
 
-  await page.goto("/");
+test("选择文件夹上传导入：显示进度与报告，导入后知识库计数刷新", async ({ page }) => {
+  const corpus = makeCorpus();
+  try {
+    await stubBackend(page);
+    await page.goto("/");
 
-  // 初始状态：知识库为空
-  await expect(page.getByText(/知识库：0 文档 \/ 0 块/)).toBeVisible();
+    // 初始状态：知识库为空
+    await expect(page.getByText(/知识库：0 文档 \/ 0 块/)).toBeVisible();
 
-  const input = page.getByRole("textbox", { name: "知识库目录路径" });
-  await input.fill("C:/docs");
-  await page.getByRole("button", { name: "开始导入" }).click();
+    // 通过文件夹选择触发上传导入
+    await page.locator('input[type="file"]').setInputFiles(corpus);
 
-  // 按钮进入导入中
-  await expect(page.getByRole("button", { name: "导入中…" })).toBeVisible();
+    // 按钮进入导入中
+    await expect(page.getByRole("button", { name: "导入中…" })).toBeVisible();
 
-  // 实时进度（running 快照）
-  await expect(page.getByText(/扫描 2 · 解析 1 · 跳过 0 · 块 1/)).toBeVisible();
+    // 实时进度（running 快照）
+    await expect(page.getByText(/扫描 2 · 解析 1 · 跳过 0 · 块 1/)).toBeVisible();
 
-  // 完成报告
-  await expect(page.getByText("导入完成")).toBeVisible();
-  await expect(page.getByText(/块 3 · 写入 3/)).toBeVisible();
+    // 完成报告
+    await expect(page.getByText("导入完成")).toBeVisible();
+    await expect(page.getByText(/块 3 · 写入 3/)).toBeVisible();
 
-  // 导入后 /api/status 刷新：知识库计数变为 2 文档 / 3 块
-  await expect(page.getByText(/知识库：2 文档 \/ 3 块/)).toBeVisible();
-
-  // 输入框恢复可用
-  await expect(input).toBeEnabled();
+    // 导入后 /api/status 刷新：知识库计数变为 2 文档 / 3 块
+    await expect(page.getByText(/知识库：2 文档 \/ 3 块/)).toBeVisible();
+  } finally {
+    rmSync(corpus, { recursive: true, force: true });
+  }
 });
 
-test("导入失败：后端 400 展示可读错误", async ({ page }) => {
+test("所选文件夹内没有 Markdown 时提示", async ({ page }) => {
+  const dir = mkdtempSync(join(tmpdir(), "erag-e2e-"));
+  try {
+    writeFileSync(join(dir, "note.txt"), "hello");
+    await stubBackend(page);
+    await page.goto("/");
+
+    await page.locator('input[type="file"]').setInputFiles(dir);
+
+    await expect(page.getByText("所选文件夹内没有 Markdown 文件")).toBeVisible();
+    await expect(page.getByRole("button", { name: "选择文件夹" })).toBeEnabled();
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("上传失败：后端 400 展示可读错误", async ({ page }) => {
   await page.route("**/api/status", (route) =>
     route.fulfill({ status: 200, contentType: "application/json", body: statusBody(false) }),
   );
-  await page.route("**/api/import", (route) =>
-    route.fulfill({ status: 400, contentType: "application/json", body: JSON.stringify({ detail: "目录不存在: C:/nope" }) }),
+  await page.route("**/api/import/upload", (route) =>
+    route.fulfill({
+      status: 400,
+      contentType: "application/json",
+      body: JSON.stringify({ detail: "所选内容中没有 Markdown 文件" }),
+    }),
   );
 
-  await page.goto("/");
+  const corpus = makeCorpus();
+  try {
+    await page.goto("/");
+    await page.locator('input[type="file"]').setInputFiles(corpus);
 
-  const input = page.getByRole("textbox", { name: "知识库目录路径" });
-  await input.fill("C:/nope");
-  await page.getByRole("button", { name: "开始导入" }).click();
-
-  await expect(page.getByText("目录不存在: C:/nope")).toBeVisible();
-  await expect(page.getByRole("button", { name: "开始导入" })).toBeEnabled();
+    await expect(page.getByText("所选内容中没有 Markdown 文件")).toBeVisible();
+    await expect(page.getByRole("button", { name: "选择文件夹" })).toBeEnabled();
+  } finally {
+    rmSync(corpus, { recursive: true, force: true });
+  }
 });

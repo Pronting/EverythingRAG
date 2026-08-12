@@ -257,6 +257,12 @@ body {
   cursor: not-allowed;
 }
 
+.import-hint {
+  align-self: center;
+  font-size: 12px;
+  color: #57606a;
+}
+
 .import-progress {
   margin: 8px 0 0;
   font-size: 13px;

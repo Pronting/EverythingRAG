@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from "react";
-import { getImportStatus, startImport } from "../api/importApi";
+import { type ChangeEvent, useEffect, useRef, useState } from "react";
+import { getImportStatus, uploadFolder } from "../api/importApi";
 import type { ImportStatus } from "../types";
 
 const POLL_INTERVAL_MS = 1000;
@@ -9,12 +9,12 @@ interface ImportPanelProps {
   onImported: () => void;
 }
 
-/** 知识库导入面板：目录路径 -> 异步导入 -> 轮询进度 -> 展示报告。 */
+/** 知识库导入面板：选择文件夹 -> 上传 .md 到本地后端 -> 异步导入 -> 轮询进度 -> 展示报告。 */
 export default function ImportPanel({ onImported }: ImportPanelProps) {
-  const [dir, setDir] = useState("");
   const [busy, setBusy] = useState(false);
   const [task, setTask] = useState<ImportStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const timerRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -53,45 +53,53 @@ export default function ImportPanel({ onImported }: ImportPanelProps) {
     void tick(); // 立即查一次，避免小任务延迟一整轮
   };
 
-  const handleImport = async (): Promise<void> => {
-    const path = dir.trim();
-    if (path === "" || busy) return;
+  const handleFolderSelected = async (event: ChangeEvent<HTMLInputElement>): Promise<void> => {
+    const input = event.target;
+    const files = Array.from(input.files ?? []).filter((file) =>
+      file.name.toLowerCase().endsWith(".md"),
+    );
+    input.value = ""; // 允许再次选择同一文件夹时触发 change
+    if (busy) return;
+    if (files.length === 0) {
+      setError("所选文件夹内没有 Markdown 文件");
+      return;
+    }
     setBusy(true);
     setError(null);
     setTask(null);
     try {
-      const { task_id } = await startImport(path);
+      const { task_id } = await uploadFolder(files);
       poll(task_id);
-    } catch (importError) {
+    } catch (uploadError) {
       setBusy(false);
-      setError(importError instanceof Error ? importError.message : String(importError));
+      setError(uploadError instanceof Error ? uploadError.message : String(uploadError));
     }
   };
 
   const progress = task?.progress;
   const report = task?.report;
-  const canImport = !busy && dir.trim() !== "";
 
   return (
     <section className="import-panel">
       <div className="import-controls">
-        <input
-          className="import-input"
-          type="text"
-          value={dir}
-          onChange={(e) => setDir(e.target.value)}
-          placeholder="输入本地文档目录路径，如 C:/Users/me/Documents/knowledge"
-          disabled={busy}
-          aria-label="知识库目录路径"
-        />
         <button
           className="import-start"
           type="button"
-          onClick={() => void handleImport()}
-          disabled={!canImport}
+          disabled={busy}
+          onClick={() => fileInputRef.current?.click()}
         >
-          {busy ? "导入中…" : "开始导入"}
+          {busy ? "导入中…" : "选择文件夹"}
         </button>
+        <input
+          type="file"
+          ref={fileInputRef}
+          multiple
+          hidden
+          {...({ webkitdirectory: "" } as object)}
+          onChange={(event) => void handleFolderSelected(event)}
+          aria-label="选择知识库文件夹"
+        />
+        <span className="import-hint">选择文件夹后，其中的 Markdown 文件会被复制到本地知识库并导入</span>
       </div>
 
       {error !== null && (

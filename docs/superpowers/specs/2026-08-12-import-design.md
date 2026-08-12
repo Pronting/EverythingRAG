@@ -51,6 +51,13 @@
 - `error`：非目录/解析级灾难错误；message 字段给可读原因。
 - 未知 task_id → 404。
 
+### 3.3 `POST /api/import/upload`（上传式，浏览器选文件夹）
+
+- 浏览器用 `<input webkitdirectory>` 选文件夹，multipart 上传 `.md` 文件（filename 携带 `webkitRelativePath` 相对路径）。
+- 后端严格净化路径（拒绝绝对路径 / `..` / 盘符穿越）后，按原结构写入 **`data_dir/documents/<task_id>/`（持久保留**——知识库自持数据，来源可回溯）。
+- 与路径导入共用同一异步管线 + `GET /api/import/status/{id}` 轮询；完成后文档不删除。
+- 依赖 `python-multipart`（已加入 pyproject 依赖）。
+
 ## 4. 任务存储与执行
 
 - **`ImportTaskStore`**：进程内 dict + `threading.Lock`，键 `task_id`，值 `ImportTask`（含 status / progress / report / error）。单用户本地足够；重启丢失（status 返回 404，可接受）。接口独立成模块便于测试。
@@ -81,9 +88,9 @@ def ingest(
 
 ## 7. 前端
 
-- **「导入知识库」面板**（头部与聊天区之间）：目录路径输入框 + 「开始导入」按钮 + 进度/报告区。
-- 流程：点击 → `startImport(dir)` → 拿 `task_id` → 每 ~1s `getImportStatus(task_id)` → 显示 `扫描 X · 解析 Y · 写入 Z` → 完成展示报告（含失败原因）→ 刷新 `/api/status` 计数显示。
-- 新增 `frontend/src/api/importApi.ts`（`startImport` / `getImportStatus`）；扩展 `types.ts` 的 `StatusResponse`（config / knowledge 字段）；`App.tsx` 状态栏增加「知识库：N 文档 / M 块」。
+- **「导入知识库」面板**（头部与聊天区之间）：`选择文件夹` 按钮（原生资源管理器，`<input webkitdirectory>`）+ 进度/报告区。
+- 流程：点击按钮 → 浏览器资源管理器选文件夹 → 筛选 `.md` 上传到 `POST /api/import/upload`（multipart，携带 webkitRelativePath 相对路径）→ 拿 `task_id` → 每 ~1s 轮询 `getImportStatus(task_id)` → 显示 `扫描 X · 解析 Y · 写入 Z` → 完成展示报告（含失败原因）→ 刷新 `/api/status` 计数显示。
+- 新增 `frontend/src/api/importApi.ts`（`startImport` / `uploadFolder` / `getImportStatus`）；扩展 `types.ts` 的 `StatusResponse`（config / knowledge 字段）；`App.tsx` 状态栏增加「知识库：N 文档 / M 块」。
 - 样式遵循现有 Chat UI（`App.css`）。
 
 ## 8. 错误处理
