@@ -99,8 +99,12 @@ def test_static_hosting_serves_index_when_dist_exists() -> None:
 # ---------------------------------------------------------------- 3. run.py 拉起冒烟
 
 
-def test_run_py_no_browser_starts_and_serves_status() -> None:
+def test_run_py_no_browser_starts_and_serves_status(tmp_path: Path) -> None:
     """subprocess 拉起 run.py --no-browser → 解析端口 → /api/status 200 → 干净终止。"""
+    # 子进程用独立数据目录：避免与真实 ~/.everything-rag 的 Chroma 锁冲突
+    # （/api/status 现在会打开向量库；隔离后不依赖/不干扰任何运行中的服务）。
+    data_dir = tmp_path / "data"
+    env = {**os.environ, "EVERYTHING_RAG_DATA_DIR": str(data_dir)}
     proc = subprocess.Popen(
         [sys.executable, "-u", str(RUN_PY), "--no-browser"],
         stdout=subprocess.PIPE,
@@ -108,6 +112,7 @@ def test_run_py_no_browser_starts_and_serves_status() -> None:
         text=True,
         encoding="utf-8",
         errors="replace",
+        env=env,
     )
     try:
         port = _wait_for_startup_line(proc, timeout=30.0)
