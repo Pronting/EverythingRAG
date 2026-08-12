@@ -1,7 +1,10 @@
-"""嵌入器接口与 bge-m3 实现（fastembed / ONNX / 惰性加载）。
+"""嵌入器接口与实现：本地 bge-m3（fastembed/ONNX）+ 云端 OpenAI 兼容（/embeddings）。
 
-隐私约束：bge-m3 模型下载只在首次 embed_texts 时惰性触发（用户已授权）；
-import 本模块、创建 FastEmbedEmbedder 实例均零副作用（不加载、不下载、不出网）。
+隐私约束：
+- 本地 bge-m3 下载只在首次 embed_texts 惰性触发（用户已授权）；import 本模块、
+  创建实例均零副作用。
+- 云端嵌入（CloudEmbedder）：构造零出网，首次 embed 才建连（OpenAI 兼容端点）。
+  出网即用户显式配置云端嵌入的结果，属 opt-in。
 """
 
 from __future__ import annotations
@@ -9,6 +12,7 @@ from __future__ import annotations
 from typing import Protocol
 
 from fastembed import TextEmbedding
+from openai import OpenAI
 
 # bge-m3 输出维度（HF 配置 word_embedding_dimension = 1024，CLS 池化）
 _BGE_M3_DIM = 1024
@@ -95,3 +99,58 @@ def _register_bge_m3_custom(model_name: str) -> None:
             size_in_gb=2.5,
             additional_files=["onnx/model.onnx_data", "onnx/sentencepiece.bpe.model"],
         )
+
+
+class CloudEmbedder:
+    """OpenAI 兼容云端嵌入（POST {base_url}/embeddings，同步 OpenAI client）。
+
+    - 构造零出网：OpenAI client 惰性，首次 embed_texts 才建连。
+    - dim 惰性：配置未显式给 dim 时，从首次响应推导（OpenAI SDK 返回 item.embedding）。
+    - fingerprint 含模型名：collection 按 `chunks__cloud-{model}__v1` 隔离，
+      切换嵌入模型 = 新向量空间 = 需重新导入（天然由 collection 名隔离）。
+    """
+
+    def __init__(
+        self,
+        base_url: str,
+        model: str,
+        api_key: str | None = None,
+        dim: int | None = None,
+    ) -> None:
+        self._base_url = base_url
+        self._model = model
+        self._api_key = api_key
+        self._configured_dim = dim
+        self._resolved_dim: int | None = dim
+        self._client: OpenAI | None = None
+
+    @property
+    def fingerprint(self) -> str:
+        """嵌入指纹：cloud-{model}（斜杠转连字符），供 collection 名隔离。"""
+        return f"cloud-{self._model.replace('/', '-')}"
+
+    @property
+    def model(self) -> str:
+        return self._model
+
+    @property
+    def dim(self) -> int:
+        """嵌入维度：配置给定或已从首次响应解析；未解析时抛错（不应在 embed 前用到）。"""
+        if self._resolved_dim is None:
+            raise RuntimeError("嵌入维度尚未解析：请先执行一次嵌入，或配置显式 dim")
+        return self._resolved_dim
+
+    def embed_texts(self, texts: list[str]) -> list[list[float]]:
+        """调用云端 /embeddings；首次调用推导 dim 并缓存。"""
+        client = self._ensure_client()
+        response = client.embeddings.create(model=self._model, input=texts)
+        vectors = [item.embedding for item in response.data]
+        if self._resolved_dim is None and vectors:
+            self._resolved_dim = len(vectors[0])
+        return vectors
+
+    def _ensure_client(self) -> OpenAI:
+        """惰性构造同步 OpenAI client（构造零出网，首次 embed 才建连）。"""
+        if self._client is None:
+            self._client = OpenAI(base_url=self._base_url, api_key=self._api_key or "local")
+        return self._client
