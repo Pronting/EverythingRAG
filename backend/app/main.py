@@ -8,6 +8,7 @@ from __future__ import annotations
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.routes.chat import router as chat_router
 from app.core.config import settings
 
 app = FastAPI(
@@ -15,6 +16,9 @@ app = FastAPI(
     version=settings.app_version,
     description="个人知识第二大脑 —— 纯本地 RAG 检索问答",
 )
+
+# 业务路由
+app.include_router(chat_router)
 
 # 同源部署（前端静态资源由本服务托管），MVP 无需跨域；保留可配置位
 if settings.enable_cors:

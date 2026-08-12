@@ -32,6 +32,12 @@ class Settings(BaseSettings):
     # 功能开关（对齐 PRD 4.3 图片 / 4.7 配置向导）
     vision_enabled: bool = False
     wizard_completed: bool = False
+    # 对话 provider（OpenAI 兼容云端；API key 仅运行期从环境变量读，绝不落本类值）
+    chat_provider_type: str = "openai_compatible"
+    chat_base_url: str | None = None  # env: EVERYTHING_RAG_CHAT_BASE_URL
+    chat_model: str | None = None  # env: EVERYTHING_RAG_CHAT_MODEL
+    # key 所在的环境变量名（非 key 值本身）
+    chat_api_key_env: str = "EVERYTHING_RAG_CHAT_API_KEY"
 
 
 @lru_cache
