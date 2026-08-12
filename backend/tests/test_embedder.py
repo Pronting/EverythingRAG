@@ -185,3 +185,36 @@ def test_cloud_embedder_model_name_normalized_in_fingerprint() -> None:
     """指纹把 / 转 -：模型名含斜杠也不破坏 collection 名。"""
     emb = embedder_mod.CloudEmbedder(base_url="http://e.test/v1", model="BAAI/bge-m3")
     assert emb.fingerprint == "cloud-BAAI-bge-m3"
+
+
+# ---------------------------------------------------------------- 嵌入器工厂（按设置）
+
+
+def test_create_embedder_local_returns_fastembed() -> None:
+    """mode=local -> FastEmbedEmbedder（本地 bge-m3）。"""
+    from app.core.settings_store import EmbedModelConfig
+
+    emb = embedder_mod.create_embedder_from_config(EmbedModelConfig(mode="local"))
+    assert isinstance(emb, FastEmbedEmbedder)
+
+
+def test_create_embedder_cloud_returns_cloud() -> None:
+    """mode=cloud 且配置完整 -> CloudEmbedder。"""
+    from pydantic import SecretStr
+
+    from app.core.settings_store import EmbedModelConfig
+
+    emb = embedder_mod.create_embedder_from_config(
+        EmbedModelConfig(mode="cloud", base_url="http://e.test/v1", model="bge-m3", api_key=SecretStr("sk-x"))
+    )
+    assert isinstance(emb, embedder_mod.CloudEmbedder)
+    assert emb.model == "bge-m3"
+    assert emb.fingerprint == "cloud-bge-m3"
+
+
+def test_create_embedder_cloud_incomplete_raises() -> None:
+    """mode=cloud 但缺 base_url/model -> ValueError。"""
+    from app.core.settings_store import EmbedModelConfig
+
+    with pytest.raises(ValueError):
+        embedder_mod.create_embedder_from_config(EmbedModelConfig(mode="cloud"))

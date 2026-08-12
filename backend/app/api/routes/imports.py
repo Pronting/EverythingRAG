@@ -22,6 +22,7 @@ from pydantic import BaseModel, Field
 
 from app.api.deps import get_import_task_store, get_vector_store
 from app.core.config import settings
+from app.core.settings_store import SettingsStore, get_settings_store
 from app.ingestion.import_task import ImportTask, ImportTaskStore
 from app.ingestion.pipeline import IngestionPipeline, IngestReport
 from app.vectorstore.base import VectorStore
@@ -38,11 +39,17 @@ class ImportRequest(BaseModel):
 
 def get_import_pipeline(
     vectorstore: VectorStore = Depends(get_vector_store),  # noqa: B008
+    store: SettingsStore = Depends(get_settings_store),  # noqa: B008
 ) -> IngestionPipeline:
-    """构造导入管线（惰性 bge-m3 + 共享向量库；构造零出网）。测试可 override 为 fake。"""
-    from app.vectorstore.embedder import FastEmbedEmbedder
+    """构造导入管线（按设置选本地/云端嵌入器 + 共享向量库；构造零出网）。
 
-    return IngestionPipeline(embedder=FastEmbedEmbedder(), vectorstore=vectorstore)
+    嵌入器与 get_vector_store 同源（同一设置），保证 collection 与向量维度一致。
+    """
+    from app.vectorstore.embedder import create_embedder_from_config
+
+    app_settings = store.load()
+    embedder = create_embedder_from_config(app_settings.embed)
+    return IngestionPipeline(embedder=embedder, vectorstore=vectorstore)
 
 
 @router.post("/api/import", status_code=202)

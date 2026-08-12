@@ -14,6 +14,8 @@ from typing import Protocol
 from fastembed import TextEmbedding
 from openai import OpenAI
 
+from app.core.settings_store import EmbedModelConfig
+
 # bge-m3 输出维度（HF 配置 word_embedding_dimension = 1024，CLS 池化）
 _BGE_M3_DIM = 1024
 
@@ -154,3 +156,16 @@ class CloudEmbedder:
         if self._client is None:
             self._client = OpenAI(base_url=self._base_url, api_key=self._api_key or "local")
         return self._client
+
+
+def create_embedder_from_config(embed: EmbedModelConfig) -> Embedder:
+    """按设置构造嵌入器：mode=local -> 本地 bge-m3；mode=cloud -> OpenAI 兼容云端。
+
+    云端配置不完整时 raise ValueError（设置页 PUT 已校验，这里兜底）。
+    """
+    if embed.mode == "cloud":
+        if not embed.base_url or not embed.model:
+            raise ValueError("云端嵌入未配置完整：需同时提供 Base URL 与模型名")
+        api_key = embed.api_key.get_secret_value() if embed.api_key is not None else None
+        return CloudEmbedder(base_url=embed.base_url, model=embed.model, api_key=api_key)
+    return FastEmbedEmbedder()

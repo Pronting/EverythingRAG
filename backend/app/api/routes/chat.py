@@ -24,7 +24,7 @@ from app.generation.providers import (
 )
 from app.retrieval.vector_retriever import VectorRetriever
 from app.vectorstore.base import VectorStore
-from app.vectorstore.embedder import FastEmbedEmbedder
+from app.vectorstore.embedder import create_embedder_from_config
 
 router = APIRouter()
 
@@ -43,7 +43,7 @@ def get_chat_service(
     ChatProviderError 延迟到请求的 stream 阶段以 error 帧上报，不崩不 500。
     """
     app_settings = store.load()
-    embedder = FastEmbedEmbedder()
+    embedder = create_embedder_from_config(app_settings.embed)
     retriever = VectorRetriever(vectorstore)
     try:
         chat_model = create_chat_model_from_config(app_settings.chat)

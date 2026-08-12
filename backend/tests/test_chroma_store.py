@@ -110,6 +110,17 @@ def test_collection_naming_custom_fingerprint(tmp_path: Path) -> None:
     assert store._collection_name == "chunks__fake__v1"
 
 
+def test_collection_isolated_by_embed_model(tmp_path: Path) -> None:
+    """本地 bge-m3 与云端嵌入指向不同 collection（切换嵌入模型=需重新导入）。"""
+    from app.vectorstore.embedder import CloudEmbedder
+
+    local = create_vector_store(persist_dir=tmp_path, embedder=FakeEmbedder())
+    cloud = create_vector_store(persist_dir=tmp_path, embedder=CloudEmbedder(base_url="http://e.test/v1", model="bge-m3"))
+    assert local._collection_name == "chunks__fake__v1"
+    assert cloud._collection_name == "chunks__cloud-bge-m3__v1"
+    assert local._collection_name != cloud._collection_name
+
+
 # ---------------------------------------------------------------- 3. where 过滤
 
 
