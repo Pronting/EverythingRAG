@@ -65,3 +65,39 @@ export interface ImportStatus {
   created_at: string;
   updated_at: string;
 }
+
+/** /api/settings 脱敏视图（key 只给 hint）。 */
+export interface SettingsView {
+  chat: {
+    provider_type: string;
+    base_url: string | null;
+    model: string | null;
+    api_key_set: boolean;
+    api_key_hint: string | null;
+  };
+  embed: {
+    mode: "local" | "cloud";
+    base_url: string | null;
+    model: string | null;
+    api_key_set: boolean;
+    api_key_hint: string | null;
+  };
+  system_prompt: string;
+}
+
+/** PUT /api/settings 局部更新负载（null = 保留原值；api_key 空串 = 清除）。 */
+export interface SettingsUpdate {
+  chat?: {
+    provider_type?: string;
+    base_url?: string;
+    model?: string;
+    api_key?: string | null;
+  };
+  embed?: {
+    mode?: "local" | "cloud";
+    base_url?: string;
+    model?: string;
+    api_key?: string | null;
+  };
+  system_prompt?: string;
+}
