@@ -53,9 +53,10 @@ class ChatService:
             return
 
         meta = self._meta_frame(chunks)
-        stream = self._chat_model.stream_chat(_build_messages(message, chunks))
 
         try:
+            # MEDIUM-2：stream_chat 调用并入首帧 try，同步抛错也收敛为单个 error 帧
+            stream = self._chat_model.stream_chat(_build_messages(message, chunks))
             first_token = await anext(stream)
         except StopAsyncIteration:
             yield meta

@@ -8,8 +8,10 @@ from __future__ import annotations
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.routes.audit import router as audit_router
 from app.api.routes.chat import router as chat_router
 from app.core.config import settings
+from app.core.outbound import outbound_client
 
 app = FastAPI(
     title="Everything RAG",
@@ -19,6 +21,7 @@ app = FastAPI(
 
 # 业务路由
 app.include_router(chat_router)
+app.include_router(audit_router)
 
 # 同源部署（前端静态资源由本服务托管），MVP 无需跨域；保留可配置位
 if settings.enable_cors:
@@ -54,7 +57,7 @@ async def status() -> dict:
             "needs_rebuild": False,
         },
         "privacy": {
-            "outbound_state": "local-only",
+            "outbound_state": outbound_client.outbound_state,
             "providers": {},
         },
     }

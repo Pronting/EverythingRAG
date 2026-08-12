@@ -182,6 +182,28 @@ async def test_chat_model_error_becomes_single_error_frame() -> None:
     assert frames[0]["message"]
 
 
+async def test_sync_raise_from_chat_model_becomes_error_frame() -> None:
+    """MEDIUM-2：stream_chat 调用阶段同步抛异常（非迭代阶段）-> 单个 error 帧，不 500。"""
+
+    class SyncRaisingChatModel:
+        @property
+        def supports_image_input(self) -> bool:
+            return False
+
+        def stream_chat(self, messages: list[dict[str, Any]], **kwargs: Any) -> Any:
+            raise RuntimeError("sync-boom-internal")
+
+    service = ChatService(
+        FakeEmbedder(),
+        FakeRetriever(chunks=[_chunk("b1")]),
+        SyncRaisingChatModel(),
+    )
+    frames = await _collect(service, "你好")
+    assert [frame["type"] for frame in frames] == ["error"]
+    assert "sync-boom-internal" not in frames[0]["message"]
+    assert frames[0]["message"]
+
+
 async def test_provider_error_becomes_single_error_frame() -> None:
     """ChatProviderError -> 单个 error 帧，消息列出缺失的环境变量名。"""
     service = ChatService(
