@@ -14,11 +14,16 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
-from app.core.config import Settings, get_settings
+from app.api.deps import get_vector_store
+from app.core.settings_store import SettingsStore, get_settings_store
 from app.generation.chat_service import ChatService
-from app.generation.providers import ChatProviderError, UnconfiguredChatModel, create_chat_model
+from app.generation.providers import (
+    ChatProviderError,
+    UnconfiguredChatModel,
+    create_chat_model_from_config,
+)
 from app.retrieval.vector_retriever import VectorRetriever
-from app.vectorstore.chroma_store import create_vector_store
+from app.vectorstore.base import VectorStore
 from app.vectorstore.embedder import FastEmbedEmbedder
 
 router = APIRouter()
@@ -28,20 +33,28 @@ class ChatRequest(BaseModel):
     message: str = Field(min_length=1, max_length=4000)
 
 
-def get_chat_service(settings: Settings = Depends(get_settings)) -> ChatService:  # noqa: B008
-    """构建真实问答链路（惰性嵌入 + Chroma 检索 + 对话模型）；零联网构造。
+def get_chat_service(
+    store: SettingsStore = Depends(get_settings_store),  # noqa: B008
+    vectorstore: VectorStore = Depends(get_vector_store),  # noqa: B008
+) -> ChatService:
+    """构建真实问答链路（嵌入 + Chroma 检索 + 对话模型 + 设置页系统提示词）。
 
-    provider 未配置时返回占位模型，ChatProviderError 延迟到请求的 stream 阶段，
-    以 error 帧形式上报（列出缺失环境变量），不崩溃、不 500。
+    chat 配置来自设置（config.json 优先，env 兜底）；provider 未配置时返回占位模型，
+    ChatProviderError 延迟到请求的 stream 阶段以 error 帧上报，不崩不 500。
     """
+    app_settings = store.load()
     embedder = FastEmbedEmbedder()
-    vectorstore = create_vector_store(persist_dir=settings.data_dir)
     retriever = VectorRetriever(vectorstore)
     try:
-        chat_model = create_chat_model(settings)
+        chat_model = create_chat_model_from_config(app_settings.chat)
     except ChatProviderError as exc:
         chat_model = UnconfiguredChatModel(exc)
-    return ChatService(embedder=embedder, retriever=retriever, chat_model=chat_model)
+    return ChatService(
+        embedder=embedder,
+        retriever=retriever,
+        chat_model=chat_model,
+        system_prompt=app_settings.system_prompt,
+    )
 
 
 @router.post("/api/chat")

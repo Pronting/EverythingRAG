@@ -13,6 +13,7 @@ import pytest
 from pydantic import SecretStr
 
 from app.core.config import Settings
+from app.core.settings_store import ChatModelConfig
 from app.generation import providers
 from app.generation.providers import (
     ChatProviderError,
@@ -133,6 +134,50 @@ def test_settings_populates_chat_api_key_from_env(
     s = Settings()
     assert s.chat_api_key is not None
     assert s.chat_api_key.get_secret_value() == "sk-123"
+
+
+# ---------------------------------------------------------------- 5b. 从设置页 ChatModelConfig 构造
+
+
+def test_create_from_config_uses_chat_config(monkeypatch: pytest.MonkeyPatch) -> None:
+    """create_chat_model_from_config 用 ChatModelConfig 的 base_url/model/api_key。"""
+    captured: dict[str, Any] = {}
+    monkeypatch.setattr(
+        providers,
+        "AsyncOpenAI",
+        lambda base_url, api_key, **kwargs: captured.update(base_url=base_url, api_key=api_key),
+    )
+    chat = ChatModelConfig(base_url="http://cfg.test/v1", model="cfg-model", api_key=SecretStr("sk-cfg"))
+    model = providers.create_chat_model_from_config(chat)
+    assert isinstance(model, OpenAICompatChatModel)
+    assert model.supports_image_input is False
+    assert captured["base_url"] == "http://cfg.test/v1"
+    assert captured["api_key"] == "sk-cfg"
+
+
+def test_create_from_config_missing_raises_listing_fields() -> None:
+    """缺 base_url/model -> ChatProviderError，消息列出字段名。"""
+    with pytest.raises(ChatProviderError) as exc:
+        providers.create_chat_model_from_config(ChatModelConfig())
+    message = str(exc.value)
+    assert "Base URL" in message
+    assert "模型名" in message
+
+
+def test_create_from_config_key_absent_uses_local_placeholder(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """ChatModelConfig 无 api_key -> client 用 'local' 占位（不报错）。"""
+    captured: dict[str, Any] = {}
+    monkeypatch.setattr(
+        providers,
+        "AsyncOpenAI",
+        lambda base_url, api_key, **kwargs: captured.update(base_url=base_url, api_key=api_key),
+    )
+    providers.create_chat_model_from_config(
+        ChatModelConfig(base_url="http://cfg.test/v1", model="m")
+    )
+    assert captured["api_key"] == "local"
 
 
 def test_key_absent_uses_local_placeholder(monkeypatch: pytest.MonkeyPatch) -> None:

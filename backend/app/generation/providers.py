@@ -18,6 +18,7 @@ from openai import AsyncOpenAI
 
 from app.core.config import Settings
 from app.core.outbound import OutboundClient, OutboundEvent, outbound_client
+from app.core.settings_store import ChatModelConfig
 from app.generation.base import ChatModel
 
 
@@ -192,3 +193,28 @@ def _resolve_api_key(settings: Settings) -> str | None:
     if settings.chat_api_key is not None:
         return settings.chat_api_key.get_secret_value()
     return os.environ.get(settings.chat_api_key_env)
+
+
+def create_chat_model_from_config(
+    chat: ChatModelConfig,
+    outbound: OutboundClient | None = outbound_client,
+) -> ChatModel:
+    """从设置页 ChatModelConfig（config.json / env 合并后的有效值）构造对话模型。
+
+    与 create_chat_model(env) 等价，但读取 dashboard 设置；配置缺失 raise
+    ChatProviderError（缺失项列出字段名），outbound 缺省接全局审计单例。
+    """
+    missing: list[str] = []
+    if not chat.base_url:
+        missing.append("对话模型 Base URL")
+    if not chat.model:
+        missing.append("对话模型名")
+    if missing:
+        raise ChatProviderError(f"对话模型未配置，缺少: {', '.join(missing)}")
+    api_key = chat.api_key.get_secret_value() if chat.api_key is not None else None
+    return OpenAICompatChatModel(
+        base_url=chat.base_url,
+        model=chat.model,
+        api_key=api_key,
+        outbound=outbound,
+    )

@@ -249,5 +249,32 @@ async def test_zero_outbound_full_chain(monkeypatch: pytest.MonkeyPatch) -> None
     assert [frame["type"] for frame in frames] == ["meta", "token", "done"]
 
 
+async def test_custom_system_prompt_used() -> None:
+    """ChatService(system_prompt=...) -> 传给对话模型的 system 消息用自定义提示词（覆盖内置）。"""
+    chat = FakeChatModel(tokens=["ok"])
+    service = ChatService(
+        FakeEmbedder(),
+        FakeRetriever(chunks=[_chunk("b1")]),
+        chat,
+        system_prompt="你是测试助手，只用中文回答，且不引用任何来源。",
+    )
+    frames = await _collect(service, "你好")
+    assert [frame["type"] for frame in frames] == ["meta", "token", "done"]
+    system_msg = chat.calls[0][0]
+    assert system_msg["role"] == "system"
+    assert system_msg["content"] == "你是测试助手，只用中文回答，且不引用任何来源。"
+    assert "不得虚构" not in system_msg["content"]  # 内置提示词被覆盖
+
+
+async def test_default_system_prompt_when_not_given() -> None:
+    """未传 system_prompt -> 用内置默认提示词。"""
+    chat = FakeChatModel(tokens=["ok"])
+    service = ChatService(FakeEmbedder(), FakeRetriever(chunks=[_chunk("b1")]), chat)
+    await _collect(service, "你好")
+    system_msg = chat.calls[0][0]
+    assert system_msg["role"] == "system"
+    assert "不要编造" in system_msg["content"]
+
+
 def _raise_outbound(*args: object, **kwargs: object) -> None:
     raise AssertionError("Unexpected outbound network call")

@@ -36,10 +36,13 @@ class ChatService:
         embedder: Embedder,
         retriever: VectorRetriever,
         chat_model: ChatModel,
+        system_prompt: str | None = None,
     ) -> None:
         self._embedder = embedder
         self._retriever = retriever
         self._chat_model = chat_model
+        # 设置页可覆盖的系统提示词；None -> 用内置默认
+        self._system_prompt = system_prompt
 
     async def stream_answer(self, message: str) -> AsyncIterator[dict[str, Any]]:
         """逐帧产出 SSE 帧；对话模型首帧失败时不发 meta，直接 error 终帧。"""
@@ -56,7 +59,7 @@ class ChatService:
 
         try:
             # MEDIUM-2：stream_chat 调用并入首帧 try，同步抛错也收敛为单个 error 帧
-            stream = self._chat_model.stream_chat(_build_messages(message, chunks))
+            stream = self._chat_model.stream_chat(_build_messages(message, chunks, self._system_prompt))
             first_token = await anext(stream)
         except StopAsyncIteration:
             yield meta
@@ -106,12 +109,13 @@ class ChatService:
 def _build_messages(
     message: str,
     chunks: list[RetrievedChunk],
+    system_prompt: str | None = None,
 ) -> list[dict[str, Any]]:
-    """组装 system（约束提示词）+ user（问题 + 带来源序号的上下文）。"""
+    """组装 system（约束提示词，可被设置页覆盖）+ user（问题 + 带来源序号的上下文）。"""
     context = "\n\n".join(f"[{index}] {chunk.text}" for index, chunk in enumerate(chunks, start=1))
     user_content = f"问题：{message}\n\n参考上下文：\n{context}"
     return [
-        {"role": "system", "content": _SYSTEM_PROMPT},
+        {"role": "system", "content": system_prompt or _SYSTEM_PROMPT},
         {"role": "user", "content": user_content},
     ]
 
