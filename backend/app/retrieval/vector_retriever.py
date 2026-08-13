@@ -36,11 +36,17 @@ _DEFAULT_SOURCE_FILE = ""
 _DEFAULT_PLATFORM = "local"
 _DEFAULT_CHUNK_TYPE = "text"
 
+#: 相关度门控缺省阈值：相似度低于该值的命中视为无关，不进上下文。
+#: 修复根因 2——库外/常识问题不再被无关 chunk 污染（生产装配处注入该值，
+#: 核心类缺省 None 保持向后兼容）。数值须用真实语料校准（见诊断报告 §4）。
+DEFAULT_MIN_SIMILARITY = 0.55
+
 
 class VectorRetriever:
-    """按查询向量召回带来源块（纯向量：候选放大 + 上下文裁剪）。
+    """按查询向量召回带来源块（纯向量：候选放大 + 上下文裁剪 + 相关度门控）。
 
     空查询 / 未建索引抛 RetrievalError；有数据但无匹配返回 []（非错误）。
+    min_similarity 非 None 时：相似度低于阈值的命中被过滤，全部低于则返回 []。
     """
 
     def __init__(
@@ -48,17 +54,20 @@ class VectorRetriever:
         vectorstore: VectorStore,
         candidate_k: int = 20,
         context_top_k: int = 5,
+        min_similarity: float | None = None,
     ) -> None:
         self._vectorstore = vectorstore
         self._candidate_k = candidate_k
         self._context_top_k = context_top_k
+        self._min_similarity = min_similarity
 
     def retrieve(
         self,
+        query_text: str,
         query_vector: list[float],
         where: dict[str, Any] | None = None,
     ) -> list[RetrievedChunk]:
-        """向量检索 top-context_k；where 原样透传给 vectorstore。"""
+        """向量检索 top-context_k；query_text 供混合检索词法支路使用（纯向量忽略）。"""
         self._reject_empty_query(query_vector)
         if self._vectorstore.count() == 0:
             raise RetrievalError("知识库尚未建立索引，请先导入并同步文档")
@@ -71,13 +80,17 @@ class VectorRetriever:
             raise RetrievalError("查询向量为空，请先对查询文本进行嵌入")
 
     def _rank_and_map(self, hits: list[dict[str, Any]]) -> list[RetrievedChunk]:
-        """按 similarity 降序（同分按 block_id 稳定），裁剪到 context_top_k 后映射。"""
+        """按 similarity 降序（同分按 block_id 稳定），门控 + 裁剪到 context_top_k 后映射。"""
         if not hits:
             return []
         ranked = sorted(
             hits,
             key=lambda hit: (-float(hit.get("similarity", 0.0)), str(hit.get("block_id", ""))),
         )
+        if self._min_similarity is not None:
+            ranked = [
+                hit for hit in ranked if float(hit.get("similarity", 0.0)) >= self._min_similarity
+            ]
         return [self._to_chunk(hit) for hit in ranked[: self._context_top_k]]
 
     def _to_chunk(self, hit: dict[str, Any]) -> RetrievedChunk:

@@ -36,6 +36,20 @@ class VectorStore(Protocol):
         """按元数据条件批量删除（如文件删除时按 source_file 级联清块）。"""
         ...
 
+    def get_blocks_by_source(self, source_file: str) -> dict[str, str]:
+        """返回某来源文件的全部块：{block_id: text}（增量同步块级比对用）。
+
+        只取文本不取向量（读便宜）；空文件 / 未知来源返回 {}。
+        """
+        ...
+
+    def list_blocks(self) -> list[tuple[str, str, dict[str, Any]]]:
+        """枚举全部块：[(block_id, text, metadata)]（混合检索建 BM25 索引用）。
+
+        只取文本 + 元数据（不取向量，读便宜）；空库返回 []。
+        """
+        ...
+
     def query(
         self,
         vector: list[float],

@@ -49,10 +49,10 @@ def test_blocks_code_fence_and_indented() -> None:
 
 
 def test_blocks_table() -> None:
-    """表格块：每个单元格 inline 为独立块。"""
+    """表格块：每行一个块，行内单元格以 | 连接（行级粒度，避免单元格碎片化）。"""
     parsed = parse_markdown("| a | b |\n|---|---|\n| 1 | 2 |")
     tables = [b for b in parsed.blocks if b.kind == "table"]
-    assert [b.text for b in tables] == ["a", "b", "1", "2"]
+    assert [b.text for b in tables] == ["a | b", "1 | 2"]
 
 
 def test_blocks_list() -> None:

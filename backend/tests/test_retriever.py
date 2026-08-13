@@ -36,6 +36,9 @@ class FakeVectorStore:
     def delete_by_where(self, where: dict[str, Any]) -> None:
         raise AssertionError("retrieval 不应触发 delete_by_where")
 
+    def get_blocks_by_source(self, source_file: str) -> dict[str, str]:
+        raise AssertionError("retrieval 不应触发 get_blocks_by_source")
+
     def query(
         self,
         vector: list[float],
@@ -84,8 +87,14 @@ def _retriever(
     store: FakeVectorStore,
     candidate_k: int = 20,
     context_top_k: int = 5,
+    min_similarity: float | None = None,
 ) -> VectorRetriever:
-    return VectorRetriever(store, candidate_k=candidate_k, context_top_k=context_top_k)
+    return VectorRetriever(
+        store,
+        candidate_k=candidate_k,
+        context_top_k=context_top_k,
+        min_similarity=min_similarity,
+    )
 
 
 # ---------------------------------------------------------------- 1. query -> top-k 带来源块
@@ -105,7 +114,7 @@ def test_query_returns_top_k_with_sources() -> None:
         ],
     )
     retriever = _retriever(store)
-    chunks = retriever.retrieve([1.0, 0.0, 0.0])
+    chunks = retriever.retrieve("查询文本",[1.0, 0.0, 0.0])
 
     assert len(chunks) == 5  # context_top_k 裁剪
     assert all(isinstance(chunk, RetrievedChunk) for chunk in chunks)
@@ -141,7 +150,7 @@ def test_candidate_k_and_context_top_k_semantics() -> None:
         ],
     )
     retriever = _retriever(store, candidate_k=20, context_top_k=5)
-    chunks = retriever.retrieve([1.0, 0.0, 0.0])
+    chunks = retriever.retrieve("查询文本",[1.0, 0.0, 0.0])
 
     assert store.query_calls[0][1] == 20  # candidate_k 传给 store
     assert [chunk.similarity for chunk in chunks] == [0.98, 0.85, 0.8, 0.75, 0.7]
@@ -165,7 +174,7 @@ def test_tie_break_by_block_id_stable() -> None:
         ],
     )
     retriever = _retriever(store)
-    chunks = retriever.retrieve([1.0, 0.0, 0.0])
+    chunks = retriever.retrieve("查询文本",[1.0, 0.0, 0.0])
     assert [chunk.block_id for chunk in chunks] == ["b-a", "b-b", "b-c"]
 
 
@@ -178,7 +187,7 @@ def test_empty_query_raises_clear_error(query_vector: list[float]) -> None:
     store = FakeVectorStore(count=5, query_result=[_block_dict("b1", 0.9)])
     retriever = _retriever(store)
     with pytest.raises(RetrievalError, match="空"):
-        retriever.retrieve(query_vector)
+        retriever.retrieve("查询文本",query_vector)
     assert store.query_calls == []
 
 
@@ -190,7 +199,7 @@ def test_unindexed_raises_clear_error() -> None:
     store = FakeVectorStore(count=0)
     retriever = _retriever(store)
     with pytest.raises(RetrievalError, match="索引"):
-        retriever.retrieve([1.0, 0.0, 0.0])
+        retriever.retrieve("查询文本",[1.0, 0.0, 0.0])
     assert store.query_calls == []
 
 
@@ -201,7 +210,7 @@ def test_no_match_returns_empty_list() -> None:
     """store 有数据但 query 返回空 -> 返回 []，不抛错。"""
     store = FakeVectorStore(count=5)  # query_result 缺省为空
     retriever = _retriever(store)
-    assert retriever.retrieve([1.0, 0.0, 0.0]) == []
+    assert retriever.retrieve("查询文本",[1.0, 0.0, 0.0]) == []
     assert store.query_calls[0][1] == 20
 
 
@@ -213,8 +222,57 @@ def test_where_passthrough() -> None:
     where = {"platform": "kimi", "source_file": "a.md"}
     store = FakeVectorStore(count=3, query_result=[_block_dict("b1", 0.9)])
     retriever = _retriever(store)
-    retriever.retrieve([1.0, 0.0, 0.0], where=where)
+    retriever.retrieve("查询文本",[1.0, 0.0, 0.0], where=where)
     assert store.query_calls[0][2] == where
+
+
+# ---------------------------------------------------------------- 6b. 相关度门控（min_similarity）
+
+
+def test_min_similarity_drops_below_threshold() -> None:
+    """min_similarity 设定后，相似度低于阈值的命中被过滤（不再进上下文）。"""
+    store = FakeVectorStore(
+        count=6,
+        query_result=[
+            _block_dict("b-high", 0.92),
+            _block_dict("b-mid", 0.71),
+            _block_dict("b-low", 0.42),
+            _block_dict("b-lowest", 0.30),
+        ],
+    )
+    retriever = _retriever(store, min_similarity=0.55)
+    chunks = retriever.retrieve("查询文本",[1.0, 0.0, 0.0])
+    assert [chunk.block_id for chunk in chunks] == ["b-high", "b-mid"]
+    assert store.query_calls[0][1] == 20  # 候选仍全量召回，门控发生在裁剪前
+
+
+def test_min_similarity_all_below_returns_empty() -> None:
+    """全部命中低于阈值 -> 返回 []（无相关上下文，调用方走常识路径）。"""
+    store = FakeVectorStore(
+        count=4,
+        query_result=[_block_dict("b1", 0.45), _block_dict("b2", 0.38)],
+    )
+    retriever = _retriever(store, min_similarity=0.55)
+    assert retriever.retrieve("查询文本",[1.0, 0.0, 0.0]) == []
+
+
+def test_min_similarity_default_none_keeps_all() -> None:
+    """min_similarity 缺省 None：不过滤（向后兼容，既有行为不变）。"""
+    store = FakeVectorStore(
+        count=3,
+        query_result=[_block_dict("b1", 0.4), _block_dict("b2", 0.3)],
+    )
+    retriever = _retriever(store)  # 不传 min_similarity
+    chunks = retriever.retrieve("查询文本",[1.0, 0.0, 0.0])
+    assert [chunk.block_id for chunk in chunks] == ["b1", "b2"]
+
+
+def test_min_similarity_boundary_inclusive() -> None:
+    """恰等于阈值的命中保留（>= 语义）。"""
+    store = FakeVectorStore(count=2, query_result=[_block_dict("b1", 0.55)])
+    retriever = _retriever(store, min_similarity=0.55)
+    chunks = retriever.retrieve("查询文本",[1.0, 0.0, 0.0])
+    assert [chunk.block_id for chunk in chunks] == ["b1"]
 
 
 # ---------------------------------------------------------------- 7. 缺失字段安全默认 + 零出网
@@ -226,7 +284,7 @@ def test_missing_metadata_fields_get_safe_defaults() -> None:
     block["metadata"] = {"block_id": "b1", "source_file": "a.md"}  # 仅最小编码
     store = FakeVectorStore(count=2, query_result=[block])
     retriever = _retriever(store)
-    chunk = retriever.retrieve([1.0, 0.0, 0.0])[0]
+    chunk = retriever.retrieve("查询文本",[1.0, 0.0, 0.0])[0]
     assert chunk.platform == "local"
     assert chunk.chunk_type == "text"
     assert chunk.anchor is None
@@ -240,7 +298,7 @@ def test_zero_outbound_full_flow(monkeypatch: pytest.MonkeyPatch) -> None:
 
     store = FakeVectorStore(count=3, query_result=[_block_dict("b1", 0.9)])
     retriever = _retriever(store)
-    chunks = retriever.retrieve([1.0, 0.0, 0.0])
+    chunks = retriever.retrieve("查询文本",[1.0, 0.0, 0.0])
     assert [chunk.block_id for chunk in chunks] == ["b1"]
 
 

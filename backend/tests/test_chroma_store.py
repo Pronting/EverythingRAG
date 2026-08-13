@@ -155,6 +155,26 @@ def test_delete_by_ids_and_where(tmp_path: Path) -> None:
     assert store._collection.count() == 0
 
 
+# ---------------------------------------------------------------- 4b. get_blocks_by_source
+
+
+def test_get_blocks_by_source_returns_block_texts(tmp_path: Path) -> None:
+    """get_blocks_by_source 按来源文件返回 {block_id: text}（增量块级比对用）。"""
+    store = _store(tmp_path)
+    _seed(store)  # a.md -> block-a/block-c；b.md -> block-b
+
+    a_blocks = store.get_blocks_by_source("a.md")
+    assert set(a_blocks) == {"block-a", "block-c"}
+    assert a_blocks["block-a"] == "text a"
+    assert a_blocks["block-c"] == "text c"
+
+    b_blocks = store.get_blocks_by_source("b.md")
+    assert set(b_blocks) == {"block-b"}
+
+    # 未知来源 / 无块 -> 空 dict
+    assert store.get_blocks_by_source("ghost.md") == {}
+
+
 # ---------------------------------------------------------------- 5. 幂等 upsert
 
 
@@ -258,3 +278,61 @@ def test_count_files_empty(tmp_path: Path) -> None:
     """空库 count_files = 0。"""
     store = _store(tmp_path)
     assert store.count_files() == 0
+
+
+# ---------------------------------------------------------------- 4c. list_blocks（BM25 标题注入用）
+
+
+def test_list_blocks_enumerates_all_with_text_and_metadata(tmp_path: Path) -> None:
+    """list_blocks 返回全部块 (block_id, text, metadata)，供混合检索建 BM25 索引。"""
+    store = _store(tmp_path)
+    _seed(store)  # block-a/block-c（a.md）+ block-b（b.md）
+
+    blocks = store.list_blocks()
+    assert {block[0] for block in blocks} == {"block-a", "block-b", "block-c"}
+    assert {block[1] for block in blocks} == {"text a", "text b", "text c"}
+    meta = {block[0]: block[2] for block in blocks}
+    assert meta["block-a"]["source_file"] == "a.md"
+    assert meta["block-a"]["heading_path"] == "s1/s2"
+    assert meta["block-b"]["platform"] == "kimi"
+
+
+def test_list_blocks_empty_store(tmp_path: Path) -> None:
+    """空库 list_blocks 返回空列表。"""
+    store = _store(tmp_path)
+    assert store.list_blocks() == []
+
+
+# ---------------------------------------------------------------- 11. collection 失效自愈（崩溃根因回归）
+
+
+def test_read_ops_tolerate_deleted_collection(tmp_path: Path) -> None:
+    """collection 被外部删除/重建后，读操作不抛 NotFoundError、自愈为空库。
+
+    崩溃根因回归：持久库被并发重建（切换嵌入模型 / 其他进程访问同一 persist_dir）
+    时，旧 collection 句柄失效。count/count_files/query/get_blocks_by_source 必须
+    自愈为「空库」，否则 /api/status 等入口直接 500 甚至拖垮服务进程。
+    """
+    store = _store(tmp_path)
+    _seed(store)
+    assert store.count_files() == 2
+
+    store._client.delete_collection(store._collection_name)
+
+    assert store.count() == 0
+    assert store.count_files() == 0
+    assert store.query(QUERY, top_k=3) == []
+    assert store.get_blocks_by_source("a.md") == {}
+
+
+def test_upsert_self_heals_after_collection_deleted(tmp_path: Path) -> None:
+    """collection 被删后 upsert 自愈重建，随后可正常写入与查询。"""
+    store = _store(tmp_path)
+    _seed(store)
+    store._client.delete_collection(store._collection_name)
+
+    store.upsert([("block-a", "text a", VECTORS["block-a"], _block("block-a", "a.md"))])
+
+    assert store.count() == 1
+    assert store.count_files() == 1
+    assert [hit["block_id"] for hit in store.query(QUERY, top_k=3)] == ["block-a"]

@@ -11,16 +11,18 @@ from app.retrieval.vector_retriever import RetrievedChunk
 
 
 class Retriever(Protocol):
-    """统一检索接口。MVP 实现 VectorRetriever（纯向量，无混合/重排）。"""
+    """统一检索接口。实现：VectorRetriever（纯向量）、HybridRetriever（dense+BM25+RRF）。"""
 
     def retrieve(
         self,
+        query_text: str,
         query_vector: list[float],
         where: dict[str, Any] | None = None,
     ) -> list[RetrievedChunk]:
-        """按查询向量检索，返回带来源的命中块（候选放大 + 上下文裁剪）。
+        """按查询文本 + 查询向量检索，返回带来源的命中块（候选放大 + 上下文裁剪）。
 
+        query_text 供混合检索的词法（BM25）支路使用；纯向量实现忽略之。
         candidate_k=20：召回候选数；context_top_k=5：入上下文的块数；
-        二者由 VectorRetriever 构造参数决定，接口不暴露 top_k。
+        二者由 Retriever 构造参数决定，接口不暴露 top_k。
         """
         ...

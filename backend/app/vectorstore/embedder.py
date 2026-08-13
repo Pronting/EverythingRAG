@@ -34,19 +34,38 @@ class FastEmbedEmbedder:
 
     惰性加载：底层模型对象在首次 embed_texts 时创建并缓存，之后复用，
     因此创建实例不触发模型加载或下载。
+
+    内存安全（优化① 提速配套）：fastembed 按 batch 内最长序列 padding，超大
+    输入（巨型代码块/配置转储）会让单个 batch 的内存爆炸（曾出现 15.8GB 分配
+    失败）。故：
+    - max_chars：嵌入前把每条输入截断到上限（缺省 2000 字符，覆盖常规块，仅
+      裁剪超长块；不影响块文本在向量库的完整存储）。
+    - batch_size：缺省 8——小 batch 既省内存，又避免「大 batch + 长序列」的
+      padding 计算浪费（实测 batch=128 反而比 batch=8 慢 3 倍）。
     """
 
     fingerprint = "bge-m3"
     dim = _BGE_M3_DIM
+    max_chars: int = 2000
+    batch_size: int = 8
 
-    def __init__(self, model_name: str = "BAAI/bge-m3", cache_dir: str | None = None) -> None:
+    def __init__(
+        self,
+        model_name: str = "BAAI/bge-m3",
+        cache_dir: str | None = None,
+        max_chars: int | None = None,
+        batch_size: int | None = None,
+    ) -> None:
         self.model_name = model_name
         self._cache_dir = cache_dir
+        self._max_chars = max_chars if max_chars is not None else type(self).max_chars
+        self._batch_size = batch_size if batch_size is not None else type(self).batch_size
         self._model: TextEmbedding | None = None
 
     def embed_texts(self, texts: list[str]) -> list[list[float]]:
         model = self._ensure_model()
-        return [vector.tolist() for vector in model.embed(texts)]
+        bounded = [text[: self._max_chars] for text in texts]
+        return [vector.tolist() for vector in model.embed(bounded, batch_size=self._batch_size)]
 
     def _ensure_model(self) -> TextEmbedding:
         """首次调用才加载模型（触发 bge-m3 下载，已授权）；之后缓存复用。"""

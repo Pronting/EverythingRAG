@@ -19,10 +19,14 @@ _CONTENT_KINDS = frozenset({"paragraph", "list", "table", "quote", "image"})
 #: 句子切分用：贪婪匹配「非句末符若干 + 一个句末符」，保留句末符便于拼接还原。
 _SENTENCE_RE = re.compile(r"[^。！？.!?]*[。！？.!?]")
 
+#: 内联 HTML 标签（markdown-it html=False 下作为字面文本进正文，如 <font style="...">）。
+#: 标签本身无检索价值且污染嵌入/上下文，切块时从内容块剥离（代码块保留原样）。
+_INLINE_HTML_RE = re.compile(r"<[^>]*>")
+
 
 @dataclass(frozen=True)
 class Chunk:
-    """单个切块：稳定锚点路径链 + 序号 / 文本 / 来源 / 标题路径 / 锚点 / 序号。"""
+    """单个切块：稳定锚点路径链 + 序号 / 文本 / 来源 / 标题路径 / 锚点 / 序号 / 类型。"""
 
     block_id: str  # 如 "/H1/{anchor}/H2/{anchor}#1"；无标题文档 "#1"、"#2"…
     text: str
@@ -30,6 +34,7 @@ class Chunk:
     heading_path: str  # 标题路径文本，如 "笔记方法 > 检索"；无标题则 ""
     anchor: str  # 所属标题锚点链末端；无标题则 ""
     seq: int  # 该锚点区间内块序号（1 起）
+    kind: str = "text"  # "text" | "code"：代码块恒独立、不参与短块合并
 
 
 @dataclass(frozen=True)
@@ -45,14 +50,18 @@ def chunk_document(
     parsed: ParsedMarkdown,
     source_file: str,
     max_chunk_chars: int = 2000,  # PRD 4.3：默认约 2000 字符
+    min_chunk_chars: int = 120,  # 优化②：短碎片合并的下限（低于该长度的文本块不独立成块）
 ) -> list[Chunk]:
     """把解析结果按标题锚点分层切成文本块（纯函数，零出网）。
 
     - 标题区间默认合并为一个块；超长则按段落/句子/字符边界逐级拆分。
     - 代码块永远独立成块，即使超过上限也不拆散（PRD 规则 7）。
-    - 无标题文档按段落为最小单元切块（``#1``、``#2``…）。
+    - 无标题文档按段落切块（``#1``、``#2``…）。
+    - 优化②：正文内联 HTML 标签（<font> 等）剥离；低于 ``min_chunk_chars`` 的
+      相邻短文本块前向合并，使检索/嵌入面对语义完整的块而非残句。
     """
     max_chars = max(1, int(max_chunk_chars))
+    min_chars = max(0, int(min_chunk_chars))
     chunks: list[Chunk] = []
     doc_seq = 0  # 无标题区间用文档级序号，保证 block_id 全局唯一
     for region in _build_regions(parsed.blocks):
@@ -60,7 +69,7 @@ def chunk_document(
             _emit_heading_region(region, source_file, max_chars, chunks)
         else:
             doc_seq = _emit_headingless_region(region, source_file, max_chars, doc_seq, chunks)
-    return chunks
+    return _coalesce_short_chunks(chunks, min_chars, max_chars)
 
 
 def _build_regions(blocks: tuple[MDBlock, ...]) -> list[_Region]:
@@ -79,7 +88,7 @@ def _build_regions(blocks: tuple[MDBlock, ...]) -> list[_Region]:
             if block.text:
                 code.append(block.text)
         elif block.kind in _CONTENT_KINDS and block.text:
-            content.append(block.text)
+            content.append(_strip_inline_html(block.text))
     _flush_region(regions, chain, content, code)
     return regions
 
@@ -107,8 +116,11 @@ def _emit_heading_region(region: _Region, source_file: str, max_chars: int, chun
         seq += 1
         chunks.append(Chunk(f"{prefix}#{seq}", part, source_file, heading_path, anchor, seq))
     for text in region.code:
-        seq += 1
-        chunks.append(Chunk(f"{prefix}#{seq}", text, source_file, heading_path, anchor, seq))
+        # 优化① 提速配套：代码块超上限按字符边界拆分（_split_chars 短块原样返回）。
+        # 巨型代码块（如 JVM 配置转储）若整块保留，会 OOM 且无法作上下文喂给 LLM。
+        for part in _split_chars(text, max_chars):
+            seq += 1
+            chunks.append(Chunk(f"{prefix}#{seq}", part, source_file, heading_path, anchor, seq, kind="code"))
 
 
 def _emit_headingless_region(
@@ -125,8 +137,10 @@ def _emit_headingless_region(
             seq += 1
             chunks.append(Chunk(f"#{seq}", part, source_file, "", "", seq))
     for text in region.code:
-        seq += 1
-        chunks.append(Chunk(f"#{seq}", text, source_file, "", "", seq))
+        # 优化① 提速配套：超长代码块按字符边界拆分（同带标题分支）。
+        for part in _split_chars(text, max_chars):
+            seq += 1
+            chunks.append(Chunk(f"#{seq}", part, source_file, "", "", seq, kind="code"))
     return seq
 
 
@@ -206,3 +220,59 @@ def _split_sentences(text: str) -> list[str]:
 def _split_chars(text: str, max_chars: int) -> list[str]:
     """按字符边界拆（允许）：最终兜底，保证每块 ≤ 上限。"""
     return [text[i : i + max_chars] for i in range(0, len(text), max_chars)]
+
+
+def _strip_inline_html(text: str) -> str:
+    """剥离内联 HTML 标签（<font> 等）；内容块专用，代码块不调用。"""
+    return _INLINE_HTML_RE.sub("", text)
+
+
+def _coalesce_short_chunks(chunks: list[Chunk], min_chars: int, max_chars: int) -> list[Chunk]:
+    """把低于最小长度的相邻文本块前向合并，使每块达到语义完整长度。
+
+    - 低于 ``min_chars`` 的碎片被并入后续块（直到 ≥min 或触及上限）；已达标且
+      后续块也达标的相邻块保持独立，不过度粘连。
+    - 代码块恒独立，不参与合并、也不被短正文并入（代码与正文分离）。
+    - 合并块保留首个块的 block_id/锚点身份（内容归属其起点的标题区间）。
+    """
+    if min_chars <= 0 or not chunks:
+        return chunks
+    out: list[Chunk] = []
+    pending: list[Chunk] = []
+    pending_len = 0
+
+    def _flush() -> None:
+        nonlocal pending, pending_len
+        if not pending:
+            return
+        if len(pending) > 1:
+            first = pending[0]
+            merged = Chunk(
+                block_id=first.block_id,
+                text="\n\n".join(c.text for c in pending),
+                source_file=first.source_file,
+                heading_path=first.heading_path,
+                anchor=first.anchor,
+                seq=first.seq,
+                kind="text",
+            )
+            out.append(merged)
+        else:
+            out.append(pending[0])
+        pending, pending_len = [], 0
+
+    for chunk in chunks:
+        if chunk.kind == "code":
+            _flush()
+            out.append(chunk)
+            continue
+        # 已达最小长度且下一块也达标 -> 独立成块（不过度粘连）
+        if pending_len >= min_chars and len(chunk.text) >= min_chars:
+            _flush()
+        # 追加下一块会超过上限 -> 先落盘当前累积
+        if pending and pending_len + 2 + len(chunk.text) > max_chars:
+            _flush()
+        pending.append(chunk)
+        pending_len += (2 if pending_len else 0) + len(chunk.text)
+    _flush()
+    return out

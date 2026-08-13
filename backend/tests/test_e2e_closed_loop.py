@@ -19,6 +19,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.api.routes.chat import get_chat_service
+from app.generation.base import ChatChunk
 from app.generation.chat_service import ChatService
 from app.ingestion.pipeline import IngestionPipeline
 from app.main import app
@@ -83,7 +84,7 @@ class FakeChatModel:
     async def stream_chat(self, messages: list[dict[str, Any]], **kwargs: Any) -> Any:
         question = _extract_question(messages[-1]["content"]) if messages else ""
         for token in ("答案是：", question):
-            yield token
+            yield ChatChunk("content", token)
 
 
 def _extract_question(user_content: str) -> str:
@@ -145,18 +146,18 @@ def test_pipeline_ingest_retrieval_closed_loop(tmp_path: Path) -> None:
     )
     report = IngestionPipeline(embedder=embedder, vectorstore=store).ingest(root)
 
-    # 计数与 store 一致
+    # 计数与 store 一致（apple=1、orange=2 含代码块、polar 短区合并为 1）
     assert report.files_scanned == 3
     assert report.files_parsed == 3
     assert report.files_skipped == 0
-    assert report.chunks == 5
-    assert report.blocks_upserted == 5
+    assert report.chunks == 4
+    assert report.blocks_upserted == 4
     assert report.errors == ()
-    assert store.count() == 5
+    assert store.count() == 4
 
     # 检索：关键字「橘子」命中含该词的块，来源指向 fixture 文件
     retriever = VectorRetriever(store)
-    hits = retriever.retrieve(embedder.embed_texts(["橘子"])[0])
+    hits = retriever.retrieve("橘子", embedder.embed_texts(["橘子"])[0])
     assert hits, "关键字查询应命中至少一个块"
     first = hits[0]
     assert "橘子" in first.text
@@ -164,7 +165,7 @@ def test_pipeline_ingest_retrieval_closed_loop(tmp_path: Path) -> None:
     assert Path(first.source_file).is_file()  # 来源是真实文件（可回溯）
 
     # 另一关键字「北极熊」同样可召回
-    polar_hits = retriever.retrieve(embedder.embed_texts(["北极熊"])[0])
+    polar_hits = retriever.retrieve("北极熊", embedder.embed_texts(["北极熊"])[0])
     assert polar_hits and "北极熊" in polar_hits[0].text
     assert polar_hits[0].source_file.endswith("polar.md")
 
@@ -227,7 +228,7 @@ def test_zero_outbound_full_closed_loop(tmp_path: Path, monkeypatch: pytest.Monk
         embedder=embedder,
     )
     report = IngestionPipeline(embedder=embedder, vectorstore=store).ingest(root)
-    assert report.blocks_upserted == 5
+    assert report.blocks_upserted == 4
 
     retriever = VectorRetriever(store)
     service = ChatService(embedder=embedder, retriever=retriever, chat_model=FakeChatModel())

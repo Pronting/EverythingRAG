@@ -17,10 +17,12 @@ from app.vectorstore.embedder import FastEmbedEmbedder
 
 
 class FakeTextEmbedding:
-    """记录实例化次数与最近 cache_dir；embed 返回 dim=1024 的伪向量。"""
+    """记录实例化次数、最近 cache_dir 与收到的输入；embed 返回 dim=1024 伪向量。"""
 
     instances = 0
     last_cache_dir: str | None = None
+    last_texts: list[str] | None = None
+    last_batch_size: int | None = None
 
     def __init__(self, model_name: str, cache_dir: str | None = None) -> None:
         type(self).instances += 1
@@ -28,7 +30,9 @@ class FakeTextEmbedding:
         self.cache_dir = cache_dir
         type(self).last_cache_dir = cache_dir
 
-    def embed(self, texts: list[str]) -> list[np.ndarray]:
+    def embed(self, texts: list[str], batch_size: int | None = None) -> list[np.ndarray]:
+        type(self).last_texts = list(texts)
+        type(self).last_batch_size = batch_size
         return [np.zeros(FastEmbedEmbedder.dim, dtype=np.float32) for _ in texts]
 
 
@@ -59,6 +63,43 @@ def test_lazy_load_once_then_cached(monkeypatch: pytest.MonkeyPatch) -> None:
     assert FakeTextEmbedding.instances == 1  # 缓存，不重复实例化
 
 
+# ---------------------------------------------------------------- 内存安全（优化① 提速配套）
+
+
+def test_safe_embed_defaults() -> None:
+    """安全默认：输入长度上限 2000 字符、batch_size=8（小 batch 省内存且防 padding 浪费）。"""
+    assert FastEmbedEmbedder.max_chars == 2000
+    assert FastEmbedEmbedder.batch_size == 8
+
+
+def test_embed_truncates_oversized_input(monkeypatch: pytest.MonkeyPatch) -> None:
+    """超长输入（巨型代码块/配置转储）截断到上限再嵌入，杜绝 OOM。"""
+    monkeypatch.setattr(embedder_mod, "TextEmbedding", FakeTextEmbedding)
+    embedder = FastEmbedEmbedder()
+    vectors = embedder.embed_texts(["长" * 50000, "短文本"])
+    assert len(vectors) == 2
+    assert all(len(v) == FastEmbedEmbedder.dim for v in vectors)
+    assert FakeTextEmbedding.last_texts is not None
+    assert len(FakeTextEmbedding.last_texts[0]) == FastEmbedEmbedder.max_chars  # 被截断
+    assert FakeTextEmbedding.last_texts[1] == "短文本"  # 短文本不受影响
+
+
+def test_embed_passes_batch_size(monkeypatch: pytest.MonkeyPatch) -> None:
+    """batch_size 透传给底层模型（受控 batch，防 padding 内存爆炸）。"""
+    monkeypatch.setattr(embedder_mod, "TextEmbedding", FakeTextEmbedding)
+    embedder = FastEmbedEmbedder()
+    embedder.embed_texts(["a", "b"])
+    assert FakeTextEmbedding.last_batch_size == FastEmbedEmbedder.batch_size
+
+
+def test_embed_oversized_input_keeps_vector_count(monkeypatch: pytest.MonkeyPatch) -> None:
+    """截断不改变向量个数：输入 N 条 -> 输出 N 条向量。"""
+    monkeypatch.setattr(embedder_mod, "TextEmbedding", FakeTextEmbedding)
+    embedder = FastEmbedEmbedder()
+    texts = ["x" * 10000, "正常", "y" * 3000]
+    assert len(embedder.embed_texts(texts)) == 3
+
+
 class FakeUnregisteredTextEmbedding:
     """模拟「模型未内置」：首次构造抛 ValueError，注册后第二次构造成功。"""
 
@@ -72,7 +113,7 @@ class FakeUnregisteredTextEmbedding:
         self.model_name = model_name
         self.cache_dir = cache_dir
 
-    def embed(self, texts: list[str]) -> list[np.ndarray]:
+    def embed(self, texts: list[str], batch_size: int | None = None) -> list[np.ndarray]:
         return [np.zeros(FastEmbedEmbedder.dim, dtype=np.float32) for _ in texts]
 
     @classmethod

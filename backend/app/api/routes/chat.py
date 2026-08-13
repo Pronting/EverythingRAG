@@ -22,7 +22,8 @@ from app.generation.providers import (
     UnconfiguredChatModel,
     create_chat_model_from_config,
 )
-from app.retrieval.vector_retriever import VectorRetriever
+from app.retrieval.hybrid_retriever import HybridRetriever
+from app.retrieval.vector_retriever import DEFAULT_MIN_SIMILARITY
 from app.vectorstore.base import VectorStore
 from app.vectorstore.embedder import create_embedder_from_config
 
@@ -44,7 +45,9 @@ def get_chat_service(
     """
     app_settings = store.load()
     embedder = create_embedder_from_config(app_settings.embed)
-    retriever = VectorRetriever(vectorstore)
+    # 混合检索（dense + BM25 标题注入 + RRF）+ 相关度门控：
+    # 词法命中（BM25）不受余弦阈值约束，纯向量低相似度命中被过滤（修复根因 1/2）
+    retriever = HybridRetriever(vectorstore, min_similarity=DEFAULT_MIN_SIMILARITY)
     try:
         chat_model = create_chat_model_from_config(app_settings.chat)
     except ChatProviderError as exc:

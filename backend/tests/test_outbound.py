@@ -18,6 +18,7 @@ import pytest
 from app.core.config import Settings
 from app.core.outbound import OutboundClient, OutboundEvent, outbound_client
 from app.generation import providers
+from app.generation.base import ChatChunk
 from app.generation.chat_service import ChatService
 from app.generation.providers import ChatProviderError, OpenAICompatChatModel, create_chat_model
 from app.ingestion.chunker import Chunk, chunk_document
@@ -128,7 +129,7 @@ class FakeChatModel:
 
     async def stream_chat(self, messages: list[dict[str, Any]], **kwargs: Any) -> Any:
         for token in ["好", "的"]:
-            yield token
+            yield ChatChunk("content", token)
 
 
 def _event(destination: str, status: int | None = 200) -> OutboundEvent:
@@ -258,7 +259,7 @@ async def test_provider_records_one_event_on_success(
         outbound=outbound,
     )
     tokens = [token async for token in model.stream_chat([{"role": "user", "content": "hi"}])]
-    assert tokens == ["你", "好"]
+    assert [c.text for c in tokens] == ["你", "好"]
 
     entries = outbound.entries()
     assert len(entries) == 1
@@ -348,7 +349,7 @@ async def test_destination_never_leaks_path_or_key(
         outbound=outbound,
     )
     tokens = [token async for token in model.stream_chat([{"role": "user", "content": "q"}])]
-    assert tokens == ["a"]
+    assert [c.text for c in tokens] == ["a"]
     event = outbound.entries()[0]
     assert event.destination == "api.deepseek.com"
     assert "secret" not in event.destination
@@ -363,7 +364,7 @@ async def test_stream_skips_usage_only_chunk(
     monkeypatch.setattr(providers, "AsyncOpenAI", lambda **kwargs: _FakeClient(completions))
     model = OpenAICompatChatModel(base_url="http://localhost:9999/v1", model="m")
     tokens = [token async for token in model.stream_chat([{"role": "user", "content": "q"}])]
-    assert tokens == ["x"]
+    assert [c.text for c in tokens] == ["x"]
 
 
 async def test_provider_without_outbound_records_nothing(
@@ -374,7 +375,7 @@ async def test_provider_without_outbound_records_nothing(
     monkeypatch.setattr(providers, "AsyncOpenAI", lambda **kwargs: _FakeClient(completions))
     model = OpenAICompatChatModel(base_url="http://localhost:9999/v1", model="m")
     tokens = [token async for token in model.stream_chat([{"role": "user", "content": "q"}])]
-    assert tokens == ["a"]
+    assert [c.text for c in tokens] == ["a"]
 
 
 async def test_create_chat_model_wires_global_outbound(
@@ -392,7 +393,7 @@ async def test_create_chat_model_wires_global_outbound(
     model = create_chat_model(settings)
     assert model._outbound is outbound_client  # 缺省已接全局单例
     tokens = [token async for token in model.stream_chat([{"role": "user", "content": "q"}])]
-    assert tokens == ["你"]
+    assert [c.text for c in tokens] == ["你"]
     entries = outbound_client.entries()
     assert len(entries) == 1  # 生产接线后真实出网确实进审计
     assert entries[0].status == 200
@@ -414,7 +415,7 @@ async def test_provider_records_event_on_aclose(
     )
     stream = model.stream_chat([{"role": "user", "content": "q"}])
     first = await anext(stream)
-    assert first == "a"
+    assert first.text == "a"
     await stream.aclose()
     entries = outbound.entries()
     assert len(entries) == 1  # create() 已发生的出网不因 aclose 漏记
@@ -489,7 +490,7 @@ async def test_pure_text_chain_zero_outbound(
 
     # 6. 检索（真实 VectorRetriever）
     retriever = VectorRetriever(store)
-    retrieved = retriever.retrieve(embedder.embed_texts(["内容"])[0])
+    retrieved = retriever.retrieve("内容", embedder.embed_texts(["内容"])[0])
     assert retrieved
 
     # 7. 问答（本地假对话模型，零出网）

@@ -21,6 +21,15 @@ _PUNCT_RE = re.compile(r"[^\w\s-]")
 _SPACE_RUN_RE = re.compile(r"\s+")
 _INLINE_SPACES_RE = re.compile(r"\s{2,}")
 
+#: 噪声行识别（优化①：低信息块不污染向量检索）。
+#: 只作用于「顶层段落」，不碰 list/quote/表格项（避免链接收藏节整节消失）。
+#: 纯标签行（Obsidian `#c端 #埋点`）、纯 URL、纯标点/表情行均无检索价值；
+#: 标签/URL 后无空格粘连中文正文（`#c端：这是正文` / `https://x.com，参见`）不是噪声。
+_TAG_TOKEN = r"#[0-9A-Za-z_一-鿿][0-9A-Za-z_一-鿿/-]*"
+_TAG_ONLY_RE = re.compile(rf"^(?:{_TAG_TOKEN})(?:[ \t]+{_TAG_TOKEN})*$")
+_URL_ONLY_RE = re.compile(r"^https?://[^\s一-鿿，。！？；：、]+[.。]?$")
+_PUNCT_EMOJI_ONLY_RE = re.compile(r"^[\W_]+$")
+
 _PLACEHOLDER_ANCHOR = "section"
 
 
@@ -146,6 +155,7 @@ def _build_blocks(tokens: list[Token], has_frontmatter: bool) -> tuple[MDBlock, 
         blocks.append(MDBlock(kind="frontmatter", text=""))
     seen: set[str] = set()
     context: list[str] = []  # 容器栈：list / quote / table，决定 inline 的 kind
+    table_row: list[str] = []  # 当前表格行的单元格累计（table 上下文内用）
     i = 0
     n = len(tokens)
     while i < n:
@@ -161,7 +171,13 @@ def _build_blocks(tokens: list[Token], has_frontmatter: bool) -> tuple[MDBlock, 
             )
         elif t == "inline":
             text = _inline_token_text(tok)
-            if text:
+            if not text:
+                pass
+            elif context and context[-1] == "table":
+                table_row.append(text)  # 表格单元格：累计到当前行，行末统一成块
+            elif not context and _is_noise_text(text):
+                pass  # 顶层噪声行（纯标签/URL/标点）丢弃；list/quote 项保留
+            else:
                 kind = "image" if _is_pure_image(tok) else (context[-1] if context else "paragraph")
                 blocks.append(MDBlock(kind=kind, text=text))
         elif t in ("fence", "code_block"):
@@ -176,6 +192,12 @@ def _build_blocks(tokens: list[Token], has_frontmatter: bool) -> tuple[MDBlock, 
             context.append("quote")
         elif t == "table_open":
             context.append("table")
+        elif t == "tr_open":
+            table_row = []
+        elif t == "tr_close":
+            if table_row:
+                blocks.append(MDBlock(kind="table", text=" | ".join(table_row)))
+            table_row = []
         elif t in ("bullet_list_close", "ordered_list_close", "blockquote_close", "table_close"):
             if context:
                 context.pop()
@@ -252,6 +274,23 @@ def _inline_token_text(tok: Token) -> str:
         elif child.type in ("softbreak", "hardbreak"):
             parts.append(" ")
     return _INLINE_SPACES_RE.sub(" ", "".join(parts)).strip()
+
+
+def _is_noise_text(text: str) -> bool:
+    """判断归一化文本是否为无检索价值的噪声行（纯标签 / 纯 URL / 纯标点表情）。
+
+    优化①：Obsidian 标签行（``#c端 #埋点``）、纯 URL、纯标点/表情行会被整行
+    丢弃，避免这类低信息块以「与查询同词」的姿态高排位污染向量检索。
+    标签与正文混排的行（``#c端 这是正文``）不是噪声，保留。
+    """
+    s = text.strip()
+    if not s:
+        return True
+    return (
+        _TAG_ONLY_RE.match(s) is not None
+        or _URL_ONLY_RE.match(s) is not None
+        or _PUNCT_EMOJI_ONLY_RE.match(s) is not None
+    )
 
 
 def _image_alt(tok: Token) -> str:

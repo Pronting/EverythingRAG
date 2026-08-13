@@ -156,15 +156,14 @@ def test_code_blocks_preserved_as_text() -> None:
 
 
 def test_strikethrough_and_table_normalized() -> None:
-    """删除线标记去除；GFM 表格文本保留且无管道符残留。"""
+    """删除线标记去除；GFM 表格按行保留，行内单元格以 | 分隔。"""
     md = "~~删除~~ 保留\n\n| a | b |\n|---|---|\n| 1 | 2 |"
     body = parse_markdown(md).normalized_text
     assert "删除" in body
     assert "保留" in body
     assert "~~" not in body
-    for cell in ("a", "b", "1", "2"):
-        assert cell in body
-    assert "|" not in body
+    assert "a | b" in body  # 表头行整体保留（行级粒度）
+    assert "1 | 2" in body  # 数据行整体保留
 
 
 def test_lists_and_blockquote_content_kept() -> None:
@@ -301,3 +300,61 @@ def test_parse_is_deterministic() -> None:
     """同一输入两次解析结果完全一致（锚点稳定）。"""
     md = "# A 标题\n\n## B\n\n# A 标题\n\nbody"
     assert parse_markdown(md) == parse_markdown(md)
+
+
+# ---------------------------------------------------------------- 7. 噪声行过滤（优化①）
+
+
+def _content_blocks(md: str) -> list[str]:
+    """提取非 frontmatter 的内容块文本（排除空块）。"""
+    return [b.text for b in parse_markdown(md).blocks if b.text]
+
+
+def test_pure_tag_line_paragraph_dropped() -> None:
+    """Obsidian 纯标签行（#c端 #埋点）不产生段落块，也不进归一化正文。"""
+    parsed = parse_markdown("#c端 #埋点\n\n正文内容")
+    assert _content_blocks("#c端 #埋点\n\n正文内容") == ["正文内容"]
+    assert "埋点" not in parsed.normalized_text
+    assert "c端" not in parsed.normalized_text
+
+
+def test_single_tag_line_dropped() -> None:
+    """单标签行同样被丢弃（#业务 #问题吐槽 / #erp / #问题排查）。"""
+    for tag in ("#业务 #问题吐槽", "#erp", "#问题排查", "#cider #架构"):
+        assert _content_blocks(f"{tag}\n\n正文") == ["正文"]
+
+
+def test_pure_url_line_dropped() -> None:
+    """纯 URL 行无检索价值，被丢弃。"""
+    assert _content_blocks("https://example.com/long/page?x=1\n\n正文") == ["正文"]
+
+
+def test_pure_punct_or_emoji_line_dropped() -> None:
+    """纯标点/表情行（……、===、😀）被丢弃。"""
+    for noise in ("......", "！！！", "=====", "😀😀", "---"):
+        assert _content_blocks(f"{noise}\n\n正文") == ["正文"]
+
+
+def test_tag_line_with_real_content_kept() -> None:
+    """标签与正文混排的行不是噪声，必须保留（不过滤）。"""
+    md = "#c端 #埋点 这是关于埋点体系的正文说明"
+    assert _content_blocks(md) == [md]
+
+
+def test_url_with_trailing_cjk_text_kept() -> None:
+    """URL 后无空格粘连中文说明（https://x.com，参见文档）不是噪声，整行保留。"""
+    md = "https://example.com，参见文档"
+    assert _content_blocks(md) == [md]
+
+
+def test_tag_with_trailing_cjk_text_kept() -> None:
+    """标签后跟中文正文（#标签：这是正文，全角冒号无空格）不是噪声，整行保留。"""
+    md = "#c端：这是关于埋点体系的正文说明"
+    assert _content_blocks(md) == [md]
+
+
+def test_url_link_list_items_kept() -> None:
+    """列表里的纯 URL/标签项保留：链接收藏节不因噪声过滤而整节消失。"""
+    parsed = parse_markdown("# 参考资料\n\n- https://react.dev\n- https://vuejs.org")
+    lists = [b.text for b in parsed.blocks if b.kind == "list"]
+    assert lists == ["https://react.dev", "https://vuejs.org"]
