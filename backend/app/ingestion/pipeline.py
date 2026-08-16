@@ -23,6 +23,7 @@ from app.generation.vision import VisionProviderError
 from app.ingestion.chunker import Chunk, chunk_document
 from app.ingestion.image_fetch import ImageFetcher, ImageFetchError
 from app.ingestion.image_preprocess import ImageDecodeError, preprocess_image
+from app.ingestion.image_state_store import ImageStateStore, ImageTask
 from app.ingestion.image_worker import ImageWorker
 from app.ingestion.markdown_parser import parse_markdown
 from app.ingestion.scanner import DiscoveredFile, scan_directory
@@ -93,6 +94,18 @@ def _make_sub_chunk(chunk: Chunk, text: str, idx: int) -> Chunk:
     )
 
 
+def _parent_heading(heading_path: str | None) -> str:
+    """标题路径的父节（去掉末段）；顶级/无标题返回空串（空串 = 整篇文档）。"""
+    if not heading_path:
+        return ""
+    parts = heading_path.split(" > ")
+    return " > ".join(parts[:-1]) if len(parts) > 1 else ""
+
+
+#: 图文融合块的正文上下文上限（字符数）：控制图片描述块体积，避免整篇粘贴。
+_IMAGE_CONTEXT_MAX_LEN = 1200
+
+
 class IngestionPipeline:
     """编排层：把扫描 → 解析 → 切块 → 嵌入 → 入库串成一条管线。
 
@@ -106,14 +119,19 @@ class IngestionPipeline:
         vectorstore: VectorStore,
         vision: VisionModel | None = None,
         fetcher: ImageFetcher | None = None,
+        state_store: ImageStateStore | None = None,
     ) -> None:
         self._embedder = embedder
         self._vectorstore = vectorstore
         self._vision = vision
         self._fetcher = fetcher
         self._worker: ImageWorker | None = None
-        #: 同图多处引用只识一次：content_hash -> 描述文本，跨文件复用（嵌入另按标题上下文）。
-        self._image_cache: dict[str, str] = {}
+        #: 内容去重 + 任务持久化存储；None 时用内存态（单测 / 无持久化场景）。
+        self._state_store = (
+            state_store if state_store is not None else ImageStateStore(Path(":memory:"))
+        )
+        #: 图文融合块的正文上下文缓存：source_file -> {父节 -> 拼接正文}（惰性构建一次）。
+        self._context_cache: dict[str, dict[str, str]] = {}
 
     def set_worker(self, worker: ImageWorker) -> None:
         """挂接识图后台工作线程：挂接后图片走后台补全，文本仍同步先入库。"""
@@ -229,97 +247,127 @@ class IngestionPipeline:
             upserted = len(text_blocks)
         image_chunks = [chunk for chunk in chunks if chunk.kind == "image"]
         if self._worker is not None:
-            # 异步：图片任务投递后台线程，文本已先入库，导入不被识图拖垮。
-            self._worker.enqueue(file, image_chunks)
+            # 异步：图片任务投递后台线程（持久化落库），文本已先入库，导入不被识图拖垮。
+            for chunk in image_chunks:
+                task = self.make_image_task(file, chunk)
+                if task is not None:
+                    self._worker.enqueue(task)
         else:
             # 同步：图片描述直接入库（无 worker 时的兜底，行为与单测一致）。
-            try:
-                image_blocks = self.image_blocks(file, image_chunks)
-            except Exception as exc:  # noqa: BLE001 -- 图片路径任何异常都不拖累文本（文本已入库）
-                logger.debug("图片处理异常（脱敏）: %s", type(exc).__name__)
-                image_blocks = []
-            if image_blocks:
-                self._vectorstore.upsert(image_blocks)
-                upserted += len(image_blocks)
+            blocks = self.sync_image_blocks(file, image_chunks)
+            if blocks:
+                self._vectorstore.upsert(blocks)
+                upserted += len(blocks)
         return chunks, upserted
 
-    def image_blocks(
+    def make_image_task(self, file: DiscoveredFile, chunk: Chunk) -> ImageTask | None:
+        """把图片引用块转为持久化任务（无 src 时返回 None）。"""
+        src = chunk.src
+        if not src:
+            return None
+        return ImageTask(
+            block_id=make_block_id(file.content_hash, chunk.block_id),
+            src=src,
+            doc_id=file.content_hash,
+            source_file=str(file.path),
+            heading_path=chunk.heading_path,
+            anchor=chunk.anchor,
+        )
+
+    def sync_image_blocks(
         self,
         file: DiscoveredFile,
         image_chunks: list[Chunk],
     ) -> list[tuple[str, str, list[float], BlockMetadata]]:
-        """把图片引用转为描述块：下载 → 预处理 → 识图 → 嵌入（同图去重只算一次）。
-
-        未配置识图（vision/fetcher 任一缺）或单图失败时静默跳过，不阻塞文本入库；
-        描述与文本共用同一嵌入模型（方案 B 核心），block_id 稳定可幂等 upsert。
-        """
-        if self._vision is None or self._fetcher is None or not image_chunks:
-            return []
-        refs: list[tuple[Chunk, str]] = []  # (chunk, content_hash)
-        to_describe: dict[str, bytes] = {}  # content_hash -> 预处理后 JPEG
-        for chunk in image_chunks:
-            src = chunk.src
-            if not src:
-                continue
-            try:
-                raw = self._fetcher.fetch(src)
-                jpeg = preprocess_image(raw)
-            except (ImageFetchError, ImageDecodeError) as exc:  # 死链/非图/超限：跳过
-                logger.debug("图片跳过（脱敏）: %s", type(exc).__name__)
-                continue
-            content_hash = xxhash.xxh64(jpeg).hexdigest()
-            refs.append((chunk, content_hash))
-            if content_hash not in self._image_cache and content_hash not in to_describe:
-                to_describe[content_hash] = jpeg
-        # 识图（同图只算一次，描述缓存到 self._image_cache）
-        for content_hash, jpeg in to_describe.items():
-            try:
-                self._image_cache[content_hash] = self._vision.describe(jpeg)
-            except VisionProviderError as exc:
-                logger.debug("识图失败（脱敏）: %s", type(exc).__name__)
-        # 嵌入：图片描述注入标题路径（主题上下文），按 (content_hash, heading_path) 去重。
-        # 同图在不同标题下语境不同 -> 分别嵌入；同标题下同图 -> 只嵌一次。
-        embed_keys: list[tuple[str, str]] = []
-        embed_texts: list[str] = []
-        for chunk, content_hash in refs:
-            description = self._image_cache.get(content_hash)
-            if description is None:
-                continue
-            key = (content_hash, chunk.heading_path)
-            if key not in embed_keys:
-                embed_keys.append(key)
-                embed_texts.append(_image_embed_text(description, chunk.heading_path))
-        embed_map: dict[tuple[str, str], list[float]] = {}
-        if embed_texts:
-            vectors = self._embedder.embed_texts(embed_texts)
-            for key, vector in zip(embed_keys, vectors, strict=True):
-                embed_map[key] = vector
+        """同步处理图片引用（无 worker 兜底）：逐引用 process_image_task，聚合成功块。"""
         blocks: list[tuple[str, str, list[float], BlockMetadata]] = []
-        for chunk, content_hash in refs:
-            description = self._image_cache.get(content_hash)
-            if description is None:
-                continue  # 识图失败，该引用不产块
-            embed_text = _image_embed_text(description, chunk.heading_path)
-            vector = embed_map.get((content_hash, chunk.heading_path))
-            if vector is None:
-                continue  # 嵌入失败，该引用不产块
-            block_id = make_block_id(file.content_hash, chunk.block_id)
-            blocks.append(
-                (
-                    block_id,
-                    embed_text,
-                    vector,
-                    make_image_metadata(block_id, file, chunk, content_hash),
-                )
-            )
+        for chunk in image_chunks:
+            task = self.make_image_task(file, chunk)
+            if task is None:
+                continue
+            try:
+                block = self.process_image_task(task)
+            except Exception as exc:  # noqa: BLE001 -- 图片路径任何异常不拖累文本
+                logger.debug("图片处理异常（脱敏）: %s", type(exc).__name__)
+                continue
+            if block is not None:
+                blocks.append(block)
         return blocks
 
-    def process_image_chunks(self, file: DiscoveredFile, image_chunks: list[Chunk]) -> int:
-        """图片描述块入库（后台 worker 调用）：image_blocks + upsert，返回 upserted 数。"""
-        blocks = self.image_blocks(file, image_chunks)
-        if blocks:
-            self._vectorstore.upsert(blocks)
-        return len(blocks)
+    def _surrounding_text(self, task: ImageTask, max_len: int = _IMAGE_CONTEXT_MAX_LEN) -> str:
+        """图片所属「父节」的正文文本（图文融合块的上下文），按 source_file 缓存。
+
+        图片描述块本来只有图本身，信息密度低；把同父节（如「使用方法」下的所有步骤）
+        的正文拼进去，使图片块也能被正文主题词命中、并自带上下文。文本已先入库，
+        故此处可从向量库按 source_file 拉取（每文件只扫一次，结果缓存）。
+        """
+        source = task.source_file
+        if source not in self._context_cache:
+            by_parent: dict[str, list[str]] = {}
+            try:
+                blocks = self._vectorstore.list_blocks()
+            except Exception:  # noqa: BLE001 -- 测试假向量库/最小实现可能无 list_blocks，融合降级为空
+                blocks = []
+            for _, text, meta in blocks:
+                if meta.get("source_file") != source or meta.get("chunk_type") != "text":
+                    continue
+                parent = _parent_heading(meta.get("heading_path") or "")
+                by_parent.setdefault(parent, []).append(text)
+            self._context_cache[source] = {
+                parent: "\n\n".join(texts)[:max_len] for parent, texts in by_parent.items()
+            }
+        parent = _parent_heading(task.heading_path or "")
+        return self._context_cache[source].get(parent, "")
+
+    def process_image_task(
+        self,
+        task: ImageTask,
+    ) -> tuple[str, str, list[float], BlockMetadata] | None:
+        """处理单个图片引用：下载 → 预处理 → 去重(内容哈希) → 识图 → 嵌入。
+
+        返回描述块或 None（失败：死链/非图/识图失败）。同图（同内容哈希）只识一次、
+        描述持久化复用（跨 URL / 跨导入去重）；同图不同标题仍分别嵌入（语境不同）。
+        """
+        if self._vision is None or self._fetcher is None:
+            return None
+        try:
+            raw = self._fetcher.fetch(task.src)
+            jpeg = preprocess_image(raw)
+        except (ImageFetchError, ImageDecodeError) as exc:  # 死链/非图/超限：失败
+            logger.debug("图片跳过（脱敏）: %s", type(exc).__name__)
+            return None
+        content_hash = xxhash.xxh64(jpeg).hexdigest()
+        description = self._state_store.get_description(content_hash)
+        if description is None:
+            try:
+                description = self._vision.describe(jpeg)
+            except VisionProviderError as exc:
+                logger.debug("识图失败（脱敏）: %s", type(exc).__name__)
+                return None
+            self._state_store.save_description(content_hash, description)
+        embed_text = _image_embed_text(description, task.heading_path, self._surrounding_text(task))
+        vector = self._embedder.embed_texts([embed_text])[0]
+        metadata = BlockMetadata(
+            block_id=task.block_id,
+            doc_id=task.doc_id,
+            source_type=SourceType.IMAGE_DESCRIPTION,
+            source_file=task.source_file,
+            platform="local",
+            heading_path=task.heading_path or None,
+            anchor=task.anchor or None,
+            chunk_type="image_description",
+            image_path=task.src,
+            image_content_hash=content_hash,
+        )
+        return (task.block_id, embed_text, vector, metadata)
+
+    def process_image_task_and_upsert(self, task: ImageTask) -> bool:
+        """处理单个图片引用并 upsert（后台 worker 调用）；返回是否成功。"""
+        block = self.process_image_task(task)
+        if block is None:
+            return False
+        self._vectorstore.upsert([block])
+        return True
 
     @staticmethod
     def _record_error(exc: Exception, errors: list[str]) -> None:
@@ -373,37 +421,17 @@ def make_chunk_metadata(block_id: str, file: DiscoveredFile, chunk: Chunk) -> Bl
     )
 
 
-def make_image_metadata(
-    block_id: str,
-    file: DiscoveredFile,
-    chunk: Chunk,
-    content_hash: str,
-) -> BlockMetadata:
-    """组装图片描述块元数据：source_type=image_description，原图 URL + 内容哈希入元数据。
-
-    公共助手，全量导入与增量同步（sync.py）共用同一元数据规则。
-    """
-    return BlockMetadata(
-        block_id=block_id,
-        doc_id=file.content_hash,
-        source_type=SourceType.IMAGE_DESCRIPTION,
-        source_file=str(file.path),
-        platform="local",
-        heading_path=chunk.heading_path or None,
-        anchor=chunk.anchor or None,
-        chunk_type="image_description",
-        image_path=chunk.src,
-        image_content_hash=content_hash,
-    )
-
-
-def _image_embed_text(description: str, heading_path: str) -> str:
-    """图片描述块的嵌入/存储文本：注入标题路径作为主题上下文。
+def _image_embed_text(description: str, heading_path: str, context: str = "") -> str:
+    """图片描述块的嵌入/存储文本：注入标题路径 + 同父节正文作为主题上下文。
 
     图片本身常不含主题词（如图在「AB 测试」标题下但图里没写「AB 测试」），
-    把标题路径拼进文本使图片块能被主题词检索命中；标题路径很短，几乎无稀释、
-    不重复（文本块与图片块职责分离）。无标题路径时原样返回纯描述。
+    把标题路径与正文上下文拼进文本，使图片块能被主题词检索命中、信息密度更高。
+    无标题/无上下文时相应省略，不产生空段落。
     """
+    parts: list[str] = []
     if heading_path:
-        return f"【所属主题】{heading_path}\n\n{description}"
-    return description
+        parts.append(f"【所属主题】{heading_path}")
+    if context:
+        parts.append(f"【正文上下文】{context}")
+    parts.append(f"【图片描述】{description}")
+    return "\n\n".join(parts)

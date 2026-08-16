@@ -38,7 +38,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 def main(argv: list[str] | None = None) -> int:
     from app.core.config import get_settings
-    from app.core.settings_store import get_settings_store
+    from app.core.outbound import outbound_client
+    from app.core.settings_store import get_settings_store, is_vision_configured
+    from app.generation.vision import create_vision_model_from_config
+    from app.ingestion.image_fetch import ImageFetcher
+    from app.ingestion.image_state_store import ImageStateStore
+    from app.ingestion.image_worker import ImageWorker
     from app.ingestion.pipeline import IngestionPipeline
     from app.vectorstore.chroma_store import create_vector_store
     from app.vectorstore.embedder import create_embedder_from_config
@@ -52,15 +57,48 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     settings = get_settings()
-    embedder = create_embedder_from_config(get_settings_store().load().embed)
+    app_settings = get_settings_store().load()
+    embedder = create_embedder_from_config(app_settings.embed)
+    vectorstore = create_vector_store(persist_dir=settings.data_dir, embedder=embedder)
     print(f"数据目录 : {settings.data_dir}")
     print(f"导入目录 : {root}")
     print(f"嵌入模型 : {embedder.fingerprint}（云端 OpenAI 兼容）")
-    print("开始导入...")
-    report = IngestionPipeline(
+
+    # 识图（与 UI 导入对齐）：vision 已配置则挂后台 worker，图片描述后补入库。
+    vision = None
+    fetcher = None
+    if is_vision_configured(app_settings.vision):
+        vision = create_vision_model_from_config(app_settings.vision, outbound=outbound_client)
+        fetcher = ImageFetcher(outbound=outbound_client)
+        print("识图模型 : 已启用（图片描述后台补全）")
+    else:
+        print("识图模型 : 未配置（图片仅存元数据，不生成描述）")
+    image_store = ImageStateStore(settings.data_dir / "image_state.db")
+    pipeline = IngestionPipeline(
         embedder,
-        create_vector_store(persist_dir=settings.data_dir, embedder=embedder),
-    ).ingest(root)
+        vectorstore,
+        vision=vision,
+        fetcher=fetcher,
+        state_store=image_store,
+    )
+    worker = None
+    if vision is not None:
+        worker = ImageWorker(
+            pipeline.process_image_task_and_upsert, image_store, settings.vision_concurrency
+        )
+        worker.start()
+        pipeline.set_worker(worker)
+
+    print("开始导入...")
+    report = pipeline.ingest(root)
+
+    # 等图片后台任务全部跑完再退出（脚本进程结束会杀掉 daemon 工作线程，丢任务）
+    if worker is not None:
+        import time
+
+        while worker.snapshot()["pending"] > 0:
+            time.sleep(0.5)
+        worker.stop()
 
     print()
     print("=== 导入完成 ===")
