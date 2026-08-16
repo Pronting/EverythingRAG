@@ -14,6 +14,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.api.routes.chat import get_chat_service
+from app.generation.base import ChatChunk
 from app.generation.chat_service import ChatService
 from app.generation.providers import ChatProviderError, UnconfiguredChatModel
 from app.main import app
@@ -64,7 +65,7 @@ class FakeChatModel:
         if self._error is not None:
             raise self._error
         for token in self._tokens:
-            yield token
+            yield ChatChunk("content", token)
 
 
 def _chunk(
@@ -268,3 +269,50 @@ def _block_non_loopback(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def _raise_outbound(*args: object, **kwargs: object) -> None:
     raise AssertionError("Unexpected outbound network call")
+
+
+# ---------------------------------------------------------------- 4. web_search 字段转发
+
+
+class _SpyService:
+    """记录 stream_answer 收到的 web_search 参数（验证请求体字段透传）。"""
+
+    def __init__(self) -> None:
+        self.web_search: bool | None = None
+
+    async def stream_answer(
+        self,
+        message: str,
+        history: list[dict[str, Any]] | None = None,
+        web_search: bool = False,
+        images: list[str] | None = None,
+    ) -> Any:
+        self.web_search = web_search
+        self.images = images
+        yield {"type": "done"}
+
+
+def test_web_search_field_forwarded_to_service() -> None:
+    """请求体 web_search=true -> service.stream_answer 收到 True；缺省 -> False。"""
+    spy = _SpyService()
+    _override(spy)  # type: ignore[arg-type]
+    try:
+        client = TestClient(app)
+        status, _body = _stream_body(client, "你好")
+        assert status == 200
+        assert spy.web_search is False
+    finally:
+        app.dependency_overrides.clear()
+
+    spy2 = _SpyService()
+    _override(spy2)  # type: ignore[arg-type]
+    try:
+        client = TestClient(app)
+        with client.stream(
+            "POST", "/api/chat", json={"message": "你好", "web_search": True}
+        ) as resp:
+            assert resp.status_code == 200
+            resp.read()
+        assert spy2.web_search is True
+    finally:
+        app.dependency_overrides.clear()

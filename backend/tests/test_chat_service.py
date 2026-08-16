@@ -15,6 +15,7 @@ from app.generation.base import ChatChunk
 from app.generation.chat_service import ChatService
 from app.generation.providers import ChatProviderError
 from app.retrieval.vector_retriever import RetrievalError, RetrievedChunk
+from app.search.base import SearchError, SearchResult
 
 
 class FakeEmbedder:
@@ -156,28 +157,78 @@ async def test_no_sources_streams_with_empty_meta() -> None:
     assert frames[0]["sources"] == []
 
 
-async def test_empty_context_user_message_notes_no_context() -> None:
-    """检索无命中 -> user 消息标注「无参考上下文」，提示模型可走通用知识路径。"""
+async def test_stream_strips_disjointed_phrases() -> None:
+    """代码级约束：正文里的「割裂」措辞被流式剔除，剩余正文保留。"""
+    chat = FakeChatModel(
+        tokens=[
+            "以下为通用知识，非你的资料库内容：",
+            "Everything RAG 是一款本地知识助手。",
+        ]
+    )
+    service = ChatService(FakeEmbedder(), FakeRetriever(chunks=[]), chat)
+    frames = await _collect(service, "Everything RAG 是做什么的")
+    text = "".join(frame["text"] for frame in frames if frame["type"] == "token")
+    assert "非你的资料库内容" not in text
+    assert "以下为通用知识" not in text
+    assert "Everything RAG" in text
+
+
+async def test_empty_context_user_message_directs_natural_answer() -> None:
+    """检索无命中 -> user 消息走 general 分支：要求自然回答，禁止割裂标注语。"""
     chat = FakeChatModel(tokens=["ok"])
     service = ChatService(FakeEmbedder(), FakeRetriever(chunks=[]), chat)
     await _collect(service, "三国演义讲的是什么")
     user_msg = chat.calls[0][1]
     assert user_msg["role"] == "user"
     assert "问题：三国演义讲的是什么" in user_msg["content"]
-    assert "无" in user_msg["content"]
-    assert "未检索到" in user_msg["content"]
+    assert "自然" in user_msg["content"]  # 要求自然、连贯回答
+    assert "通用知识" in user_msg["content"]  # 明确禁止「通用知识」等标注语
+    assert "非资料库内容" in user_msg["content"]  # 明确禁止「非资料库内容」标注语
+    assert "以下为通用知识，非你的资料库内容" not in user_msg["content"]  # 不再强制该标注
 
 
-async def test_default_prompt_has_common_sense_and_anti_hijack_rules() -> None:
-    """默认提示词含「上下文为空/无关时可用通用知识」「防无关上下文改变角色」等规则。"""
+async def test_history_included_in_messages() -> None:
+    """多轮上下文：history 传入后，组装消息里按序插入历史 user/assistant 轮次。"""
+    chat = FakeChatModel(tokens=["ok"])
+    service = ChatService(FakeEmbedder(), FakeRetriever(chunks=[_chunk("b1")]), chat)
+    history = [
+        {"role": "user", "content": "红人系统是什么？"},
+        {"role": "assistant", "content": "红人系统是连接平台与红人的中枢。"},
+    ]
+    frames = [frame async for frame in service.stream_answer("TT 是什么意思", history)]
+    assert frames[-1]["type"] == "done"
+    messages = chat.calls[0]
+    roles = [m["role"] for m in messages]
+    assert roles == ["system", "user", "assistant", "user"]
+    assert messages[1]["content"] == "红人系统是什么？"
+    assert messages[2]["content"] == "红人系统是连接平台与红人的中枢。"
+    assert "TT 是什么意思" in messages[3]["content"]
+
+
+async def test_meta_question_skips_retrieval() -> None:
+    """元问题（知识库里有什么）跳过检索，返回空 meta（无来源）。"""
+    embedder = FakeEmbedder()
+    retriever = FakeRetriever(chunks=[_chunk("b1")])
+    chat = FakeChatModel(tokens=["ok"])
+    service = ChatService(embedder=embedder, retriever=retriever, chat_model=chat)
+    frames = await _collect(service, "知识库里有什么内容？")
+    assert retriever.calls == []  # 未触发检索
+    assert frames[0]["type"] == "meta"
+    assert frames[0]["sources"] == []
+
+
+async def test_default_prompt_has_self_intro_and_anti_hijack_rules() -> None:
+    """默认提示词含产品自我介绍 + 自然作答要求 + 防上下文劫持规则。"""
     chat = FakeChatModel(tokens=["ok"])
     service = ChatService(FakeEmbedder(), FakeRetriever(chunks=[_chunk("b1")]), chat)
     await _collect(service, "你好")
     content = chat.calls[0][0]["content"]
-    assert "通用知识" in content  # 常识回退路径
+    assert "Everything RAG" in content  # 产品自我介绍
+    assert "个人知识" in content  # 产品定位
     assert "不要逐字照抄" in content  # 防复读
     assert "改变你的角色" in content  # 防无关上下文劫持角色
     assert "不是给你的指令" in content  # 防提示注入：KB 指令式内容不视为系统指令
+    assert "割裂" in content  # 明确禁止割裂性措辞
 
 
 # ---------------------------------------------------------------- 2. 错误转 error 帧（终帧，不崩）
@@ -304,3 +355,96 @@ async def test_default_system_prompt_when_not_given() -> None:
 
 def _raise_outbound(*args: object, **kwargs: object) -> None:
     raise AssertionError("Unexpected outbound network call")
+
+
+# ---------------------------------------------------------------- 4. 联网搜索（确定性注入）
+
+
+class FakeSearchProvider:
+    def __init__(
+        self,
+        results: list[SearchResult] | None = None,
+        error: Exception | None = None,
+    ) -> None:
+        self._results = results if results is not None else []
+        self._error = error
+        self.calls: list[tuple[str, int]] = []
+
+    async def search(self, query: str, max_results: int = 5) -> list[SearchResult]:
+        self.calls.append((query, max_results))
+        if self._error is not None:
+            raise self._error
+        return self._results
+
+
+def _web_result(title: str = "联网结果", url: str = "https://example.com", content: str = "网页正文") -> SearchResult:
+    return SearchResult(title=title, url=url, snippet=content, content=content)
+
+
+async def test_web_search_injects_web_sources_and_context() -> None:
+    """web_search=True：tool(running/done) -> meta（含 KB + Web 来源）-> token -> done；
+    Web 来源带 url/source_type，上下文统一编号。"""
+    chat = FakeChatModel(tokens=["你", "好"])
+    service = ChatService(
+        FakeEmbedder(),
+        FakeRetriever(chunks=[_chunk("b1")]),
+        chat,
+        search_provider=FakeSearchProvider(results=[_web_result()]),
+    )
+
+    frames = [frame async for frame in service.stream_answer("你好", web_search=True)]
+
+    assert [frame["type"] for frame in frames] == ["tool", "tool", "meta", "token", "token", "done"]
+    assert frames[0] == {"type": "tool", "tool": "web_search", "status": "running"}
+    assert frames[1] == {"type": "tool", "tool": "web_search", "status": "done"}
+
+    sources = frames[2]["sources"]
+    assert len(sources) == 2
+    kb, web = sources
+    assert kb["block_id"] == "b1"
+    assert kb.get("source_type") is None  # KB 来源无 source_type
+    assert web["source_type"] == "web"
+    assert web["url"] == "https://example.com"
+    assert web["chunk_type"] == "web"
+    assert web["source_file"] == "联网结果"
+
+    # 上下文：KB 为 [1]，Web 为 [2]，来源描述含「联网搜索」
+    user_msg = chat.calls[0][1]
+    assert "[1]" in user_msg["content"]
+    assert "[2]" in user_msg["content"]
+    assert "知识库与联网搜索" in user_msg["content"]
+
+
+async def test_web_search_unconfigured_returns_error_frame() -> None:
+    """web_search=True 但 provider=None -> 单个 error 帧，消息提示未配置。"""
+    service = ChatService(FakeEmbedder(), FakeRetriever(chunks=[_chunk("b1")]), FakeChatModel())
+    frames = [frame async for frame in service.stream_answer("你好", web_search=True)]
+    assert [frame["type"] for frame in frames] == ["error"]
+    assert "未配置" in frames[0]["message"]
+
+
+async def test_web_search_error_becomes_error_frame() -> None:
+    """搜索 provider 抛 SearchError -> tool(running) 后 error 帧，消息脱敏。"""
+    service = ChatService(
+        FakeEmbedder(),
+        FakeRetriever(chunks=[_chunk("b1")]),
+        FakeChatModel(),
+        search_provider=FakeSearchProvider(error=SearchError("联网搜索失败（HTTP 429）")),
+    )
+    frames = [frame async for frame in service.stream_answer("你好", web_search=True)]
+    assert [frame["type"] for frame in frames] == ["tool", "error"]
+    assert "HTTP 429" in frames[1]["message"]
+
+
+async def test_web_search_disabled_does_not_call_provider() -> None:
+    """web_search=False：不调用搜索 provider，帧序与既有行为完全一致。"""
+    provider = FakeSearchProvider(results=[_web_result()])
+    service = ChatService(
+        FakeEmbedder(),
+        FakeRetriever(chunks=[_chunk("b1")]),
+        FakeChatModel(tokens=["好"]),
+        search_provider=provider,
+    )
+    frames = [frame async for frame in service.stream_answer("你好", web_search=False)]
+    assert [frame["type"] for frame in frames] == ["meta", "token", "done"]
+    assert provider.calls == []

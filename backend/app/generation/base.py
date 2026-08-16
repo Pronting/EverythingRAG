@@ -7,7 +7,18 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
-from typing import Any, Protocol
+from typing import Any, NamedTuple, Protocol
+
+
+class ChatChunk(NamedTuple):
+    """流式产出单元：kind 区分正文与思维链，text 为增量文本。
+
+    对齐 DeepSeek 推理模型：思维链在 delta.reasoning_content，正文在
+    delta.content；前端对二者分别渲染（思维链可折叠、样式独立）。
+    """
+
+    kind: str  # "content" | "reasoning"
+    text: str
 
 
 class ChatModel(Protocol):
@@ -17,9 +28,9 @@ class ChatModel(Protocol):
         self,
         messages: list[dict[str, Any]],
         **kwargs: Any,
-    ) -> AsyncIterator[str]:
-        """流式生成：逐 token 产出文本增量。
-        若上游为 OpenAI 兼容 chat/completions stream，在此层透传为 token 帧。
+    ) -> AsyncIterator[ChatChunk]:
+        """流式生成：逐 chunk 产出正文（content）与思维链（reasoning）增量。
+        若上游为 OpenAI 兼容 chat/completions stream，在此层透传为 ChatChunk。
         """
         ...
 

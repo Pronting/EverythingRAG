@@ -19,7 +19,7 @@ from openai import AsyncOpenAI
 from app.core.config import Settings
 from app.core.outbound import OutboundClient, OutboundEvent, outbound_client
 from app.core.settings_store import ChatModelConfig
-from app.generation.base import ChatModel
+from app.generation.base import ChatChunk, ChatModel
 
 
 class ChatProviderError(Exception):
@@ -41,28 +41,30 @@ class OpenAICompatChatModel:
         model: str,
         api_key: str | None = None,
         outbound: OutboundClient | None = None,
+        supports_image_input: bool = False,
     ) -> None:
         self._base_url = base_url
         self._model = model
         self._outbound = outbound
         self._destination = _destination_host(base_url)
+        self._supports_image_input = supports_image_input
         self._client = AsyncOpenAI(base_url=base_url, api_key=api_key or "local")
 
     @property
     def supports_image_input(self) -> bool:
-        return False
+        return self._supports_image_input
 
     async def stream_chat(
         self,
         messages: list[dict[str, Any]],
         **kwargs: Any,
-    ) -> AsyncIterator[str]:
-        """流式调用云端 chat/completions；逐 chunk 提取 delta.content，空内容跳过。
+    ) -> AsyncIterator[ChatChunk]:
+        """流式调用云端 chat/completions；逐 chunk 提取正文与思维链增量。
 
-        MEDIUM-1：上游收尾可能发 usage-only chunk（choices 为空），跳过不报错；
-        MEDIUM-3：空 choices 同时带 error（流式中途报错）-> 抛 ChatProviderError。
-        出网审计：仅当注入 outbound 时记录一条事件（成功 status=200 / 异常
-        status=None）；异常照常向上抛，不吞。
+        正文走 delta.content，思维链走 delta.reasoning_content（DeepSeek 推理模型
+        等），分别产出 kind=content / reasoning 的 ChatChunk，前端分样式渲染。
+        MEDIUM-1：收尾 usage-only chunk（choices 空）跳过；MEDIUM-3：空 choices 带
+        error -> 抛 ChatProviderError。出网审计同前。
         """
         started_at = _utcnow() if self._outbound is not None else None
         try:
@@ -79,9 +81,13 @@ class OpenAICompatChatModel:
                         message = getattr(error, "message", None) or str(error)
                         raise ChatProviderError(f"对话服务流式中止: {message}")
                     continue
-                token = chunk.choices[0].delta.content or ""
+                delta = chunk.choices[0].delta
+                token = delta.content or ""
                 if token:
-                    yield token
+                    yield ChatChunk("content", token)
+                reasoning = getattr(delta, "reasoning_content", None) or ""
+                if reasoning:
+                    yield ChatChunk("reasoning", reasoning)
         except BaseException:
             # 异常含 GeneratorExit（SSE 客户端断开触发 aclose）：已发生出网也要记审计
             self._record_outbound(started_at, status=None)
@@ -217,4 +223,5 @@ def create_chat_model_from_config(
         model=chat.model,
         api_key=api_key,
         outbound=outbound,
+        supports_image_input=chat.supports_image,
     )
