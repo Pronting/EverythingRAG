@@ -38,8 +38,10 @@ _DEFAULT_CHUNK_TYPE = "text"
 
 #: 相关度门控缺省阈值：相似度低于该值的命中视为无关，不进上下文。
 #: 修复根因 2——库外/常识问题不再被无关 chunk 污染（生产装配处注入该值，
-#: 核心类缺省 None 保持向后兼容）。数值须用真实语料校准（见诊断报告 §4）。
-DEFAULT_MIN_SIMILARITY = 0.55
+#: 核心类缺省 None 保持向后兼容）。
+#: 注：0.55 原为 bge-m3（1024 维余弦）校准；切换 Qwen3-Embedding-8B（4096 维）
+#: 后无关内容基线相似度升至 0.38~0.57，0.55 已拦不住噪声，实测校准上调到 0.60。
+DEFAULT_MIN_SIMILARITY = 0.60
 
 
 class VectorRetriever:

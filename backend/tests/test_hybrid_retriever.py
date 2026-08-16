@@ -181,6 +181,97 @@ def test_bm25_rescue_kept_when_dense_sim_above_threshold() -> None:
     assert "rel" in [chunk.block_id for chunk in chunks]
 
 
+def test_same_document_expansion_pulls_in_siblings_below_threshold() -> None:
+    """文档级扩展：某文档一块过门禁后，同文档相似度低于阈值的兄弟块也一并召回；
+    无关文档（无锚点）不进上下文。修复「问整篇文档只召回 1 块」的问题。"""
+    store = FakeVectorStore(
+        blocks=[
+            _block("c1", "本书第一章 核心观点", "book.md", "第一章"),
+            _block("c2", "本书第二章 方法论", "book.md", "第二章"),
+            _block("c3", "本书第三章 案例", "book.md", "第三章"),
+            _block("other", "无关 文档 内容", "other.md"),
+        ],
+        query_result=[
+            _hit("c1", 0.80, "book.md"),
+            _hit("c2", 0.50, "book.md"),  # 低于阈值，但同文档
+            _hit("c3", 0.45, "book.md"),  # 低于阈值，但同文档
+            _hit("other", 0.40, "other.md"),
+        ],
+    )
+    retriever = _retriever(store, min_similarity=0.55, context_top_k=8)
+    chunks = retriever.retrieve("这本书讲了什么", [1.0, 0.0, 0.0])
+    ids = [chunk.block_id for chunk in chunks]
+    assert "c1" in ids
+    assert "c2" in ids  # 同文档兄弟块被扩展召回（即使低于阈值）
+    assert "c3" in ids
+    assert "other" not in ids  # 无关文档不进上下文
+
+
+def test_anchors_prioritized_before_siblings() -> None:
+    """锚点块优先于兄弟块：跨文档时，各文档的锚点先进上下文，兄弟块只补剩余名额。"""
+    store = FakeVectorStore(
+        blocks=[
+            _block("a1", "文档A 的锚点 块", "a.md"),
+            _block("a2", "文档A 的其它 内容", "a.md"),
+            _block("b1", "文档B 的锚点 块", "b.md"),
+            _block("b2", "文档B 的其它 内容", "b.md"),
+        ],
+        query_result=[
+            _hit("a1", 0.90, "a.md"),
+            _hit("a2", 0.40, "a.md"),
+            _hit("b1", 0.80, "b.md"),
+            _hit("b2", 0.35, "b.md"),
+        ],
+    )
+    retriever = _retriever(store, min_similarity=0.55, context_top_k=2)
+    chunks = retriever.retrieve("A B", [1.0, 0.0, 0.0])
+    ids = [chunk.block_id for chunk in chunks]
+    # 名额只有 2：两个文档的锚点 a1、b1 优先，兄弟块 a2/b2 不挤出锚点
+    assert ids == ["a1", "b1"]
+
+
+def test_weak_anchor_does_not_trigger_expansion() -> None:
+    """弱相关命中（0.60~0.68）只返回自身，不把同文档的无关兄弟块拖进来。"""
+    store = FakeVectorStore(
+        blocks=[
+            _block("w1", "如何评估 RAG 效果", "AI八股文.md"),
+            _block("w2", "Java 垃圾回收机制", "AI八股文.md"),  # 同文档但无关
+            _block("w3", "缓存 设计", "cache.md"),
+        ],
+        query_result=[
+            _hit("w1", 0.66, "AI八股文.md"),  # 弱锚点：过了 0.60 门禁，但低于 0.68 强阈值
+            _hit("w2", 0.40, "AI八股文.md"),
+            _hit("w3", 0.50, "cache.md"),
+        ],
+    )
+    retriever = _retriever(store, min_similarity=0.60, context_top_k=8)
+    chunks = retriever.retrieve("Everything RAG 是做什么的", [1.0, 0.0, 0.0])
+    ids = [chunk.block_id for chunk in chunks]
+    assert ids == ["w1"]  # 只返回弱锚点自身，w2/w3 不进上下文
+
+
+def test_parent_child_expands_to_parent_section_not_whole_doc() -> None:
+    """父子检索：命中块所在父节（同一上级标题）的兄弟块被展开，跨父节的块不拖入。"""
+    store = FakeVectorStore(
+        blocks=[
+            _block("p1", "父节A 的子块1 详细内容", "a.md", "父节A > 子1"),
+            _block("p2", "父节A 的子块2 详细内容", "a.md", "父节A > 子2"),
+            _block("q1", "父节B 的子块 完全无关", "a.md", "父节B > 子1"),
+        ],
+        query_result=[
+            _hit("p1", 0.90, "a.md"),
+            _hit("p2", 0.40, "a.md"),
+            _hit("q1", 0.45, "a.md"),
+        ],
+    )
+    retriever = _retriever(store, min_similarity=0.60, context_top_k=8)
+    chunks = retriever.retrieve("父节A", [1.0, 0.0, 0.0])
+    ids = [chunk.block_id for chunk in chunks]
+    assert "p1" in ids  # 锚点
+    assert "p2" in ids  # 同父节（父节A）的兄弟块被展开
+    assert "q1" not in ids  # 跨父节（父节B）不拖入
+
+
 def test_no_bm25_and_low_sim_returns_empty() -> None:
     """无关查询：无 BM25 命中 + dense 全低于阈值 -> 返回 []（门禁拦截）。"""
     store = FakeVectorStore(
