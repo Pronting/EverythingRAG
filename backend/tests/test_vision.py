@@ -80,7 +80,7 @@ def test_describe_builds_image_url_message(monkeypatch: pytest.MonkeyPatch) -> N
     call = completions.calls[0]
     assert call["model"] == "qwen2-vl:7b"
     assert call["temperature"] == 0.2
-    assert call["max_tokens"] == 1024
+    assert call["max_tokens"] == 800
     messages = call["messages"]
     assert messages[0]["role"] == "user"
     parts = messages[0]["content"]
@@ -207,3 +207,12 @@ def test_describe_permanent_error_no_retry(monkeypatch: pytest.MonkeyPatch) -> N
         model.describe(b"img")
     assert completions.calls == 1  # 不重试
     assert sleeps == []
+
+
+def test_describe_truncates_to_max_chars(monkeypatch: pytest.MonkeyPatch) -> None:
+    """超长描述被硬截断到 MAX_DESCRIBE_CHARS（严格 ≤1000 字）。"""
+    long_content = "字" * (vision_mod.MAX_DESCRIBE_CHARS + 500)
+    model = _model(monkeypatch, _FakeCompletions(long_content))
+    result = model.describe(b"img")
+    assert len(result) == vision_mod.MAX_DESCRIBE_CHARS
+    assert len(result) <= 1000
