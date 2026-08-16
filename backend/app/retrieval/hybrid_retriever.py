@@ -38,6 +38,7 @@ class HybridRetriever:
         lexical_floor: float = 0.45,
         bm25_rescue_k: int = 15,
         numeric_penalty: float = 0.10,
+        dense_only_penalty: float = 0.05,
     ) -> None:
         self._vectorstore = vectorstore
         self._candidate_k = candidate_k
@@ -49,6 +50,7 @@ class HybridRetriever:
         self._lexical_floor = lexical_floor
         self._bm25_rescue_k = bm25_rescue_k
         self._numeric_penalty = numeric_penalty
+        self._dense_only_penalty = dense_only_penalty
         self._bm25: BM25Index | None = None
         self._blocks: dict[str, tuple[str, dict[str, Any]]] = {}
         self._index_to_id: dict[int, str] = {}
@@ -68,20 +70,23 @@ class HybridRetriever:
         bm25 = self._ensure_bm25()
         bm25_hits = bm25.search(query_text or "", self._bm25_k)
 
-        ordered, dense_sims, bm25_matched = self._fuse(dense_hits, bm25_hits)
-        return self._select_with_expansion(ordered, dense_sims, bm25_matched)
+        ordered, dense_sims, bm25_matched, bm25_hit = self._fuse(dense_hits, bm25_hits)
+        return self._select_with_expansion(ordered, dense_sims, bm25_matched, bm25_hit)
 
     def _select_with_expansion(
         self,
         ordered: list[str],
         dense_sims: dict[str, float],
         bm25_matched: set[str],
+        bm25_hit: set[str],
     ) -> list[RetrievedChunk]:
         """门控选出锚点块后，仅对「强锚点」同源文档做兄弟扩展。
 
         - 基础门禁（min_similarity）：相似度达标的块可入上下文；
         - 词法救援（lexical_floor）：短缩写（如 SPM/MQ/RFID）dense 相似度天然偏低，
           但 BM25 词法强命中，故对词法命中的块把阈值放宽到 lexical_floor；
+        - 纯 dense 加罚（dense_only_penalty）：既无强词法、也无弱词法命中（仅 dense
+          相似度高）的块，往往是与查询共享「业务/数据」等泛词的假阳性，需更高阈值；
         - 文档级扩展（expand_min_similarity）：只有相似度 ≥ 强阈值的块才触发
           同文档兄弟扩展，避免弱命中拖入整篇无关文档。
         """
@@ -91,11 +96,12 @@ class HybridRetriever:
                 continue
             dense_sim = dense_sims.get(block_id, 0.0)
             if self._min_similarity is not None:
-                threshold = (
-                    self._lexical_floor
-                    if block_id in bm25_matched and self._lexical_floor < self._min_similarity
-                    else self._min_similarity
-                )
+                if block_id in bm25_matched and self._lexical_floor < self._min_similarity:
+                    threshold = self._lexical_floor  # 强词法命中：救援
+                elif block_id not in bm25_hit:
+                    threshold = self._min_similarity + self._dense_only_penalty  # 纯 dense：加罚
+                else:
+                    threshold = self._min_similarity  # 弱词法命中：基础门槛
                 # 数值噪声块（结构化定价/统计表，语义密度低）加罚：需更高相似度，
                 # 避免「大模型价格表」这类 dense 噪声磁铁压过真正相关的块
                 if _is_numeric_noise(self._blocks[block_id][0]):
@@ -142,11 +148,15 @@ class HybridRetriever:
         self,
         dense_hits: list[dict[str, Any]],
         bm25_hits: list[tuple[int, float]],
-    ) -> tuple[list[str], dict[str, float], set[str]]:
-        """RRF 融合：dense 排名 + BM25 排名各自 1/(k+rank) 累加，返回降序 block_id + dense 相似度 + 词法命中集。"""
+    ) -> tuple[list[str], dict[str, float], set[str], set[str]]:
+        """RRF 融合：dense 排名 + BM25 排名各自 1/(k+rank) 累加。
+
+        返回降序 block_id + dense 相似度 + 强词法命中集（top-k）+ 全部词法命中集。
+        """
         scores: dict[str, float] = {}
         dense_sims: dict[str, float] = {}
         bm25_matched: set[str] = set()
+        bm25_hit: set[str] = set()
         for rank, hit in enumerate(dense_hits, 1):
             block_id = str(hit.get("block_id", ""))
             if not block_id:
@@ -157,11 +167,12 @@ class HybridRetriever:
             block_id = self._index_to_id.get(index)
             if block_id is None:
                 continue
+            bm25_hit.add(block_id)  # 全部词法命中（top-k）
             if rank <= self._bm25_rescue_k:
                 bm25_matched.add(block_id)  # 仅强词法命中（top-k）触发词法救援
             scores[block_id] = scores.get(block_id, 0.0) + 1.0 / (self._rrf_k + rank)
         ordered = [block_id for block_id, _ in sorted(scores.items(), key=lambda kv: -kv[1])]
-        return ordered, dense_sims, bm25_matched
+        return ordered, dense_sims, bm25_matched, bm25_hit
 
     def _ensure_bm25(self) -> BM25Index:
         """按需构建 BM25 索引：块文本 + 标题注入（文件名 + heading_path）。"""

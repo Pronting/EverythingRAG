@@ -272,6 +272,25 @@ def test_parent_child_expands_to_parent_section_not_whole_doc() -> None:
     assert "q1" not in ids  # 跨父节（父节B）不拖入
 
 
+def test_dense_only_chunk_requires_higher_similarity() -> None:
+    """纯 dense 命中（无词法匹配）的块需更高相似度，过滤共享泛词的假阳性。"""
+    store = FakeVectorStore(
+        blocks=[
+            _block("r1", "首次触点模型 归因方式 末次触点", "归因.md"),
+            _block("n1", "首单加深离奇的问题", "首单.md"),
+        ],
+        query_result=[
+            _hit("r1", 0.60, "归因.md"),  # 词法命中，0.60 过救援门槛
+            _hit("n1", 0.64, "首单.md"),  # 仅 dense，0.64 < 0.65 → 过滤
+        ],
+    )
+    retriever = _retriever(store, min_similarity=0.60, context_top_k=8)
+    chunks = retriever.retrieve("什么是首次触点末次触点归因方式", [1.0, 0.0, 0.0])
+    ids = [chunk.block_id for chunk in chunks]
+    assert "r1" in ids  # 词法命中，救援
+    assert "n1" not in ids  # 仅 dense，加罚后过滤
+
+
 def test_no_bm25_and_low_sim_returns_empty() -> None:
     """无关查询：无 BM25 命中 + dense 全低于阈值 -> 返回 []（门禁拦截）。"""
     store = FakeVectorStore(
