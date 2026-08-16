@@ -1,17 +1,78 @@
 import { type ChangeEvent, useEffect, useRef, useState } from "react";
-import { getImportStatus, uploadFolder } from "../api/importApi";
-import type { ImportStatus } from "../types";
+import { getImportStatus, syncKnowledge, uploadFolder } from "../api/importApi";
+import type {
+  ImportProgress,
+  ImportReport,
+  ImportStatus,
+  SyncProgress,
+  SyncReport,
+} from "../types";
 
 const POLL_INTERVAL_MS = 1000;
 
 interface ImportPanelProps {
-  /** 导入成功后回调（父级刷新 /api/status 知识计数）。 */
+  /** 导入/同步成功后回调（父级刷新 /api/status 知识计数）。 */
   onImported: () => void;
 }
 
 /** 文件相对路径（webkitRelativePath 优先，普通文件用 basename）。 */
 function fileRelPath(file: File): string {
   return file.webkitRelativePath || file.name;
+}
+
+/** 判别增量同步进度快照（files_processed 字段独有）。 */
+function isSyncProgress(progress: ImportProgress): progress is SyncProgress {
+  return "files_processed" in progress;
+}
+
+/** 判别增量同步报告（files_added 字段独有）。 */
+function isSyncReport(report: ImportReport): report is SyncReport {
+  return "files_added" in report;
+}
+
+/** 增量同步进度条（复用：上传式增量任务 + 一键同步按钮）。 */
+function SyncProgressView({ progress }: { progress: SyncProgress }) {
+  const pct =
+    progress.files_scanned > 0
+      ? Math.min(100, Math.round((progress.files_processed / progress.files_scanned) * 100))
+      : 0;
+  return (
+    <div className="import-progress" role="status">
+      <div className="import-progress-track">
+        <div className="import-progress-fill" style={{ width: `${pct}%` }} />
+      </div>
+      <div className="import-progress-meta">
+        <span>
+          处理 {progress.files_processed} / {progress.files_scanned}
+        </span>
+        <span>{pct}%</span>
+      </div>
+      <p className="import-progress-line">
+        扫描 {progress.files_scanned} · 已处理 {progress.files_processed} · 失败{" "}
+        {progress.files_skipped}
+      </p>
+    </div>
+  );
+}
+
+/** 增量同步完成报告（新增/更新/删除/未变 + 块）。 */
+function SyncReportView({ report, title }: { report: SyncReport; title: string }) {
+  return (
+    <div className="import-report">
+      <p className="import-report-title">{title}</p>
+      <p className="import-report-meta">
+        新增 {report.files_added} · 更新 {report.files_updated} · 删除 {report.files_deleted} · 未变{" "}
+        {report.files_unchanged}
+      </p>
+      <p className="import-report-meta">
+        块 写入 {report.blocks_upserted} · 清理 {report.blocks_deleted}
+        {report.files_skipped > 0 ? ` · 跳过 ${report.files_skipped}` : ""}
+      </p>
+      {report.errors.length > 0 && (
+        <p className="import-report-errors">失败原因：{report.errors.join("、")}</p>
+      )}
+    </div>
+  );
 }
 
 /**
@@ -26,10 +87,12 @@ export default function ImportPanel({ onImported }: ImportPanelProps) {
   const folderInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const timerRef = useRef<number | null>(null);
+  const syncTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     return () => {
       if (timerRef.current !== null) window.clearInterval(timerRef.current);
+      if (syncTimerRef.current !== null) window.clearInterval(syncTimerRef.current);
     };
   }, []);
 
@@ -110,8 +173,67 @@ export default function ImportPanel({ onImported }: ImportPanelProps) {
     setTask(null);
   };
 
+  // ---------------------------------------------------------------- 一键增量同步
+
+  const [syncTask, setSyncTask] = useState<ImportStatus | null>(null);
+  const [syncBusy, setSyncBusy] = useState(false);
+  const [syncError, setSyncError] = useState<string | null>(null);
+
+  const stopSyncPolling = (): void => {
+    if (syncTimerRef.current !== null) {
+      window.clearInterval(syncTimerRef.current);
+      syncTimerRef.current = null;
+    }
+  };
+
+  /** 轮询同步任务状态；terminal 时停止并刷新知识库计数。 */
+  const pollSync = (taskId: string): void => {
+    const tick = async (): Promise<void> => {
+      let status: ImportStatus;
+      try {
+        status = await getImportStatus(taskId);
+      } catch (pollError) {
+        stopSyncPolling();
+        setSyncBusy(false);
+        setSyncError(pollError instanceof Error ? pollError.message : String(pollError));
+        return;
+      }
+      setSyncTask(status);
+      if (status.status === "running") return;
+      stopSyncPolling();
+      setSyncBusy(false);
+      if (status.status === "done") {
+        onImported();
+      }
+    };
+    stopSyncPolling();
+    syncTimerRef.current = window.setInterval(() => void tick(), POLL_INTERVAL_MS);
+    void tick();
+  };
+
+  /** 触发后端一键增量同步（同步全部已登记知识库目录）。 */
+  const handleSync = async (): Promise<void> => {
+    if (syncBusy) return;
+    setSyncBusy(true);
+    setSyncError(null);
+    setSyncTask(null);
+    try {
+      const { task_id } = await syncKnowledge();
+      pollSync(task_id);
+    } catch (syncCallError) {
+      setSyncBusy(false);
+      setSyncError(syncCallError instanceof Error ? syncCallError.message : String(syncCallError));
+    }
+  };
+
   const progress = task?.progress;
   const report = task?.report;
+  const syncProgress =
+    syncTask?.progress !== undefined && isSyncProgress(syncTask.progress) ? syncTask.progress : undefined;
+  const syncReport =
+    syncTask?.report !== null && syncTask?.report !== undefined && isSyncReport(syncTask.report)
+      ? syncTask.report
+      : null;
 
   return (
     <section className="import-panel">
@@ -154,7 +276,11 @@ export default function ImportPanel({ onImported }: ImportPanelProps) {
         />
       </div>
 
-      <p className="import-hint">可多选重点子文件夹 / 单个文件；敏感目录不选即可排除。</p>
+      <p className="import-hint">
+        可多选重点子文件夹 / 单个文件；敏感目录不选即可排除。
+        <br />
+        重新选择同一批文件夹导入 = 增量更新（只处理新增/修改/删除）。
+      </p>
 
       {pending.length > 0 && (
         <div className="import-pending">
@@ -191,48 +317,57 @@ export default function ImportPanel({ onImported }: ImportPanelProps) {
       )}
 
       {task !== null && task.status === "running" && progress !== undefined && (
-        <div className="import-progress" role="status">
-          <div className="import-progress-track">
-            <div
-              className="import-progress-fill"
-              style={{
-                width: `${
-                  progress.files_scanned > 0
-                    ? Math.min(100, Math.round((progress.files_parsed / progress.files_scanned) * 100))
-                    : 0
-                }%`,
-              }}
-            />
+        isSyncProgress(progress) ? (
+          <SyncProgressView progress={progress} />
+        ) : (
+          <div className="import-progress" role="status">
+            <div className="import-progress-track">
+              <div
+                className="import-progress-fill"
+                style={{
+                  width: `${
+                    progress.files_scanned > 0
+                      ? Math.min(100, Math.round((progress.files_parsed / progress.files_scanned) * 100))
+                      : 0
+                  }%`,
+                }}
+              />
+            </div>
+            <div className="import-progress-meta">
+              <span>
+                解析 {progress.files_parsed} / {progress.files_scanned}
+              </span>
+              <span>
+                {progress.files_scanned > 0
+                  ? Math.min(100, Math.round((progress.files_parsed / progress.files_scanned) * 100))
+                  : 0}
+                %
+              </span>
+            </div>
+            <p className="import-progress-line">
+              扫描 {progress.files_scanned} · 解析 {progress.files_parsed} · 跳过{" "}
+              {progress.files_skipped} · 块 {progress.chunks}
+            </p>
           </div>
-          <div className="import-progress-meta">
-            <span>
-              解析 {progress.files_parsed} / {progress.files_scanned}
-            </span>
-            <span>
-              {progress.files_scanned > 0
-                ? Math.min(100, Math.round((progress.files_parsed / progress.files_scanned) * 100))
-                : 0}
-              %
-            </span>
-          </div>
-          <p className="import-progress-line">
-            扫描 {progress.files_scanned} · 解析 {progress.files_parsed} · 跳过{" "}
-            {progress.files_skipped} · 块 {progress.chunks}
-          </p>
-        </div>
+        )
       )}
 
       {task !== null && task.status === "done" && report != null && (
-        <div className="import-report">
-          <p className="import-report-title">导入完成</p>
-          <p className="import-report-meta">
-            文档 {report.files_parsed}（扫描 {report.files_scanned} · 跳过{" "}
-            {report.files_skipped}）· 块 {report.chunks} · 写入 {report.blocks_upserted}
-          </p>
-          {report.errors.length > 0 && (
-            <p className="import-report-errors">失败原因：{report.errors.join("、")}</p>
-          )}
-        </div>
+        isSyncReport(report) ? (
+          <SyncReportView report={report} title="导入完成（增量更新）" />
+        ) : (
+          <div className="import-report">
+            <p className="import-report-title">导入完成</p>
+            <p className="import-report-meta">
+              文档 {report.files_parsed}（扫描 {report.files_scanned} · 跳过{" "}
+              {report.files_skipped}）· 块 {report.chunks} · 写入{" "}
+              {report.blocks_upserted}
+            </p>
+            {report.errors.length > 0 && (
+              <p className="import-report-errors">失败原因：{report.errors.join("、")}</p>
+            )}
+          </div>
+        )
       )}
 
       {task !== null && task.status === "error" && (
@@ -240,6 +375,39 @@ export default function ImportPanel({ onImported }: ImportPanelProps) {
           {task.error ?? "导入失败"}
         </p>
       )}
+
+      {/* ------------------------------------------------------------ 一键增量同步 */}
+      <div className="import-sync">
+        <button
+          type="button"
+          className="import-sync-btn"
+          onClick={() => void handleSync()}
+          disabled={syncBusy}
+          title="对已导入/同步过的知识库目录做增量同步：只处理新增/更新/删除，未变文件毫秒级跳过"
+        >
+          {syncBusy ? "同步中…" : "同步知识库"}
+        </button>
+
+        {syncError !== null && (
+          <p className="import-error" role="alert">
+            {syncError}
+          </p>
+        )}
+
+        {syncTask !== null && syncTask.status === "running" && syncProgress !== undefined && (
+          <SyncProgressView progress={syncProgress} />
+        )}
+
+        {syncTask !== null && syncTask.status === "done" && syncReport != null && (
+          <SyncReportView report={syncReport} title="同步完成" />
+        )}
+
+        {syncTask !== null && syncTask.status === "error" && (
+          <p className="import-error" role="alert">
+            {syncTask.error ?? "同步失败"}
+          </p>
+        )}
+      </div>
     </section>
   );
 }

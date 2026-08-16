@@ -21,9 +21,17 @@ const SETTINGS_VIEW = {
     api_key_set: true,
     api_key_hint: "...abcd",
   },
-  embed: { mode: "local", base_url: null, model: null, api_key_set: false, api_key_hint: null },
+  embed: {
+    mode: "cloud",
+    base_url: "https://embed.example.com/v1",
+    model: "bge-m3",
+    api_key_set: false,
+    api_key_hint: null,
+  },
   system_prompt:
     "你是 Everything RAG 个人知识助手。请严格基于给定的参考上下文作答，不要编造上下文之外的内容；若上下文无法回答该问题，请如实说明。引用来源时只能使用上下文中标注的序号，不得虚构来源。",
+  avatars: { user: null, agent: null },
+  theme: "light",
 };
 
 /** 拦截 status 与 settings（GET 返回视图；PUT 记录请求体并返回原视图）。 */
@@ -54,6 +62,7 @@ test("设置弹窗：配置对话模型 + 保存系统提示词", async ({ page 
   await expect(dialog.getByRole("heading", { name: "对话模型" })).toBeVisible();
   await expect(dialog.getByRole("heading", { name: "嵌入模型" })).toBeVisible();
   await expect(dialog.getByRole("heading", { name: "系统提示词" })).toBeVisible();
+  await expect(dialog.getByRole("heading", { name: "头像" })).toBeVisible();
 
   // 对话模型已回填
   await expect(page.getByLabel("对话模型 API Key")).toHaveValue("");
@@ -67,14 +76,62 @@ test("设置弹窗：配置对话模型 + 保存系统提示词", async ({ page 
   expect(putBody()).toMatchObject({ system_prompt: "你是测试助手，只用中文回答。" });
 });
 
-test("设置弹窗：切换云端嵌入显示字段与重建提示", async ({ page }) => {
+test("设置弹窗：修改嵌入模型显示重建提示", async ({ page }) => {
   await stubSettings(page);
   await page.goto("/");
   await page.getByRole("button", { name: "设置" }).click();
 
-  await page.getByRole("button", { name: "云端" }).click();
-  await expect(page.getByLabel("嵌入模型 API Key")).toBeVisible();
-  await expect(page.getByLabel("嵌入模型 API Key")).toBeEnabled();
-  // 切换嵌入模型 -> 重建提示
+  // 改动嵌入模型名 -> 提示需重新导入
+  await page.getByPlaceholder("Qwen/Qwen3-Embedding-8B").fill("another-embed-model");
   await expect(page.getByText(/重新导入全部文档/)).toBeVisible();
+});
+
+test("设置弹窗：切换深色主题实时应用并随保存持久化", async ({ page }) => {
+  const { putBody } = await stubSettings(page);
+  await page.goto("/");
+  await page.getByRole("button", { name: "设置" }).click();
+
+  // 实时应用：点击「深色」后 <html> 根节点 data-theme 变为 dark
+  await page.getByRole("button", { name: "深色" }).click();
+  await expect
+    .poll(() => page.evaluate(() => document.documentElement.dataset.theme))
+    .toBe("dark");
+
+  // 保存 -> PUT 负载携带 theme=dark
+  await page.getByRole("button", { name: "保存" }).click();
+  await expect(page.getByText("已保存")).toBeVisible();
+  expect(putBody()).toMatchObject({ theme: "dark" });
+});
+
+test("设置弹窗：选择用户头像并保存上传", async ({ page }) => {
+  await stubSettings(page);
+  let uploaded = false;
+  await page.route("**/api/avatars/user", (route) => {
+    if (route.request().method() === "POST") {
+      uploaded = true;
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ kind: "user", url: "/api/avatars/user-test.png", filename: "user-test.png" }),
+      });
+    } else {
+      route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ kind: "user", url: null }) });
+    }
+  });
+  await page.goto("/");
+  await page.getByRole("button", { name: "设置" }).click();
+
+  // 通过隐藏 file input 选择头像（打开系统资源管理器选择文件）
+  await page
+    .getByLabel("选择用户头像")
+    .setInputFiles({ name: "me.png", mimeType: "image/png", buffer: Buffer.from([0x89, 0x50, 0x4e, 0x47]) });
+
+  // 预览显示文件名 + 出现「恢复默认」
+  await expect(page.getByText("me.png")).toBeVisible();
+  await expect(page.getByRole("button", { name: "恢复默认" })).toBeVisible();
+
+  // 保存 -> 触发头像上传
+  await page.getByRole("button", { name: "保存" }).click();
+  await expect(page.getByText("已保存")).toBeVisible();
+  expect(uploaded).toBe(true);
 });

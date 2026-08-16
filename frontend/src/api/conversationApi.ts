@@ -41,7 +41,7 @@ export async function getConversation(id: string): Promise<Conversation> {
 /** 追加一轮消息（user + assistant），返回摘要。 */
 export async function appendConversationMessages(
   id: string,
-  messages: Pick<ConversationMessage, "role" | "content" | "sources">[],
+  messages: Pick<ConversationMessage, "role" | "content" | "thinking" | "sources">[],
 ): Promise<ConversationSummary> {
   const response = await fetch(`${CONVERSATIONS_ENDPOINT}/${encodeURIComponent(id)}/messages`, {
     method: "POST",

@@ -36,7 +36,7 @@ cd backend
 cp .env.example .env        # git-bash；PowerShell 用 Copy-Item .env.example .env
 ```
 
-编辑 `.env`，填写 `EVERYTHING_RAG_CHAT_BASE_URL` / `EVERYTHING_RAG_CHAT_MODEL` / `EVERYTHING_RAG_CHAT_API_KEY`（云端必填）。**嵌入模型不需要配置**：本地 bge-m3 首次使用时自动下载，无需 API Key。
+编辑 `.env`，填写 `EVERYTHING_RAG_CHAT_BASE_URL` / `EVERYTHING_RAG_CHAT_MODEL` / `EVERYTHING_RAG_CHAT_API_KEY`，以及嵌入模型 `EVERYTHING_RAG_EMBED_BASE_URL` / `EVERYTHING_RAG_EMBED_MODEL` / `EVERYTHING_RAG_EMBED_API_KEY`（云端必配，如硅基流动）。
 
 ### 4. 启动
 
@@ -59,10 +59,16 @@ backend/.venv/Scripts/python scripts/run.py --no-browser   # 自动化/CI 用
 | `EVERYTHING_RAG_CHAT_API_KEY` | 云端必填 | API Key，只填值不带 `Bearer` | `sk-...` |
 | `EVERYTHING_RAG_CHAT_PROVIDER_TYPE` | ✳ | Provider 类型，默认 `openai_compatible` | `openai_compatible` |
 
-### 嵌入模型（自动，无需配置）
+### 嵌入模型（必配）
 
-- 模型固定为本地 **bge-m3**（fastembed/ONNX），首次真实嵌入时自动从 Hugging Face 下载约 2.5GB，之后离线可用。
-- 无需 API Key；换模型能力在 v0.1 配置向导中落地。
+| 变量 | 必填 | 说明 | 示例 |
+|---|---|---|---|
+| `EVERYTHING_RAG_EMBED_BASE_URL` | ✅ | OpenAI 兼容 `/embeddings` 端点 | `https://api.siliconflow.cn/v1` |
+| `EVERYTHING_RAG_EMBED_MODEL` | ✅ | 文本嵌入模型 id | `Qwen/Qwen3-Embedding-8B` / `BAAI/bge-m3` |
+| `EVERYTHING_RAG_EMBED_API_KEY` | ✅ | API Key，只填值不带 `Bearer` | `sk-...` |
+
+- 嵌入统一走云端（本地 fastembed/bge-m3 已移除，省去本地下载与 CPU 推理）。
+- 可在设置页「嵌入模型」随时修改；切换嵌入模型 = 新向量空间 = 需重新导入全部文档。
 
 ### 其他可选
 

@@ -40,17 +40,39 @@ export async function getImportStatus(taskId: string): Promise<ImportStatus> {
   return (await response.json()) as ImportStatus;
 }
 
-/** 上传式导入：把选中的文件夹文件（.md）multipart 上传到本地后端并异步导入。 */
-export async function uploadFolder(files: File[]): Promise<StartImportResult> {
+/** 上传式导入：把选中的文件夹文件（.md）multipart 上传到本地后端并异步导入。
+
+mode=incremental（默认）：重新选择同一批文件夹上传 = 增量对账（只处理新增/更新/删除）；
+mode=full：仅入库/更新，不删除。
+ */
+export async function uploadFolder(
+  files: File[],
+  mode: "full" | "incremental" = "incremental",
+): Promise<StartImportResult> {
   const formData = new FormData();
   for (const file of files) {
     // webkitRelativePath 携带相对路径（如 subdir/a.md），供后端按原结构暂存
     const relativePath = file.webkitRelativePath || file.name;
     formData.append("files", file, relativePath);
   }
+  formData.append("mode", mode);
   let response: Response;
   try {
     response = await fetch(`${IMPORT_ENDPOINT}/upload`, { method: "POST", body: formData });
+  } catch {
+    throw new Error("无法连接本地服务，请确认后端已启动");
+  }
+  if (!response.ok) {
+    throw new Error(await readErrorDetail(response));
+  }
+  return (await response.json()) as StartImportResult;
+}
+
+/** 一键增量同步：对全部已登记的知识库目录做增量同步，返回 task_id（走同一轮询）。 */
+export async function syncKnowledge(): Promise<StartImportResult> {
+  let response: Response;
+  try {
+    response = await fetch("/api/sync", { method: "POST" });
   } catch {
     throw new Error("无法连接本地服务，请确认后端已启动");
   }

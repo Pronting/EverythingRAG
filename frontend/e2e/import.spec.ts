@@ -5,6 +5,11 @@ import { join } from "node:path";
 
 const TASK_ID = "task-123";
 
+/** 展开侧边栏「知识库」卡片（默认折叠，导入前需先展开）。 */
+async function expandKnowledgeBase(page: Page): Promise<void> {
+  await page.locator(".kb-card-header").click();
+}
+
 /** 状态桩：导入前 knowledge 为 0；imported=true 后返回真实计数（验证导入后刷新）。 */
 function statusBody(imported: boolean): string {
   return JSON.stringify({
@@ -89,6 +94,7 @@ test("多选文件夹/文件积累待导入清单，开始导入后显示进度�
   try {
     await stubBackend(page);
     await page.goto("/");
+    await expandKnowledgeBase(page);
 
     // 初始状态：知识库为空
     await expect(page.getByText("共 0 个语义块 · 尚未导入")).toBeVisible();
@@ -127,6 +133,7 @@ test("所选内容中没有 Markdown 时提示", async ({ page }) => {
     writeFileSync(join(dir, "note.txt"), "hello");
     await stubBackend(page);
     await page.goto("/");
+    await expandKnowledgeBase(page);
 
     await page.locator('input[webkitdirectory]').setInputFiles(dir);
 
@@ -153,6 +160,7 @@ test("上传失败：后端 400 展示可读错误", async ({ page }) => {
   const corpus = makeCorpus();
   try {
     await page.goto("/");
+    await expandKnowledgeBase(page);
     await page.locator('input[webkitdirectory]').setInputFiles(corpus);
     await page.getByRole("button", { name: "开始导入" }).click();
 

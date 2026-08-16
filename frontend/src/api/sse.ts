@@ -4,8 +4,22 @@ import type { Source, SSEFrame } from "../types";
 export interface StreamChatHandlers {
   onMeta: (sources: Source[]) => void;
   onToken: (text: string) => void;
+  onReasoning: (text: string) => void;
+  onTool: (tool: string, status: string) => void;
   onDone: () => void;
   onError: (message: string) => void;
+}
+
+/** streamChat 可选参数：联网搜索开关、贴图（data URI）。 */
+export interface StreamChatOptions {
+  webSearch?: boolean;
+  images?: string[];
+}
+
+/** 多轮对话历史中的一条。 */
+export interface HistoryMessage {
+  role: "user" | "assistant";
+  content: string;
 }
 
 const ENDPOINT = "/api/chat";
@@ -18,15 +32,22 @@ const ENDPOINT = "/api/chat";
  */
 export async function streamChat(
   message: string,
+  history: HistoryMessage[],
   handlers: StreamChatHandlers,
   signal?: AbortSignal,
+  options?: StreamChatOptions,
 ): Promise<void> {
   let response: Response;
   try {
     response = await fetch(ENDPOINT, {
       method: "POST",
       headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
-      body: JSON.stringify({ message }),
+      body: JSON.stringify({
+        message,
+        history,
+        web_search: options?.webSearch ?? false,
+        images: options?.images ?? [],
+      }),
       signal,
     });
   } catch (error) {
@@ -94,6 +115,14 @@ function dispatchFrame(frameText: string, handlers: StreamChatHandlers): void {
       break;
     case "token":
       if (typeof frame.text === "string") handlers.onToken(frame.text);
+      break;
+    case "reasoning":
+      if (typeof frame.text === "string") handlers.onReasoning(frame.text);
+      break;
+    case "tool":
+      if (typeof frame.tool === "string" && typeof frame.status === "string") {
+        handlers.onTool(frame.tool, frame.status);
+      }
       break;
     case "done":
       handlers.onDone();

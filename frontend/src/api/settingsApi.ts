@@ -36,6 +36,39 @@ export async function updateSettings(update: SettingsUpdate): Promise<SettingsVi
   return (await response.json()) as SettingsView;
 }
 
+/** 头像类型：user=用户，agent=Agent 助手。 */
+export type AvatarKind = "user" | "agent";
+
+/** 上传头像（multipart），返回新的头像 URL。 */
+export async function uploadAvatar(kind: AvatarKind, file: File): Promise<string> {
+  const form = new FormData();
+  form.append("file", file);
+  let response: Response;
+  try {
+    response = await fetch(`/api/avatars/${kind}`, { method: "POST", body: form });
+  } catch {
+    throw new Error("无法连接本地服务，请确认后端已启动");
+  }
+  if (!response.ok) {
+    throw new Error(await readErrorDetail(response));
+  }
+  const data = (await response.json()) as { url: string };
+  return data.url;
+}
+
+/** 删除头像（恢复默认）。 */
+export async function deleteAvatar(kind: AvatarKind): Promise<void> {
+  let response: Response;
+  try {
+    response = await fetch(`/api/avatars/${kind}`, { method: "DELETE" });
+  } catch {
+    throw new Error("无法连接本地服务，请确认后端已启动");
+  }
+  if (!response.ok) {
+    throw new Error(await readErrorDetail(response));
+  }
+}
+
 /** 尝试从错误响应体提取 detail；失败回退通用消息。 */
 async function readErrorDetail(response: Response): Promise<string> {
   try {

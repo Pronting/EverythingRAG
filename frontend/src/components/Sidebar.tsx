@@ -1,5 +1,28 @@
+import { useState } from "react";
 import type { ConversationSummary, StatusResponse } from "../types";
 import ImportPanel from "./ImportPanel";
+
+const KB_COLLAPSED_KEY = "everything-rag-kb-collapsed";
+const SIDEBAR_COLLAPSED_KEY = "everything-rag-sidebar-collapsed";
+
+/** 读取知识库卡片是否收起（未设置时默认收起，避免长期占用侧边栏视野）。 */
+function readCollapsed(): boolean {
+  try {
+    const value = localStorage.getItem(KB_COLLAPSED_KEY);
+    return value === null ? true : value === "1";
+  } catch {
+    return true;
+  }
+}
+
+/** 读取侧边栏是否折叠（未设置时默认展开）。 */
+function readSidebarCollapsed(): boolean {
+  try {
+    return localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
 
 interface SidebarProps {
   status: StatusResponse | null;
@@ -12,7 +35,8 @@ interface SidebarProps {
   onOpenSettings: () => void;
 }
 
-/** ChatGPT 风格左侧边栏：品牌 + 新对话 + 会话历史 + 知识库管理 + 设置入口 + 隐私状态。 */
+/** ChatGPT 风格左侧边栏：品牌 + 新对话 + 会话搜索/历史 + 知识库管理 + 设置入口 + 隐私状态；
+ *  支持折叠为图标栏。 */
 export default function Sidebar({
   status,
   statusError,
@@ -27,68 +51,161 @@ export default function Sidebar({
   const outboundState = status?.privacy.outbound_state ?? "local-only";
   const hasOutbound = outboundState !== "local-only";
 
+  // 知识库卡片可折叠：收起后只留「知识库 + 文档数」一行，展开才显示导入面板
+  const [collapsed, setCollapsed] = useState<boolean>(readCollapsed);
+  // 整个侧边栏可折叠为图标栏
+  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(readSidebarCollapsed);
+  // 会话搜索关键字
+  const [query, setQuery] = useState("");
+
+  const toggleCollapsed = (): void => {
+    setCollapsed((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem(KB_COLLAPSED_KEY, next ? "1" : "0");
+      } catch {
+        /* 忽略：存储不可用时仅失去记忆 */
+      }
+      return next;
+    });
+  };
+
+  const toggleSidebar = (): void => {
+    setSidebarCollapsed((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem(SIDEBAR_COLLAPSED_KEY, next ? "1" : "0");
+      } catch {
+        /* 忽略：存储不可用时仅失去记忆 */
+      }
+      return next;
+    });
+  };
+
+  const normalizedQuery = query.trim().toLowerCase();
+  const filteredConversations =
+    normalizedQuery === ""
+      ? conversations
+      : conversations.filter((c) => c.title.toLowerCase().includes(normalizedQuery));
+
   return (
-    <aside className="sidebar">
+    <aside className={`sidebar${sidebarCollapsed ? " collapsed" : ""}`}>
       <div className="sidebar-brand">
         <div className="sidebar-logo" aria-hidden="true">
           E
         </div>
-        <div>
-          <h1 className="sidebar-title">Everything RAG</h1>
-          <p className="sidebar-subtitle">个人知识第二大脑</p>
-        </div>
+        {!sidebarCollapsed && <h1 className="sidebar-title">Everything RAG</h1>}
       </div>
 
-      <button type="button" className="new-chat-btn" onClick={onNewChat}>
+      <button type="button" className="new-chat-btn" onClick={onNewChat} aria-label="新对话" title="新对话">
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
           <path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
         </svg>
-        新对话
+        {!sidebarCollapsed && <span>新对话</span>}
       </button>
 
-      <nav className="conversation-list" aria-label="会话历史">
-        {conversations.map((conversation) => (
-          <button
-            key={conversation.id}
-            type="button"
-            className={`conversation-item${conversation.id === activeConversationId ? " active" : ""}`}
-            onClick={() => onSelectConversation(conversation.id)}
-            title={conversation.title}
-          >
-            <span className="conversation-item-title">{conversation.title}</span>
-          </button>
-        ))}
-        {conversations.length === 0 && (
-          <p className="conversation-empty">暂无会话，点击「新对话」开始</p>
-        )}
-      </nav>
-
-      <div className="kb-card">
-        <div className="kb-card-header">
-          <span className="kb-card-title">知识库</span>
-          <span className="kb-count-badge">
-            {knowledge !== undefined ? `${knowledge.file_count} 文档` : "—"}
-          </span>
+      {!sidebarCollapsed && (
+        <div className="conversation-search">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+            <circle cx="7" cy="7" r="4.5" stroke="currentColor" strokeWidth="1.4" />
+            <path d="M10.5 10.5 14 14" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+          </svg>
+          <input
+            className="conversation-search-input"
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="搜索对话"
+            aria-label="搜索对话"
+          />
         </div>
-        <p className="kb-stats">
-          共 <strong>{knowledge?.chunk_count ?? 0}</strong> 个语义块
-          {(knowledge?.chunk_count ?? 0) > 0 ? " · 已导入" : " · 尚未导入"}
-        </p>
-        <ImportPanel onImported={onImported} />
-      </div>
+      )}
+
+      {!sidebarCollapsed && (
+        <nav className="conversation-list" aria-label="会话历史">
+          {filteredConversations.map((conversation) => (
+            <button
+              key={conversation.id}
+              type="button"
+              className={`conversation-item${conversation.id === activeConversationId ? " active" : ""}`}
+              onClick={() => onSelectConversation(conversation.id)}
+              title={conversation.title}
+            >
+              <span className="conversation-item-title">{conversation.title}</span>
+            </button>
+          ))}
+          {filteredConversations.length === 0 && (
+            <p className="conversation-empty">
+              {conversations.length === 0 ? "暂无会话，点击「新对话」开始" : "未找到匹配的会话"}
+            </p>
+          )}
+        </nav>
+      )}
+
+      {!sidebarCollapsed && (
+        <div className={`kb-card${collapsed ? " collapsed" : ""}`}>
+          <button
+            type="button"
+            className="kb-card-header"
+            onClick={toggleCollapsed}
+            aria-expanded={!collapsed}
+            aria-label={collapsed ? "展开知识库" : "收起知识库"}
+            title={collapsed ? "展开知识库管理" : "收起知识库管理"}
+          >
+            <span className="kb-card-title">知识库</span>
+            <span className="kb-count-badge">
+              {knowledge !== undefined ? `${knowledge.file_count} 文档` : "—"}
+            </span>
+            <span className="kb-card-chevron" aria-hidden="true">
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                <path
+                  d="M3 4.5 6 7.5l3-3"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            </span>
+          </button>
+          <div className="kb-card-body">
+            <p className="kb-stats">
+              共 <strong>{knowledge?.chunk_count ?? 0}</strong> 个语义块
+              {(knowledge?.chunk_count ?? 0) > 0 ? " · 已导入" : " · 尚未导入"}
+            </p>
+            <ImportPanel onImported={onImported} />
+          </div>
+        </div>
+      )}
 
       <div className="sidebar-footer">
-        {statusError !== null ? (
-          <span className="status-error">后端未连接</span>
-        ) : (
-          <>
-            <span
-              className={`privacy-dot${hasOutbound ? " has-outbound" : ""}`}
-              aria-hidden="true"
-            />
-            <span className="sidebar-privacy">隐私基线：{outboundState}</span>
-          </>
-        )}
+        {!sidebarCollapsed &&
+          (statusError !== null ? (
+            <span className="status-error">后端未连接</span>
+          ) : (
+            <>
+              <span
+                className={`privacy-dot${hasOutbound ? " has-outbound" : ""}`}
+                aria-hidden="true"
+              />
+              <span className="sidebar-privacy">隐私基线：{outboundState}</span>
+            </>
+          ))}
+        <button
+          type="button"
+          className="sidebar-collapse-btn"
+          onClick={toggleSidebar}
+          aria-label={sidebarCollapsed ? "展开侧边栏" : "收起侧边栏"}
+          title={sidebarCollapsed ? "展开侧边栏" : "收起侧边栏"}
+        >
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+            {sidebarCollapsed ? (
+              <path d="M6 3l5 5-5 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+            ) : (
+              <path d="M10 3 5 8l5 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+            )}
+          </svg>
+        </button>
         <button
           type="button"
           className="sidebar-settings-btn"
