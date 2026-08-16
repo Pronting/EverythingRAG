@@ -298,9 +298,9 @@ def _coalesce_short_chunks(chunks: list[Chunk], min_chars: int, max_chars: int) 
         nonlocal pending, pending_len
         if not pending:
             return
-        # 短碎片向后并入前一个块（含代码块，若未超上限），消除孤立碎片；
-        # 合并后按正文处理（混合内容），保证检索面向语义完整的块而非残句。
-        if pending_len < min_chars and out:
+        # 短碎片向后并入前一个块（文本/代码块，若未超上限），消除孤立碎片；
+        # 但不并入图片块（图片 alt 描述应独立，避免混入正文）；合并后按正文处理。
+        if pending_len < min_chars and out and out[-1].kind != "image":
             prev = out[-1]
             if len(prev.text) + 2 + pending_len <= max_chars:
                 out[-1] = Chunk(
@@ -331,8 +331,13 @@ def _coalesce_short_chunks(chunks: list[Chunk], min_chars: int, max_chars: int) 
         pending, pending_len = [], 0
 
     for chunk in chunks:
-        if chunk.kind in ("code", "image"):
+        if chunk.kind == "code":
             _flush()
+            out.append(chunk)
+            continue
+        if chunk.kind == "image":
+            # 图片不打断正文累积：步骤式文档里截图夹在短句之间，若在此 flush 会把
+            # 每步短句冲成孤立碎块；图片独立成块即可，正文继续累积跨图合并。
             out.append(chunk)
             continue
         # 已达最小长度且下一块也达标 -> 独立成块（不过度粘连）

@@ -13,6 +13,20 @@ import pytest
 
 from app.ingestion import chunk_document, parse_markdown
 
+
+def test_short_text_merges_across_images() -> None:
+    """步骤式文档：截图夹在短句之间不打断正文累积，短句跨图合并为一段。"""
+    a = "第一步：确定想要查询的事件、属性和时间范围。" * 3
+    b = "第二步：在下拉框中找到想要查看的事件，单击即可选中。" * 3
+    c = "第三步：点击红框部分选择想要查看的指标。" * 3
+    md = f"# 使用方法\n\n{a}\n\n![图](x.png)\n\n{b}\n\n![图](y.png)\n\n{c}"
+    chunks = chunk_document(parse_markdown(md), "f.md")
+    text_chunks = [ch for ch in chunks if ch.kind == "text"]
+    assert len(text_chunks) == 1  # 三步短句跨图片合并为一个文本块
+    assert "第一步" in text_chunks[0].text and "第三步" in text_chunks[0].text
+    assert len(text_chunks[0].text) >= 120
+
+
 # ---------------------------------------------------------------- 1. 标题层级切块
 
 
