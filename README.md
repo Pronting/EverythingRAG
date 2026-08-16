@@ -1,8 +1,38 @@
 # Everything RAG — 个人知识第二大脑
 
-纯本地 RAG 检索问答：把「本地文档 + 各 AI 平台对话记录」统一向量化，用自然语言检索，**答案永远带来源，数据不出本机**。
+**纯本地的 RAG（Retrieval-Augmented Generation）检索问答**：把「本地 Markdown 文档 + 各 AI 平台对话记录」统一向量化，用自然语言检索，**答案永远带来源，数据不出本机**。
 
 > 项目总纲与工作流见 [CLAUDE.md](CLAUDE.md) ｜ 产品需求见 [docs/PRD/PRD.md](docs/PRD/PRD.md) ｜ 技术选型见 [docs/tech/](docs/tech/)
+
+## 功能特性
+
+- 🗂️ **本地知识库管理**：导入本地 Markdown 目录/多级子目录，一键向量化，答案带来源引用。
+- 🔄 **多文件/多目录增量同步**：指纹比对（mtime+size 快路径 + 内容哈希确认）区分 新增/更新/删除/未变；**块级复用**——改一处只更新相关块、未变文件毫秒级跳过；改动的旧块级联清理。
+- 👁️ **视觉理解（图文入库）**：文档里的截图/架构图自动「下载 → 预处理 → 识图 → 文字描述 → 文本嵌入」，同图跨文档去重只识一次；图片描述块与正文**融合成图文块**，可被主题词检索命中。
+- ✂️ **面向 Markdown 的切块优化**：针对语雀/Obsidian 导出文档的常见问题专门打磨（见下）。
+- 🔍 **混合检索 + 精准召回**：dense 向量 + BM25 词法（标题注入）+ RRF 融合 + 多级相关度门禁（见下）。
+- 🌐 **联网搜索（可选）**：问答时可按需「联网搜索」，每条消息独立 opt-in。
+- 🔒 **隐私优先**：纯本地部署、默认零外发；出网仅经唯一 `OutboundClient` 并记入审计；API key 只运行期从环境读取。
+
+## 分块与检索优势
+
+### Markdown 切块（针对不规范源文档）
+
+| 手段 | 解决的问题 |
+|---|---|
+| 标题层级切块 + 短段合并 | 空行/截断导致的孤立碎句；步骤式文档跨图合并 |
+| 表格语义化（表头→`字段：值`，rowspan 继承）| 合并单元格表格平铺成噪声 |
+| `plain`/`text` 伪代码围栏按正文处理、缩进不加粗 | 语雀导出把正文误判成代码 |
+| 数值噪声过滤（数字+标点占比过高，如定价/统计表）| dense 检索噪声磁铁 |
+| 语义切块（相邻段 embedding 相似度骤降处切分）| 一标题塞多个话题的边界漂移 |
+| 图文融合块（图片描述 + 同节正文上下文）| 图片块信息密度低、不可被主题词命中 |
+
+### 检索召回
+
+- **混合检索**：dense（Qwen3-Embedding-8B 云端嵌入）+ BM25 词法（bigram + 文件名/标题注入）+ RRF 融合。
+- **多级相关度门禁**：基础门禁 0.60 + 词法救援 0.45（短缩写/标题命中）+ 纯 dense 加罚（无词法匹配的假阳性）+ 数值噪声加罚。
+- **父子检索**：命中块展开到「同父节（上级标题）」上下文，替代整篇文档拖入。
+- **实测精度**：自建评测集 **hit@5 = 16/16（100%）**。
 
 ## 快速开始
 
@@ -10,9 +40,10 @@
 
 | 依赖 | 版本 | 说明 |
 |---|---|---|
-| Python | 3.11+ | 后端（Windows 建议用 `py -3.11`） |
+| Python | 3.11+ | 后端 |
 | Node | 18+ | 仅构建前端时需要 |
-| 网络 | 首次需联网 | 下载 bge-m3 嵌入模型（约 2.5GB，一次性） |
+
+> 嵌入/识图均走云端 OpenAI 兼容 API，无需本地下载大模型。
 
 ### 2. 安装依赖
 
@@ -27,63 +58,40 @@ cd ../frontend
 npm install
 ```
 
-### 3. 配置对话模型（必做）
+### 3. 配置模型（对话/嵌入必配，识图/搜索可选）
 
-复制配置模板并填写：
+两种方式任选其一，推荐**设置页**（图形化，实时生效）：
 
-```bash
-cd backend
-cp .env.example .env        # git-bash；PowerShell 用 Copy-Item .env.example .env
-```
+- **方式 A（推荐）**：启动后在 Web 设置页填写「对话模型 / 嵌入模型 / 识图模型 / 联网搜索 / 系统提示词」，持久化到 `~/.everything-rag/config.json`。
+- **方式 B（环境变量）**：复制模板 `backend/.env.example` → `backend/.env`，填写下表变量。
 
-编辑 `.env`，填写 `EVERYTHING_RAG_CHAT_BASE_URL` / `EVERYTHING_RAG_CHAT_MODEL` / `EVERYTHING_RAG_CHAT_API_KEY`，以及嵌入模型 `EVERYTHING_RAG_EMBED_BASE_URL` / `EVERYTHING_RAG_EMBED_MODEL` / `EVERYTHING_RAG_EMBED_API_KEY`（云端必配，如硅基流动）。
+| 变量 | 必填 | 说明 |
+|---|---|---|
+| `EVERYTHING_RAG_CHAT_BASE_URL` / `_MODEL` / `_API_KEY` | ✅ | 对话模型（OpenAI 兼容端点） |
+| `EVERYTHING_RAG_EMBED_BASE_URL` / `_MODEL` / `_API_KEY` | ✅ | 嵌入模型（OpenAI 兼容 `/embeddings`） |
+| `EVERYTHING_RAG_SEARCH_API_KEY` | ✳ | 联网搜索（Tavily，可选） |
+| `EVERYTHING_RAG_DATA_DIR` | ✳ | 数据目录，默认 `~/.everything-rag` |
+
+> 隐私红线：API key 只运行期从环境读取，绝不写入配置/日志；出网仅经唯一 `OutboundClient` 并记入审计（`GET /api/audit`）。
 
 ### 4. 启动
 
 ```bash
 # 回到仓库根目录
-backend/.venv/Scripts/python scripts/run.py        # 随机端口 + 自动开浏览器
-backend/.venv/Scripts/python scripts/run.py --no-browser   # 自动化/CI 用
+backend/.venv/Scripts/python scripts/run.py              # 随机端口 + 自动开浏览器
+backend/.venv/Scripts/python scripts/run.py --no-browser # 自动化/CI 用（只打印端口）
+
+# 或双击 start.bat（Windows）
 ```
 
-## 配置说明
-
-所有配置走**环境变量**（pydantic-settings 读取，前缀 `EVERYTHING_RAG_`），可写在 `backend/.env` 或真实环境变量中。完整模板见 [backend/.env.example](backend/.env.example)。
-
-### 对话模型（必配）
-
-| 变量 | 必填 | 说明 | 示例 |
-|---|---|---|---|
-| `EVERYTHING_RAG_CHAT_BASE_URL` | ✅ | OpenAI 兼容端点地址 | `https://api.deepseek.com/v1` |
-| `EVERYTHING_RAG_CHAT_MODEL` | ✅ | 模型 id | `gpt-4o-mini` / `deepseek-chat` |
-| `EVERYTHING_RAG_CHAT_API_KEY` | 云端必填 | API Key，只填值不带 `Bearer` | `sk-...` |
-| `EVERYTHING_RAG_CHAT_PROVIDER_TYPE` | ✳ | Provider 类型，默认 `openai_compatible` | `openai_compatible` |
-
-### 嵌入模型（必配）
-
-| 变量 | 必填 | 说明 | 示例 |
-|---|---|---|---|
-| `EVERYTHING_RAG_EMBED_BASE_URL` | ✅ | OpenAI 兼容 `/embeddings` 端点 | `https://api.siliconflow.cn/v1` |
-| `EVERYTHING_RAG_EMBED_MODEL` | ✅ | 文本嵌入模型 id | `Qwen/Qwen3-Embedding-8B` / `BAAI/bge-m3` |
-| `EVERYTHING_RAG_EMBED_API_KEY` | ✅ | API Key，只填值不带 `Bearer` | `sk-...` |
-
-- 嵌入统一走云端（本地 fastembed/bge-m3 已移除，省去本地下载与 CPU 推理）。
-- 可在设置页「嵌入模型」随时修改；切换嵌入模型 = 新向量空间 = 需重新导入全部文档。
-
-### 其他可选
-
-| 变量 | 说明 | 默认 |
-|---|---|---|
-| `EVERYTHING_RAG_DATA_DIR` | 数据目录（向量库/state.db/配置，不出本机） | `~/.everything-rag` |
-| `EVERYTHING_RAG_VISION_ENABLED` | 识图开关（v0.1 前保持关） | `false` |
-| `EVERYTHING_RAG_HOST` / `EVERYTHING_RAG_PORT` | 绑定地址/端口（run.py 实际用随机端口） | `127.0.0.1:8000` |
-| `EVERYTHING_RAG_ENABLE_CORS` / `EVERYTHING_RAG_CORS_ORIGINS` | 跨域开关 + 白名单（JSON 数组） | `false` / `[]` |
-
-> 隐私红线：API key 只运行期从环境读取，绝不写入配置/日志；出网仅经唯一 `OutboundClient` 并记入审计（`GET /api/audit`）。
+启动后：**设置页配好模型 → 导入 Markdown 目录 → 增量同步 → 开始问答**。
 
 ## 常用命令
 
 ```bash
+# 命令行全量导入（与 UI 导入一致，含识图；图片描述后台补全）
+backend/.venv/Scripts/python scripts/import_md.py --dir "<你的文档目录>"
+
 # 后端测试（Windows）
 cd backend && .venv/Scripts/python -m pytest
 
@@ -92,9 +100,6 @@ cd frontend && npm run build
 
 # E2E（Playwright，需先启动服务）
 cd frontend && npx playwright test
-
-# 网络审计
-curl http://127.0.0.1:<port>/api/audit
 ```
 
 ## 文档导航
