@@ -4,11 +4,12 @@
     backend/.venv/Scripts/python scripts/import_md.py --dir <你的文档目录>
 
 说明：
-    - 扫描 <dir> 下所有 .md，解析 → 语义切块 → bge-m3 嵌入 → 写入向量库
+    - 扫描 <dir> 下所有 .md，解析 → 语义切块 → 云端嵌入 → 写入向量库
       （~/.everything-rag，与 Web 服务共用同一数据目录）。
+    - 嵌入走云端 OpenAI 兼容 /embeddings（配置来自 backend/.env 或设置页 config.json）。
     - 导入完成后，运行中的服务（/api/chat）即可基于这些文档问答。
     - 幂等：同一内容重复导入不产生重复块（block_id 稳定，upsert 覆盖）。
-    - 隐私：纯本地处理，零出网；单文件失败只记异常类型名，不泄露路径/正文。
+    - 隐私：文档正文经云端嵌入出网（opt-in）；单文件失败只记异常类型名，不泄露路径/正文。
 
 示例：
     backend/.venv/Scripts/python scripts/import_md.py --dir "C:/Users/me/Documents/knowledge"
@@ -32,19 +33,15 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         description="导入 Markdown 知识库到 Everything RAG 向量库",
     )
     parser.add_argument("--dir", required=True, help="包含 Markdown 文档的目录（绝对路径或相对当前目录）")
-    parser.add_argument(
-        "--no-embed-cache",
-        action="store_true",
-        help="不使用持久缓存目录（调试用；默认落 ~/.everything-rag/models）",
-    )
     return parser.parse_args(argv)
 
 
 def main(argv: list[str] | None = None) -> int:
     from app.core.config import get_settings
+    from app.core.settings_store import get_settings_store
     from app.ingestion.pipeline import IngestionPipeline
     from app.vectorstore.chroma_store import create_vector_store
-    from app.vectorstore.embedder import FastEmbedEmbedder
+    from app.vectorstore.embedder import create_embedder_from_config
 
     args = parse_args(argv)
     root = Path(args.dir)
@@ -55,13 +52,14 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     settings = get_settings()
+    embedder = create_embedder_from_config(get_settings_store().load().embed)
     print(f"数据目录 : {settings.data_dir}")
     print(f"导入目录 : {root}")
-    print("嵌入模型 : bge-m3（首次可能需下载/加载，之后走持久缓存）")
+    print(f"嵌入模型 : {embedder.fingerprint}（云端 OpenAI 兼容）")
     print("开始导入...")
     report = IngestionPipeline(
-        FastEmbedEmbedder(),
-        create_vector_store(persist_dir=settings.data_dir),
+        embedder,
+        create_vector_store(persist_dir=settings.data_dir, embedder=embedder),
     ).ingest(root)
 
     print()

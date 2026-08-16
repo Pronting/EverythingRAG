@@ -11,17 +11,26 @@ from __future__ import annotations
 from app.ingestion.chunker import Chunk, chunk_document
 from app.ingestion.markdown_parser import HeadingNode, MDBlock, ParsedMarkdown, parse_markdown
 from app.ingestion.pipeline import IngestionPipeline, IngestReport
-from app.ingestion.scanner import DiscoveredFile, scan_directory
+from app.ingestion.scanner import (
+    DiscoveredFile,
+    FileStat,
+    discover_file,
+    scan_directory,
+    scan_files,
+)
 
 __all__ = [
     "Chunk",
     "DiscoveredFile",
+    "FileStat",
     "HeadingNode",
     "IngestReport",
     "IngestionPipeline",
     "MDBlock",
     "ParsedMarkdown",
     "chunk_document",
+    "discover_file",
     "parse_markdown",
     "scan_directory",
+    "scan_files",
 ]

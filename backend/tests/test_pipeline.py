@@ -43,6 +43,13 @@ class FakeVectorStore:
             if where == {"source_file": meta.source_file}:
                 self.blocks.pop(block_id, None)
 
+    def get_blocks_by_source(self, source_file: str) -> dict[str, str]:
+        return {
+            block_id: text
+            for block_id, (text, _, meta) in self.blocks.items()
+            if meta.source_file == source_file
+        }
+
     def query(self, vector: list[float], top_k: int, where: dict[str, str] | None = None) -> list[dict]:
         return []
 
@@ -107,7 +114,7 @@ def test_ingest_counts_and_block_ids(tmp_path: Path) -> None:
     """单文件导入：计数正确，block_id 全局唯一（content_hash::锚点路径链）。"""
     root = tmp_path / "docs"
     root.mkdir()
-    file = _write(root, "a.md", "# 标题一\n\n正文内容\n\n## 子标题\n\n子内容\n")
+    file = _write(root, "a.md", "# 标题一\n\n" + "正文内容" * 40 + "\n\n## 子标题\n\n" + "子内容" * 40 + "\n")
 
     pipeline, _, store = _pipeline()
     report = pipeline.ingest(root)
@@ -252,3 +259,40 @@ def test_ingest_progress_default_none_unchanged(tmp_path: Path) -> None:
     report = pipeline.ingest(root)  # 不传 on_progress
     assert report.files_parsed == 1
     assert report.chunks == 1
+
+
+def test_semantic_split_splits_at_topic_boundary() -> None:
+    """语义切块：多段落长块在话题边界（相邻段相似度骤降）处切分，短块/单段不动。"""
+    from app.ingestion.chunker import Chunk
+
+    class TopicEmbedder:
+        fingerprint = "fake"
+        dim = 4
+
+        def embed_texts(self, texts: list[str]) -> list[list[float]]:
+            # 主题 A（含"苹果"）→ [1,0,0,0]；主题 B（含"汽车"）→ [0,1,0,0]
+            return [[1.0, 0.0, 0.0, 0.0] if "苹果" in t else [0.0, 1.0, 0.0, 0.0] for t in texts]
+
+    from app.vectorstore.base import VectorStore  # noqa: F401 -- 类型占位，实际用 FakeVectorStore
+
+    pipeline = IngestionPipeline(TopicEmbedder(), FakeVectorStore())
+    apple = "苹果是一种富含维生素的水果。" * 20
+    car = "汽车是一种需要加油的交通工具。" * 20
+    chunk = Chunk(
+        block_id="#1",
+        text=f"{apple}\n\n{apple}\n\n{car}",
+        source_file="f.md",
+        heading_path="A",
+        anchor="a",
+        seq=1,
+    )
+    result = pipeline.semantic_split([chunk])
+    assert len(result) == 2  # 苹果×2 与 汽车×1 之间是话题边界
+    assert "苹果" in result[0].text and "汽车" not in result[0].text
+    assert "汽车" in result[1].text and "苹果" not in result[1].text
+    assert result[0].block_id == "#1-s0"
+    assert result[1].block_id == "#1-s1"
+
+    # 单段/短块不切
+    short = Chunk(block_id="#2", text="短内容", source_file="f.md", heading_path="B", anchor="b", seq=2)
+    assert pipeline.semantic_split([short]) == [short]

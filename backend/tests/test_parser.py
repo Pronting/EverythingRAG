@@ -156,14 +156,14 @@ def test_code_blocks_preserved_as_text() -> None:
 
 
 def test_strikethrough_and_table_normalized() -> None:
-    """删除线标记去除；GFM 表格按行保留，行内单元格以 | 分隔。"""
+    """删除线标记去除；GFM 表格表头语义化（header：value 对）。"""
     md = "~~删除~~ 保留\n\n| a | b |\n|---|---|\n| 1 | 2 |"
     body = parse_markdown(md).normalized_text
     assert "删除" in body
     assert "保留" in body
     assert "~~" not in body
-    assert "a | b" in body  # 表头行整体保留（行级粒度）
-    assert "1 | 2" in body  # 数据行整体保留
+    assert "a：1" in body  # 表头语义化：a：值
+    assert "b：2" in body  # 表头语义化：b：值
 
 
 def test_lists_and_blockquote_content_kept() -> None:

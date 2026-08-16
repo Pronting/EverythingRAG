@@ -14,7 +14,14 @@ from markdown_it import MarkdownIt
 from markdown_it.token import Token
 
 #: 使用 js-default 预设：启用 GFM 表格 / 删除线，不启用 linkify（无需额外依赖）。
-_MD = MarkdownIt("default")
+#: disable("code")：关闭「4 空格缩进 = 代码块」——Yuque/Obsidian 导出的工程文档
+#: 常用缩进做视觉排版（如加粗标签行、eventType 列表），被误判成代码块会产出
+#: 「只有标签、零信息」的噪声块，且代码块在切块时永不被合并/去 ** 标记。
+_MD = MarkdownIt("default").disable("code")
+
+#: 表格单元格里作者手写的假标题标记（如 ``| ##### 事件 |``）——单元格内 ``#``
+#: 不是真标题（标题是块级），纯噪声，切块时剥离。
+_HEADING_MARKER_RE = re.compile(r"^#{1,6}\s*")
 
 #: slug 用：保留字母/数字/中文/空白/连字符/下划线，其余标点剔除。
 _PUNCT_RE = re.compile(r"[^\w\s-]")
@@ -51,6 +58,7 @@ class MDBlock:
     text: str  # 归一化文本（heading 即标题文本；hr/frontmatter 为空）
     level: int | None = None  # 仅 heading：1-6
     anchor: str | None = None  # 仅 heading：文档唯一，与 heading_tree 一致
+    src: str | None = None  # 仅 image：图片引用地址（图床 URL / 本地路径）
 
 
 @dataclass(frozen=True)
@@ -156,6 +164,9 @@ def _build_blocks(tokens: list[Token], has_frontmatter: bool) -> tuple[MDBlock, 
     seen: set[str] = set()
     context: list[str] = []  # 容器栈：list / quote / table，决定 inline 的 kind
     table_row: list[str] = []  # 当前表格行的单元格累计（table 上下文内用）
+    table_header: list[str] = []  # 当前表头单元格（首行）
+    table_row_count = 0  # 当前表已产出的行数（首行为表头）
+    table_prev_cells: list[str] = []  # 上一数据行单元格（合并单元格继承用）
     i = 0
     n = len(tokens)
     while i < n:
@@ -170,19 +181,32 @@ def _build_blocks(tokens: list[Token], has_frontmatter: bool) -> tuple[MDBlock, 
                 MDBlock(kind="heading", text=text, level=int(tok.tag[1:]), anchor=_make_anchor(text, seen))
             )
         elif t == "inline":
-            text = _inline_token_text(tok)
-            if not text:
-                pass
-            elif context and context[-1] == "table":
-                table_row.append(text)  # 表格单元格：累计到当前行，行末统一成块
-            elif not context and _is_noise_text(text):
-                pass  # 顶层噪声行（纯标签/URL/标点）丢弃；list/quote 项保留
+            if context and context[-1] == "table":
+                # 表格单元格：空单元格也保留 "" 占位，维持列对齐（rowspan 继承需要）
+                table_row.append(_strip_heading_markers(_inline_token_text(tok)))
             else:
-                kind = "image" if _is_pure_image(tok) else (context[-1] if context else "paragraph")
-                blocks.append(MDBlock(kind=kind, text=text))
+                # 图片单独成块（每个 image 一个 block，携带 src）；一行多图逐个产出。
+                for alt, src in _image_refs(tok):
+                    blocks.append(MDBlock(kind="image", text=alt, src=src))
+                text = _inline_text_no_images(tok)
+                if not text:
+                    pass
+                elif not context and _is_noise_text(text):
+                    pass  # 顶层噪声行（纯标签/URL/标点）丢弃；list/quote 项保留
+                else:
+                    kind = context[-1] if context else "paragraph"
+                    blocks.append(MDBlock(kind=kind, text=text))
         elif t in ("fence", "code_block"):
             text = _normalize_text(tok.content.rstrip("\n"))
-            if text:
+            if not text:
+                continue
+            info = (getattr(tok, "info", "") or "").strip().lower()
+            # 纯文本围栏（```````plain```` / ```` ```text`````）按正文处理：
+            # Yuque 常把 canned 回复/转移文案包成 ```plain```，实为文本而非代码，
+            # 当正文可参与短碎片合并，避免「几个字」的孤立块。
+            if t == "fence" and info in ("plain", "text"):
+                blocks.append(MDBlock(kind="paragraph", text=text))
+            else:
                 blocks.append(MDBlock(kind="code", text=text))
         elif t == "hr":
             blocks.append(MDBlock(kind="hr", text=""))
@@ -192,12 +216,36 @@ def _build_blocks(tokens: list[Token], has_frontmatter: bool) -> tuple[MDBlock, 
             context.append("quote")
         elif t == "table_open":
             context.append("table")
+            table_header = []
+            table_row_count = 0
+            table_prev_cells = []
         elif t == "tr_open":
             table_row = []
         elif t == "tr_close":
-            if table_row:
-                blocks.append(MDBlock(kind="table", text=" | ".join(table_row)))
-            table_row = []
+            table_row_count += 1
+            if not table_row:
+                continue
+            if table_row_count == 1:
+                table_header = table_row
+            else:
+                # 合并单元格（rowspan）：仅当本行首列为空（是上一行的延续）时才继承
+                # 上一行同列的单元格；首列非空 = 新一组，不继承（避免跨组串值）。
+                cells = list(table_row)
+                if cells and not cells[0]:
+                    for idx in range(len(cells)):
+                        if not cells[idx] and idx < len(table_prev_cells):
+                            cells[idx] = table_prev_cells[idx]
+                table_prev_cells = cells
+                if table_header and any(table_header):
+                    # 表头感知：header：value 对，跳过空表头/空值，语义化而非 cell | cell
+                    pairs = [
+                        f"{table_header[idx]}：{cells[idx]}"
+                        for idx in range(min(len(table_header), len(cells)))
+                        if table_header[idx] and cells[idx]
+                    ]
+                    blocks.append(MDBlock(kind="table", text="；".join(pairs)))
+                else:
+                    blocks.append(MDBlock(kind="table", text=" | ".join(table_row)))
         elif t in ("bullet_list_close", "ordered_list_close", "blockquote_close", "table_close"):
             if context:
                 context.pop()
@@ -205,9 +253,27 @@ def _build_blocks(tokens: list[Token], has_frontmatter: bool) -> tuple[MDBlock, 
     return tuple(blocks)
 
 
-def _is_pure_image(tok: Token) -> bool:
-    """inline token 只含图片子节点（无文本）时为纯图片段落。"""
-    return bool(tok.children) and all(c.type == "image" for c in tok.children)
+def _image_refs(tok: Token) -> list[tuple[str, str]]:
+    """inline token 内全部图片引用 (alt, src)，文档顺序；无图片返回 []。"""
+    return [(_image_alt(child), _image_src(child)) for child in (tok.children or []) if child.type == "image"]
+
+
+def _image_src(tok: Token) -> str:
+    """图片 token 的 src（图床 URL / 本地路径）；缺省返回空串。"""
+    return tok.attrGet("src") or ""
+
+
+def _inline_text_no_images(tok: Token) -> str:
+    """inline token 的非图片文本（图片 alt 不进正文，图片已单独成块）。"""
+    parts: list[str] = []
+    for child in tok.children or []:
+        if child.type in ("text", "code_inline"):
+            parts.append(child.content)
+        elif child.type == "image":
+            continue
+        elif child.type in ("softbreak", "hardbreak"):
+            parts.append(" ")
+    return _INLINE_SPACES_RE.sub(" ", "".join(parts)).strip()
 
 
 def _heading_tree_from_blocks(blocks: tuple[MDBlock, ...]) -> tuple[HeadingNode, ...]:
@@ -274,6 +340,11 @@ def _inline_token_text(tok: Token) -> str:
         elif child.type in ("softbreak", "hardbreak"):
             parts.append(" ")
     return _INLINE_SPACES_RE.sub(" ", "".join(parts)).strip()
+
+
+def _strip_heading_markers(text: str) -> str:
+    """剥离表格单元格里作者手写的假标题标记（``##### 事件`` -> ``事件``）。"""
+    return _HEADING_MARKER_RE.sub("", text)
 
 
 def _is_noise_text(text: str) -> bool:

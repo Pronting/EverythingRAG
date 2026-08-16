@@ -14,11 +14,30 @@ from datetime import UTC, datetime
 from uuid import uuid4
 
 from app.ingestion.pipeline import IngestReport, ProgressSnapshot
+from app.ingestion.sync import SyncProgress, SyncReport
 
 #: 任务状态常量
 STATUS_RUNNING = "running"
 STATUS_DONE = "done"
 STATUS_ERROR = "error"
+
+
+def _progress_from_report(report: object) -> ProgressSnapshot | SyncProgress:
+    """终态进度：SyncReport -> SyncProgress（files_processed 聚合），IngestReport -> ProgressSnapshot。"""
+    if hasattr(report, "files_added"):
+        assert isinstance(report, SyncReport)
+        return SyncProgress(
+            files_scanned=report.files_scanned,
+            files_processed=report.files_added + report.files_updated + report.files_deleted,
+            files_skipped=report.files_skipped,
+        )
+    assert isinstance(report, IngestReport)
+    return ProgressSnapshot(
+        files_scanned=report.files_scanned,
+        files_parsed=report.files_parsed,
+        files_skipped=report.files_skipped,
+        chunks=report.chunks,
+    )
 
 
 @dataclass
@@ -63,20 +82,19 @@ class ImportTaskStore:
             task.progress = snapshot
             task.updated_at = datetime.now(UTC)
 
-    def complete(self, task_id: str, report: IngestReport) -> None:
-        """任务成功完成：status=done、report 落位、进度对齐报告、记录 last_success_at。"""
+    def complete(self, task_id: str, report: object) -> None:
+        """任务成功完成：status=done、report 落位、进度对齐报告、记录 last_success_at。
+
+        支持两种报告：IngestReport（全量导入）与 SyncReport（增量同步），
+        进度按报告类型对齐（SyncReport -> SyncProgress）。
+        """
         with self._lock:
             task = self._tasks.get(task_id)
             if task is None:
                 return
             task.status = STATUS_DONE
             task.report = report
-            task.progress = ProgressSnapshot(
-                files_scanned=report.files_scanned,
-                files_parsed=report.files_parsed,
-                files_skipped=report.files_skipped,
-                chunks=report.chunks,
-            )
+            task.progress = _progress_from_report(report)
             task.updated_at = datetime.now(UTC)
             self._last_success_at = task.updated_at
 

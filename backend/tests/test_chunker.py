@@ -78,8 +78,8 @@ def test_short_code_block_stays_whole() -> None:
 def test_oversized_code_block_splits_into_pieces() -> None:
     """超长代码块按字符边界拆分：内存/上下文安全，拼接可还原原文。
 
-    优化① 提速配套：巨型代码块（如 JVM 配置转储 7.6 万字符）若整块保留，
-    会让 fastembed 单 batch 内存爆炸（OOM）且无法作为上下文喂给 LLM。
+    巨型代码块（如 JVM 配置转储 7.6 万字符）若整块保留，会撑爆单 batch 内存，
+    且无法作为上下文喂给 LLM，故按字符边界拆分。
     """
     code = "".join(f"line_{i}" * 20 for i in range(8))  # ~900 字符
     md = f"```\n{code}\n```"
@@ -192,11 +192,11 @@ def test_only_tag_line_document_yields_no_chunks() -> None:
 
 
 def test_headingless_table_rows_merge_into_coherent_chunks() -> None:
-    """无标题表格：相邻行合并为连贯块（行不再碎片化独立成块）。"""
+    """无标题表格：表头语义化，相邻行合并为连贯块（行不再碎片化独立成块）。"""
     md = "| a | b |\n|---|---|\n| 1 | 2 |\n| 3 | 4 |"
     chunks = chunk_document(parse_markdown(md), "f.md")
     assert [c.block_id for c in chunks] == ["#1"]
-    assert chunks[0].text == "a | b\n\n1 | 2\n\n3 | 4"
+    assert chunks[0].text == "a：1；b：2\n\na：3；b：4"
 
 
 # ---------------------------------------------------------------- 11. 短碎片合并（优化②：检索质量根因）

@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 import xxhash
 
-from app.ingestion import DiscoveredFile, scan_directory
+from app.ingestion import DiscoveredFile, FileStat, discover_file, scan_directory, scan_files
 
 
 def _write(root: Path, rel: str, content: str = "") -> Path:
@@ -133,3 +133,66 @@ def test_invalid_root_raises_value_error(tmp_path: Path) -> None:
 def test_empty_directory_returns_empty_list(tmp_path: Path) -> None:
     """空目录返回空列表，不抛异常。"""
     assert scan_directory(tmp_path) == []
+
+
+# ---------------------------------------------------------------- 增量快路径：scan_files / discover_file
+
+
+def test_scan_files_returns_light_stats_without_reading_content(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """scan_files 只返回 mtime/size，不读取文件内容（快路径核心）。
+
+    若误读内容，monkeypatch 的 read_bytes 会抛错 -> 测试失败。
+    """
+    _write(tmp_path, "a.md", "# A\n\n内容\n")
+    _write(tmp_path, "sub/b.md", "# B\n\n内容\n")
+    _write(tmp_path, "note.txt", "不是 md")
+    _write(tmp_path, ".hidden.md", "# hidden")
+
+    def _fail_read(self: Path, *args: object, **kwargs: object) -> bytes:
+        raise AssertionError("scan_files 不应读取文件内容")
+
+    monkeypatch.setattr(Path, "read_bytes", _fail_read)
+
+    results = scan_files(tmp_path)
+    assert isinstance(results[0], FileStat)
+    assert {r.path for r in results} == {
+        (tmp_path / "a.md").resolve(),
+        (tmp_path / "sub" / "b.md").resolve(),
+    }
+    for stat in results:
+        assert isinstance(stat.mtime, float)
+        assert isinstance(stat.size, int)
+        assert not hasattr(stat, "content_hash")  # 轻量对象不携带内容指纹
+
+
+def test_scan_files_matches_scan_directory(tmp_path: Path) -> None:
+    """scan_files 与 scan_directory 发现同一批文件（mtime/size 与全量一致）。"""
+    _write(tmp_path, "z.md", "# z\n\n内容\n")
+    _write(tmp_path, "a.md", "# a\n\n内容\n")
+
+    light = {str(s.path): s for s in scan_files(tmp_path)}
+    full = {str(d.path): d for d in scan_directory(tmp_path)}
+    assert set(light) == set(full)
+    for key, stat in light.items():
+        assert stat.mtime == full[key].mtime
+        assert stat.size == full[key].size
+
+
+def test_discover_file_returns_hash_and_metadata(tmp_path: Path) -> None:
+    """discover_file 单文件返回含内容指纹的完整元数据，与扫描一致。"""
+    doc = tmp_path / "doc.md"
+    doc.write_text("# hello world", encoding="utf-8")
+
+    entry = discover_file(doc)
+    assert entry is not None
+    assert entry.content_hash == xxhash.xxh64(b"# hello world").hexdigest()
+    (scanned,) = scan_directory(tmp_path)
+    assert entry == scanned
+
+
+def test_discover_file_missing_returns_none(tmp_path: Path) -> None:
+    """discover_file 对不存在/不可读文件返回 None（调用方跳过）。"""
+    assert discover_file(tmp_path / "nope.md") is None
+    assert discover_file(tmp_path) is None  # 目录而非文件
