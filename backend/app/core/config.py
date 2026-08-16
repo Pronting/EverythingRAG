@@ -37,6 +37,8 @@ class Settings(BaseSettings):
     vision_base_url: str | None = None  # env: EVERYTHING_RAG_VISION_BASE_URL
     vision_model: str | None = None  # env: EVERYTHING_RAG_VISION_MODEL
     vision_api_key: SecretStr | None = None  # env: EVERYTHING_RAG_VISION_API_KEY
+    # 识图并发度（云端 VLM 多线程并发请求数；受服务商限流约束，默认 5）
+    vision_concurrency: int = 5  # env: EVERYTHING_RAG_VISION_CONCURRENCY
     # 对话 provider（OpenAI 兼容云端；API key 仅运行期从环境读取，绝不落本类值）
     chat_provider_type: str = "openai_compatible"
     chat_base_url: str | None = None  # env: EVERYTHING_RAG_CHAT_BASE_URL

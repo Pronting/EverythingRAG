@@ -5,15 +5,23 @@ MVP 阶段仅提供 /api/status 等基础端点，业务模块逐步接入。
 """
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from app.api.deps import get_import_task_store, get_vector_store
+from app.api.deps import (
+    get_image_state_store,
+    get_import_task_store,
+    get_vector_store,
+    resume_pending_image_tasks,
+)
 from app.api.routes.audit import router as audit_router
 from app.api.routes.avatars import router as avatars_router
+from app.api.routes.blocks import router as blocks_router
 from app.api.routes.chat import router as chat_router
 from app.api.routes.conversations import router as conversations_router
 from app.api.routes.imports import router as import_router
@@ -24,16 +32,26 @@ from app.core.settings_store import get_settings_store, is_search_configured, is
 from app.ingestion.import_task import ImportTaskStore
 from app.vectorstore.base import VectorStore
 
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    """启动时续跑未完成的识图任务（应用上次退出/崩溃留下的 pending 图片）。"""
+    resume_pending_image_tasks()
+    yield
+
+
 app = FastAPI(
     title="Everything RAG",
     version=settings.app_version,
     description="个人知识第二大脑 —— 纯本地 RAG 检索问答",
+    lifespan=lifespan,
 )
 
 # 业务路由
 app.include_router(chat_router)
 app.include_router(audit_router)
 app.include_router(avatars_router)
+app.include_router(blocks_router)
 app.include_router(import_router)
 app.include_router(settings_router)
 app.include_router(conversations_router)
@@ -83,6 +101,7 @@ async def status(
             "file_count": vectorstore.count_files(),
             "chunk_count": vectorstore.count(),
             "image_count": vectorstore.count_images(),
+            "image_tasks": get_image_state_store().count_status(),
             "last_sync_at": last_sync.isoformat() if last_sync is not None else None,
             "needs_rebuild": False,
         },

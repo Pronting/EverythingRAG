@@ -12,6 +12,7 @@ from pathlib import Path
 from PIL import Image
 
 from app.ingestion.image_fetch import ImageFetchError
+from app.ingestion.image_state_store import ImageStateStore
 from app.ingestion.pipeline import IngestionPipeline
 from app.models.schemas import SourceType
 
@@ -228,3 +229,45 @@ def test_image_block_headingless_no_theme_prefix(tmp_path: Path) -> None:
     texts = _image_texts(store)
     assert len(texts) == 1
     assert "【所属主题】" not in texts[0]
+
+
+def test_same_content_different_urls_deduped(tmp_path: Path) -> None:
+    """不同图床 URL 但同一图片内容 -> 只识图一次（内容哈希去重，不依赖 URL）。"""
+    root = tmp_path / "docs"
+    root.mkdir()
+    _write(root, "a.md", "# A\n\n![](https://cdn.a.com/x.png)\n\n![](https://cdn.b.com/y.png)")
+
+    vision = FakeVision()
+    # FakeFetcher 对任何 URL 都返回同一张图 -> 内容哈希相同
+    pipeline, store = _pipeline(vision=vision, fetcher=FakeFetcher(_png_bytes()))
+    pipeline.ingest(root)
+
+    assert vision.calls == 1  # 同内容只识一次
+    images = _image_blocks(store)
+    assert len(images) == 2  # 两个引用各一个块
+    assert len({m.image_content_hash for m in images}) == 1  # 共享同一内容哈希
+
+
+def test_persistent_dedup_across_imports(tmp_path: Path) -> None:
+    """共享 state_store 的两次导入遇到同图 -> 第二次复用描述，不再识图。"""
+    root = tmp_path / "docs"
+    root.mkdir()
+    _write(root, "a.md", "# A\n\n![](https://cdn.example.com/a.png)")
+
+    state_store = ImageStateStore(tmp_path / "img_state.db")
+    vision = FakeVision()
+
+    def make_pipeline() -> IngestionPipeline:
+        return IngestionPipeline(
+            embedder=FakeEmbedder(),
+            vectorstore=FakeVectorStore(),
+            vision=vision,
+            fetcher=FakeFetcher(_png_bytes()),
+            state_store=state_store,
+        )
+
+    make_pipeline().ingest(root)  # 第一次：识图 + 落描述缓存
+    assert vision.calls == 1
+
+    make_pipeline().ingest(root)  # 第二次：复用持久化描述，不再识图
+    assert vision.calls == 1

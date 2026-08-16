@@ -1,20 +1,20 @@
-"""识图后台工作线程单测：队列消费 / 进度快照 / 失败计数 + 异步管线集成。
+"""识图后台工作线程单测：持久化任务 + 队列消费 + 快照 + 失败计数 + 启动续跑 + 异步管线。
 
-验证 T5 §5.3 异步化：文本先入库、图片后台补全、导入不被识图拖垮。
+验证 T5 §5.3/5.4：任务落库、应用重启后 resume_pending 续跑、内容哈希去重。
 """
 
 from __future__ import annotations
 
 import io
+import threading
 import time
 from pathlib import Path
 
 from PIL import Image
 
-from app.ingestion.chunker import Chunk
+from app.ingestion.image_state_store import ImageStateStore, ImageTask
 from app.ingestion.image_worker import ImageWorker
 from app.ingestion.pipeline import IngestionPipeline
-from app.ingestion.scanner import DiscoveredFile
 from app.models.schemas import SourceType
 
 
@@ -24,63 +24,108 @@ def _png_bytes() -> bytes:
     return buf.getvalue()
 
 
-def _file() -> DiscoveredFile:
-    return DiscoveredFile(path=Path("/tmp/x.md"), filename="x.md", mtime=0.0, size=0, content_hash="abc")
-
-
-def _chunk(i: int) -> Chunk:
-    return Chunk(
-        block_id=f"#{i}",
-        text="",
+def _task(i: int = 1) -> ImageTask:
+    return ImageTask(
+        block_id=f"filehash::#{i}",
+        src=f"https://e/{i}.png",
+        doc_id="filehash",
         source_file="/tmp/x.md",
         heading_path="",
         anchor="",
-        seq=i,
-        kind="image",
-        src=f"https://e/{i}.png",
     )
 
 
-# ---------------------------------------------------------------- 1. 工作线程本身
+def _store(tmp_path: Path) -> ImageStateStore:
+    return ImageStateStore(tmp_path / "image_state.db")
 
 
-def test_worker_processes_and_reports_snapshot() -> None:
-    """入队 -> 后台消费 -> snapshot 反映 done；stop 后队列耗尽。"""
+# ---------------------------------------------------------------- 1. 队列消费 + 快照
+
+
+def test_worker_processes_and_reports_snapshot(tmp_path: Path) -> None:
+    """入队 -> 后台消费 -> 快照反映 done；任务落库标记 done。"""
     processed: list[str] = []
 
-    def process(file: DiscoveredFile, chunks: list[Chunk]) -> int:
-        processed.extend(c.src or "" for c in chunks)
-        return len(chunks)
+    def process(task: ImageTask) -> bool:
+        processed.append(task.src)
+        return True
 
-    worker = ImageWorker(process)
-    worker.enqueue(_file(), [_chunk(1), _chunk(2)])
+    store = _store(tmp_path)
+    worker = ImageWorker(process, store)
+    worker.enqueue(_task(1))
+    worker.enqueue(_task(2))
     worker.stop(timeout=5)
 
     assert worker.snapshot() == {"pending": 0, "done": 2, "failed": 0}
     assert sorted(processed) == ["https://e/1.png", "https://e/2.png"]
+    assert store.count_status() == {"pending": 0, "done": 2, "failed": 0, "total": 2}
 
 
-def test_worker_records_failure_not_crash() -> None:
-    """process 抛异常 -> 计入 failed，不中断后台线程。"""
+def test_worker_records_failure_not_crash(tmp_path: Path) -> None:
+    """process 抛异常 -> 计入 failed + 落库 failed，不中断后台线程。"""
 
-    def process(file: DiscoveredFile, chunks: list[Chunk]) -> int:
+    def process(task: ImageTask) -> bool:
         raise RuntimeError("boom")
 
-    worker = ImageWorker(process)
-    worker.enqueue(_file(), [_chunk(1)])
+    store = _store(tmp_path)
+    worker = ImageWorker(process, store)
+    worker.enqueue(_task(1))
     worker.stop(timeout=5)
 
     assert worker.snapshot() == {"pending": 0, "done": 0, "failed": 1}
+    assert store.count_status()["failed"] == 1
 
 
-def test_enqueue_empty_chunks_noop() -> None:
-    """空图片块入队 -> 不启动线程、pending 不变。"""
-    worker = ImageWorker(lambda f, c: len(c))
-    worker.enqueue(_file(), [])
-    assert worker.snapshot()["pending"] == 0
+def test_enqueue_done_task_skipped(tmp_path: Path) -> None:
+    """已完成任务（store 已 done）再入队 -> 跳过，不重复处理。"""
+    processed: list[str] = []
+
+    def process(task: ImageTask) -> bool:
+        processed.append(task.src)
+        return True
+
+    store = _store(tmp_path)
+    first = ImageWorker(process, store)
+    first.enqueue(_task(1))
+    first.stop(timeout=5)
+    assert store.count_status()["done"] == 1
+
+    # 再次入队同 block_id（已完成）-> 跳过
+    second = ImageWorker(process, store)
+    second.enqueue(_task(1))
+    second.stop(timeout=5)
+    assert len(processed) == 1  # 只处理了一次
 
 
-# ---------------------------------------------------------------- 2. 异步管线集成
+# ---------------------------------------------------------------- 2. 启动续跑
+
+
+def test_resume_pending_after_restart(tmp_path: Path) -> None:
+    """持久化 pending 任务在「重启」后 resume_pending 自动续跑。"""
+    store = _store(tmp_path)
+    # 模拟上次运行：登记 2 个 pending 任务（尚未处理）
+    store.add_task(_task(1))
+    store.add_task(_task(2))
+    assert store.count_status()["pending"] == 2
+
+    # 模拟重启：新 worker resume_pending
+    processed: list[str] = []
+
+    def process(task: ImageTask) -> bool:
+        processed.append(task.src)
+        return True
+
+    worker = ImageWorker(process, store)
+    n = worker.resume_pending()
+    worker.stop(timeout=5)
+
+    assert n == 2
+    assert sorted(processed) == ["https://e/1.png", "https://e/2.png"]
+    assert store.count_status()["pending"] == 0
+    assert store.count_status()["done"] == 2
+
+
+# ---------------------------------------------------------------- 3. 异步管线集成
 
 
 class FakeEmbedder:
@@ -116,6 +161,32 @@ class FakeFetcher:
         return _png_bytes()
 
 
+def test_worker_processes_concurrently(tmp_path: Path) -> None:
+    """多线程并发消费：峰值并发 > 1（并发确实生效）。"""
+    active = 0
+    peak = 0
+    lock = threading.Lock()
+
+    def process(task: ImageTask) -> bool:
+        nonlocal active, peak
+        with lock:
+            active += 1
+            peak = max(peak, active)
+        time.sleep(0.1)
+        with lock:
+            active -= 1
+        return True
+
+    store = _store(tmp_path)
+    worker = ImageWorker(process, store, concurrency=3)
+    for i in range(6):
+        worker.enqueue(_task(i))
+    worker.stop(timeout=10)
+
+    assert peak >= 2  # 至少 2 个任务同时处理，证明并发生效
+    assert worker.snapshot() == {"pending": 0, "done": 6, "failed": 0}
+
+
 def test_pipeline_worker_backfills_images_after_text(tmp_path: Path) -> None:
     """文本立即入库、图片后台补全：导入返回时文本已就绪，图片随后补上。"""
     root = tmp_path / "docs"
@@ -126,22 +197,22 @@ def test_pipeline_worker_backfills_images_after_text(tmp_path: Path) -> None:
     )
 
     store = FakeVectorStore()
+    state_store = _store(tmp_path)
     pipeline = IngestionPipeline(
         embedder=FakeEmbedder(),
         vectorstore=store,
         vision=FakeVision(),
         fetcher=FakeFetcher(),
+        state_store=state_store,
     )
-    worker = ImageWorker(pipeline.process_image_chunks)
+    worker = ImageWorker(pipeline.process_image_task_and_upsert, state_store)
     worker.start()
     pipeline.set_worker(worker)
 
     report = pipeline.ingest(root)
-    # 导入返回时：文本已入库（报告含文本块），图片还在后台
     assert report.files_parsed == 1
     assert store.count() >= 1  # 文本块已就绪
 
-    # 等待后台补全（worker 单线程顺序消费）
     deadline = time.monotonic() + 5
     while worker.snapshot()["pending"] > 0 and time.monotonic() < deadline:
         time.sleep(0.01)
@@ -149,3 +220,4 @@ def test_pipeline_worker_backfills_images_after_text(tmp_path: Path) -> None:
 
     assert worker.snapshot() == {"pending": 0, "done": 1, "failed": 0}
     assert store.count_images() == 1
+    assert state_store.count_status()["done"] == 1  # 任务持久化标记完成

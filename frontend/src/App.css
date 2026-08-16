@@ -353,6 +353,37 @@ body {
   color: var(--accent);
 }
 
+/* 「共 N 个语义块」按钮化：可点击浏览语义块 */
+.kb-stats-btn {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+
+.kb-stats-btn:hover:not(:disabled) {
+  opacity: 0.75;
+}
+
+.kb-stats-btn:disabled {
+  cursor: default;
+  color: var(--text-tertiary);
+}
+
+/* 图片识别进度（后台生成中 / 失败计数） */
+.kb-image-pending {
+  color: var(--accent);
+}
+
+.kb-image-failed {
+  color: var(--error, #e5484d);
+}
+
 .import-btn {
   width: 100%;
   display: flex;
@@ -1859,4 +1890,322 @@ body {
   font-size: 12px;
   color: var(--accent);
   word-break: break-all;
+}
+
+/* ===== 语义块浏览弹窗 ===== */
+.block-browser-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+.block-browser {
+  width: min(720px, calc(100vw - 48px));
+  height: min(640px, calc(100vh - 80px));
+  background: var(--bg);
+  border: 1px solid var(--border-strong);
+  border-radius: 16px;
+  box-shadow: var(--shadow-pop);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.block-browser-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.block-browser-header h2 {
+  font-size: 17px;
+  margin: 0;
+  flex: 1;
+}
+
+.block-browser-total {
+  font-size: 13px;
+  color: var(--text-tertiary);
+}
+
+.block-browser-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+
+.block-browser-categories {
+  display: flex;
+  gap: 4px;
+  background: var(--hover);
+  border-radius: 8px;
+  padding: 3px;
+}
+
+.block-cat {
+  border: none;
+  background: transparent;
+  color: var(--text-tertiary);
+  font-size: 13px;
+  padding: 6px 14px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.block-cat.active {
+  background: var(--bg);
+  color: var(--text);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+
+.block-browser-search {
+  flex: 1;
+  min-width: 180px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  padding: 7px 12px;
+  font-size: 13px;
+  background: transparent;
+  color: var(--text);
+  outline: none;
+}
+
+.block-browser-search:focus {
+  border-color: var(--accent);
+}
+
+.block-browser-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 20px;
+}
+
+.block-browser-hint {
+  color: var(--text-tertiary);
+  text-align: center;
+  padding: 32px 0;
+  font-size: 14px;
+  margin: 0;
+}
+
+.block-browser-hint.error {
+  color: var(--error, #e5484d);
+}
+
+.block-item {
+  padding: 10px 8px;
+  margin: 0 -8px;
+  border-bottom: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+
+.block-item:hover {
+  background: var(--hover);
+}
+
+.block-item:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.block-item:last-child {
+  border-bottom: none;
+}
+
+.block-item-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.block-badge {
+  flex-shrink: 0;
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  margin-top: 1px;
+}
+
+.block-badge.text {
+  background: var(--hover);
+  color: var(--text-tertiary);
+}
+
+.block-badge.image {
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.block-item-summary {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.block-item-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin-top: 4px;
+  padding-left: 40px;
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.block-item-file {
+  font-weight: 600;
+}
+
+.block-item-heading {
+  overflow-wrap: anywhere;
+}
+
+.block-browser-footer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 12px 20px;
+  border-top: 1px solid var(--border);
+}
+
+.block-pager {
+  border: 1px solid var(--border-strong);
+  background: transparent;
+  color: var(--text);
+  font-size: 13px;
+  padding: 6px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.block-pager:hover:not(:disabled) {
+  background: var(--hover);
+}
+
+.block-pager:disabled {
+  color: var(--border-strong);
+  cursor: default;
+}
+
+.block-pager-info {
+  font-size: 13px;
+  color: var(--text-tertiary);
+}
+
+/* ===== 块详情弹窗 ===== */
+.block-detail-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 110;
+}
+
+.block-detail {
+  width: min(640px, calc(100vw - 48px));
+  max-height: min(560px, calc(100vh - 80px));
+  background: var(--bg);
+  border: 1px solid var(--border-strong);
+  border-radius: 16px;
+  box-shadow: var(--shadow-pop);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.block-detail-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.block-detail-header h3 {
+  font-size: 15px;
+  margin: 0;
+  flex: 1;
+}
+
+.block-detail-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 20px;
+}
+
+.block-detail-text {
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--text);
+  white-space: pre-wrap;
+  word-break: break-word;
+  user-select: text;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface, var(--bg));
+}
+
+.block-detail-meta {
+  margin: 14px 0 0;
+}
+
+.block-detail-row {
+  display: flex;
+  gap: 12px;
+  padding: 6px 0;
+  border-bottom: 1px dashed var(--border);
+  font-size: 13px;
+}
+
+.block-detail-row dt {
+  flex-shrink: 0;
+  width: 76px;
+  color: var(--text-tertiary);
+}
+
+.block-detail-row dd {
+  margin: 0;
+  color: var(--text);
+  word-break: break-all;
+  user-select: text;
+}
+
+.block-detail-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 12px 20px;
+  border-top: 1px solid var(--border);
+}
+
+.block-detail-copy {
+  border: none;
+  background: var(--accent);
+  color: #fff;
+  font-size: 13px;
+  padding: 7px 16px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.block-detail-copy:hover {
+  background: var(--accent-hover);
 }

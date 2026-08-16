@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { ConversationSummary, StatusResponse } from "../types";
+import BlockBrowser from "./BlockBrowser";
 import ImportPanel from "./ImportPanel";
 
 const KB_COLLAPSED_KEY = "everything-rag-kb-collapsed";
@@ -57,6 +58,8 @@ export default function Sidebar({
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(readSidebarCollapsed);
   // 会话搜索关键字
   const [query, setQuery] = useState("");
+  // 语义块浏览弹窗
+  const [blocksOpen, setBlocksOpen] = useState(false);
 
   const toggleCollapsed = (): void => {
     setCollapsed((prev) => {
@@ -169,10 +172,27 @@ export default function Sidebar({
             </span>
           </button>
           <div className="kb-card-body">
-            <p className="kb-stats">
+            <button
+              type="button"
+              className="kb-stats kb-stats-btn"
+              onClick={() => setBlocksOpen(true)}
+              disabled={(knowledge?.chunk_count ?? 0) === 0}
+              title="点击浏览语义块（按文本/图片分类，支持搜索）"
+            >
               共 <strong>{knowledge?.chunk_count ?? 0}</strong> 个语义块
               {(knowledge?.chunk_count ?? 0) > 0 ? " · 已导入" : " · 尚未导入"}
-            </p>
+            </button>
+            {knowledge?.image_tasks !== undefined && knowledge.image_tasks.total > 0 && (
+              <p className="kb-stats kb-image-progress">
+                图片识别 <strong>{knowledge.image_tasks.done}</strong>/{knowledge.image_tasks.total}
+                {knowledge.image_tasks.pending > 0 && (
+                  <span className="kb-image-pending"> · 生成中 {knowledge.image_tasks.pending}</span>
+                )}
+                {knowledge.image_tasks.failed > 0 && (
+                  <span className="kb-image-failed"> · 失败 {knowledge.image_tasks.failed}</span>
+                )}
+              </p>
+            )}
             <ImportPanel onImported={onImported} />
           </div>
         </div>
@@ -222,6 +242,8 @@ export default function Sidebar({
           </svg>
         </button>
       </div>
+
+      <BlockBrowser open={blocksOpen} onClose={() => setBlocksOpen(false)} />
     </aside>
   );
 }

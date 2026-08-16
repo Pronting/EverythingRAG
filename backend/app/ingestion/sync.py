@@ -23,6 +23,7 @@ import xxhash
 from app.generation.base import VisionModel
 from app.ingestion.chunker import Chunk, chunk_document
 from app.ingestion.image_fetch import ImageFetcher
+from app.ingestion.image_state_store import ImageStateStore
 from app.ingestion.image_worker import ImageWorker
 from app.ingestion.markdown_parser import parse_markdown
 from app.ingestion.pipeline import IngestionPipeline, make_block_id, make_chunk_metadata, read_text
@@ -76,19 +77,27 @@ class SyncService:
         vision: VisionModel | None = None,
         fetcher: ImageFetcher | None = None,
         worker: ImageWorker | None = None,
+        image_state_store: ImageStateStore | None = None,
     ) -> None:
         self._embedder = embedder
         self._vectorstore = vectorstore
         self._state_store = state_store
+        if image_state_store is None:
+            image_state_store = ImageStateStore(Path(":memory:"))
+        self._image_state_store = image_state_store
         self._pipeline = IngestionPipeline(
             embedder=embedder,
             vectorstore=vectorstore,
             vision=vision,
             fetcher=fetcher,
+            state_store=image_state_store,
         )
-        # 识图已配置时自动挂后台工作线程（文本先入库、图片后台补全）。
+        # 识图已配置时自动挂后台工作线程（文本先入库、图片后台补全 + 持久化续跑）。
         if worker is None and vision is not None and fetcher is not None:
-            worker = ImageWorker(self._pipeline.process_image_chunks)
+            worker = ImageWorker(
+                self._pipeline.process_image_task_and_upsert,
+                image_state_store,
+            )
             worker.start()
         self._worker = worker
         if worker is not None:
@@ -368,18 +377,17 @@ class SyncService:
                 )
             self._vectorstore.upsert(text_blocks)
             upserted = len(text_blocks)
-        # 图片块：重新下载 + 识图 + 嵌入（同图去重走管线缓存），不进文本块级复用。
+        # 图片块：重新下载 + 识图 + 嵌入（同图去重走持久化），不进文本块级复用。
         if self._worker is not None:
-            self._worker.enqueue(disc, image_chunks)
+            for chunk in image_chunks:
+                task = self._pipeline.make_image_task(disc, chunk)
+                if task is not None:
+                    self._worker.enqueue(task)
         else:
-            try:
-                image_blocks = self._pipeline.image_blocks(disc, image_chunks)
-            except Exception as exc:  # noqa: BLE001 -- 图片路径任何异常都不拖累文本
-                logger.debug("图片处理异常（脱敏）: %s", type(exc).__name__)
-                image_blocks = []
-            if image_blocks:
-                self._vectorstore.upsert(image_blocks)
-                upserted += len(image_blocks)
+            blocks = self._pipeline.sync_image_blocks(disc, image_chunks)
+            if blocks:
+                self._vectorstore.upsert(blocks)
+                upserted += len(blocks)
 
         stale = [block_id for block_id in old_blocks if block_id not in matched]
         if stale:

@@ -29,6 +29,9 @@ class FakeVectorStore:
     def get_blocks_by_source(self, source_file: str) -> dict[str, str]:
         return {}
 
+    def list_blocks(self) -> list[tuple[str, str, dict[str, Any]]]:
+        return []
+
     def query(
         self,
         vector: list[float],

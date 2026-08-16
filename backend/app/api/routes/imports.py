@@ -21,7 +21,13 @@ from typing import Literal
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel, Field
 
-from app.api.deps import get_embedder, get_import_task_store, get_state_store, get_vector_store
+from app.api.deps import (
+    get_embedder,
+    get_image_state_store,
+    get_import_task_store,
+    get_state_store,
+    get_vector_store,
+)
 from app.core.config import settings
 from app.core.outbound import outbound_client
 from app.core.settings_store import get_settings_store, is_vision_configured
@@ -68,15 +74,19 @@ def get_import_pipeline(
     嵌入器用共享单例（get_embedder），与向量库同源，保证 dim 惰性解析结果一致。
     """
     vision, fetcher = _build_vision_pair()
+    image_store = get_image_state_store()
     pipeline = IngestionPipeline(
         embedder=get_embedder(),
         vectorstore=vectorstore,
         vision=vision,
         fetcher=fetcher,
+        state_store=image_store,
     )
     if vision is not None:
-        # 识图已配置：挂后台工作线程，文本先入库、图片后台补全（导入不被识图拖垮）。
-        worker = ImageWorker(pipeline.process_image_chunks)
+        # 识图已配置：挂后台工作线程池，文本先入库、图片后台并发补全（持久化 + 重启续跑）。
+        worker = ImageWorker(
+            pipeline.process_image_task_and_upsert, image_store, settings.vision_concurrency
+        )
         worker.start()
         pipeline.set_worker(worker)
     return pipeline
@@ -94,6 +104,7 @@ def get_sync_service(
         state_store=state_store,
         vision=vision,
         fetcher=fetcher,
+        image_state_store=get_image_state_store(),
     )
 
 

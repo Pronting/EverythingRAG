@@ -39,6 +39,12 @@ export interface StatusResponse {
     file_count: number;
     chunk_count: number;
     image_count: number;
+    image_tasks: {
+      pending: number;
+      done: number;
+      failed: number;
+      total: number;
+    };
     last_sync_at: string | null;
     needs_rebuild: boolean;
   };
@@ -138,6 +144,18 @@ export interface SettingsView {
     agent: string | null;
   };
   theme: ThemeValue;
+}
+
+/** 语义块（GET /api/blocks 返回项，供浏览面板分类/搜索/分页）。 */
+export interface BlockInfo {
+  block_id: string;
+  text: string;
+  chunk_type: string;
+  source_type: string;
+  source_file: string;
+  heading_path: string | null;
+  anchor: string | null;
+  platform: string;
 }
 
 /** 主题：浅色 / 深色（默认浅色）。 */

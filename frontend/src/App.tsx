@@ -107,6 +107,14 @@ export default function App() {
     loadSettings();
   }, [loadStatus, loadConversations, loadSettings]);
 
+  // 图片后台生成中时，周期轮询 /api/status 刷新图片识别进度（每 3s）
+  const imagePending = status?.knowledge.image_tasks.pending ?? 0;
+  useEffect(() => {
+    if (imagePending <= 0) return;
+    const timer = window.setInterval(loadStatus, 3000);
+    return () => window.clearInterval(timer);
+  }, [imagePending, loadStatus]);
+
   // 设置页切换主题：实时应用 + 过渡动画（是否持久化由「保存」决定）
   const handleThemeChange = useCallback(
     (next: ThemeValue) => applyTheme(next, true),

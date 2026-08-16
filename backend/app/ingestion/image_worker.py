@@ -1,11 +1,12 @@
-"""ingestion：识图后台工作线程 —— 文本先入库，图片描述后台补全（T5 §5.3 异步化）。
+"""ingestion：识图后台工作线程池 —— 文本先入库，图片描述后台并发补全（T5 §5.3 异步化）。
 
-导入主线程只做文本（快路径，立即可检索），图片任务投递到本工作线程队列，
-由它逐张 fetch → 预处理 → 识图 → 嵌入 → upsert。单线程顺序消费，与导入线程
-并发写 Chroma 由 Chroma 内部 SQLite 锁序列化（已实测并发 upsert 安全）。
+图片任务先持久化到 image_state_store.image_tasks（pending），再由 N 个工作线程并发
+逐张 fetch → 预处理 → 识图 → 嵌入 → upsert，完成后标记 done / 失败标记 failed。
+应用重启后调用 ``resume_pending()`` 加载未完成任务续跑（block_id 幂等，重跑不重复）。
 
-内存队列 + 进程内去重缓存：同一进程内所有导入共享去重（同图只识一次）；
-跨进程重启续跑（image_tasks 持久化）留作后续增强。
+云端 VLM 是网络 I/O 密集，多线程并发请求 ≈ 线性提速（瓶颈在服务商并发/限流）；
+describe 自带 429/5xx 退避重试。Chroma 并发 upsert 实测安全，ImageStateStore 全方法
+加锁，故线程池并发安全。
 """
 
 from __future__ import annotations
@@ -15,66 +16,98 @@ import queue
 import threading
 from collections.abc import Callable
 
-from app.ingestion.chunker import Chunk
-from app.ingestion.scanner import DiscoveredFile
+from app.ingestion.image_state_store import ImageStateStore, ImageTask
 
 logger = logging.getLogger(__name__)
 
-#: 识图后台线程名（便于排查）。
+#: 识图后台线程名前缀（便于排查）。
 _WORKER_THREAD_NAME = "image-worker"
+
+#: 默认并发度（云端 VLM 2-4 合理，见 T5 §5.3）。
+DEFAULT_CONCURRENCY = 3
 
 
 class ImageWorker:
-    """识图后台工作线程：单线程顺序消费图片任务，提供进度快照。"""
+    """识图后台工作线程池：持久化任务 + 多线程并发消费 + 进度快照 + 启动续跑。"""
 
-    def __init__(self, process: Callable[[DiscoveredFile, list[Chunk]], int]) -> None:
+    def __init__(
+        self,
+        process: Callable[[ImageTask], bool],
+        state_store: ImageStateStore,
+        concurrency: int = DEFAULT_CONCURRENCY,
+    ) -> None:
         self._process = process
-        self._queue: queue.Queue[tuple[DiscoveredFile, tuple[Chunk, ...]] | None] = queue.Queue()
-        self._thread: threading.Thread | None = None
+        self._state_store = state_store
+        self._concurrency = max(1, int(concurrency))
+        self._queue: queue.Queue[ImageTask | None] = queue.Queue()
+        self._threads: list[threading.Thread] = []
         self._pending = 0
         self._done = 0
         self._failed = 0
         self._lock = threading.Lock()
 
-    def enqueue(self, file: DiscoveredFile, chunks: list[Chunk]) -> None:
-        """投递一个文件的图片任务（幂等启动线程）。"""
-        if not chunks:
+    def enqueue(self, task: ImageTask) -> None:
+        """登记并投递一个图片任务（已完成则跳过，幂等）。"""
+        if not self._state_store.add_task(task):
             return
         with self._lock:
-            self._pending += len(chunks)
+            self._pending += 1
         self.start()
-        self._queue.put((file, tuple(chunks)))
+        self._queue.put(task)
+
+    def resume_pending(self) -> int:
+        """加载持久化待处理任务并投递（应用启动续跑）；返回投递数。"""
+        tasks = self._state_store.load_pending()
+        for task in tasks:
+            with self._lock:
+                self._pending += 1
+            self._queue.put(task)
+        if tasks:
+            self.start()
+        return len(tasks)
 
     def start(self) -> None:
-        """启动后台线程（幂等，已存活则不重复启动）。"""
-        if self._thread is None or not self._thread.is_alive():
-            self._thread = threading.Thread(target=self._run, name=_WORKER_THREAD_NAME, daemon=True)
-            self._thread.start()
+        """启动工作线程池（幂等：补齐到 concurrency 个存活线程）。"""
+        alive = [t for t in self._threads if t.is_alive()]
+        self._threads = alive
+        for _ in range(self._concurrency - len(alive)):
+            thread = threading.Thread(
+                target=self._run, name=f"{_WORKER_THREAD_NAME}-{len(self._threads)}", daemon=True
+            )
+            thread.start()
+            self._threads.append(thread)
 
     def stop(self, timeout: float | None = None) -> None:
-        """优雅停止：投递哨兵并等待队列耗尽（不丢在途任务）。"""
-        self._queue.put(None)
-        if self._thread is not None:
-            self._thread.join(timeout)
+        """优雅停止：投递 N 个哨兵并等待全部线程退出（不丢在途任务）。"""
+        for _ in range(self._concurrency):
+            self._queue.put(None)
+        for thread in self._threads:
+            thread.join(timeout)
+        self._threads = [t for t in self._threads if t.is_alive()]
 
     def snapshot(self) -> dict[str, int]:
-        """当前进度快照：{pending, done, failed}。"""
+        """当前工作线程进度快照：{pending, done, failed}（持久化总数见 state_store）。"""
         with self._lock:
             return {"pending": self._pending, "done": self._done, "failed": self._failed}
 
     def _run(self) -> None:
         while True:
-            item = self._queue.get()
-            if item is None:  # 停止哨兵
+            task = self._queue.get()
+            if task is None:  # 停止哨兵
                 break
-            file, chunks = item
-            done = 0
+            ok = False
             try:
-                done = self._process(file, list(chunks))
-            except Exception as exc:  # noqa: BLE001 -- 单批失败不中断后台线程
+                ok = self._process(task)
+            except Exception as exc:  # noqa: BLE001 -- 单任务失败不中断后台线程
                 logger.debug("识图后台任务失败（脱敏）: %s", type(exc).__name__)
+            if ok:
+                self._state_store.mark_done(task.block_id)
+                with self._lock:
+                    self._done += 1
+            else:
+                self._state_store.mark_failed(task.block_id, "处理失败")
+                with self._lock:
+                    self._failed += 1
             with self._lock:
-                self._pending -= len(chunks)
-                self._done += done
-                self._failed += len(chunks) - done
+                self._pending -= 1
             self._queue.task_done()
