@@ -16,6 +16,9 @@ from fastapi.testclient import TestClient
 from app.api import deps
 from app.api.routes import imports as imports_mod
 from app.ingestion.pipeline import IngestReport, ProgressSnapshot
+from app.ingestion.scanner import DiscoveredFile
+from app.ingestion.state_store import DocumentStateStore
+from app.ingestion.sync import SyncProgress, SyncReport
 from app.main import app
 from tests.fakes import FakeVectorStore
 
@@ -41,6 +44,53 @@ class FakePipeline:
         return self.report
 
 
+class FakeSyncService:
+    """增量同步替身：记录同步的根目录，返回固定 SyncReport（含两种进度快照）。"""
+
+    def __init__(self, report: SyncReport | None = None) -> None:
+        self.report = report or SyncReport(
+            files_scanned=3,
+            files_added=1,
+            files_updated=1,
+            files_deleted=1,
+            files_unchanged=0,
+            files_skipped=0,
+            blocks_upserted=1,
+            blocks_deleted=1,
+        )
+        self.synced: list[str] = []
+        self._snapshots = [
+            SyncProgress(files_scanned=3, files_processed=1, files_skipped=0),
+            SyncProgress(files_scanned=3, files_processed=3, files_skipped=0),
+        ]
+
+    def ingest(self, root_dir: Path, on_progress=None) -> SyncReport:  # type: ignore[no-untyped-def]
+        self.synced.append(str(root_dir))
+        for snapshot in self._snapshots:
+            if on_progress is not None:
+                on_progress(snapshot)
+        return self.report
+
+    def ingest_many(self, roots: list[Path], on_progress=None) -> SyncReport:  # type: ignore[no-untyped-def]
+        self.synced.extend(str(root) for root in roots)
+        for snapshot in self._snapshots:
+            if on_progress is not None:
+                on_progress(snapshot)
+        return self.report
+
+    def sync_upload(  # type: ignore[no-untyped-def]
+        self,
+        files: list[DiscoveredFile],
+        deletion_scopes: list[Path] | None = None,
+        on_progress=None,
+    ) -> SyncReport:
+        self.synced.extend(str(file.path) for file in files)
+        for snapshot in self._snapshots:
+            if on_progress is not None:
+                on_progress(snapshot)
+        return self.report
+
+
 class BlockingPipeline(FakePipeline):
     """发完进度后阻塞，直到 release 事件置位（用于验证 running 中间态）。"""
 
@@ -60,6 +110,7 @@ class BlockingPipeline(FakePipeline):
 @pytest.fixture
 def client() -> None:
     app.dependency_overrides[imports_mod.get_import_pipeline] = lambda: FakePipeline()
+    app.dependency_overrides[imports_mod.get_sync_service] = lambda: FakeSyncService()
     with TestClient(app) as test_client:
         yield test_client
     # 清理交由 conftest 的 _isolate_local_deps teardown（clear 全部）
@@ -135,18 +186,30 @@ def test_import_status_unknown_404(client: TestClient) -> None:
     assert resp.status_code == 404
 
 
-def test_import_mode_incremental_400(client: TestClient, tmp_path: Path) -> None:
-    """mode=incremental -> 400 + 清晰「未实现」信息。"""
+def test_import_mode_incremental_completes(client: TestClient, tmp_path: Path) -> None:
+    """mode=incremental -> 202 + 轮询到 done，报告带增量字段（新增/更新/删除/块）。"""
     root = tmp_path / "docs"
     _write_md(root)
     resp = client.post("/api/import", json={"dir": str(root), "mode": "incremental"})
-    assert resp.status_code == 400
-    assert "增量同步" in resp.json()["detail"]
+    assert resp.status_code == 202
+    task_id = resp.json()["task_id"]
+
+    data = _wait_done(client, task_id)
+    assert data["status"] == "done"
+    assert data["error"] is None
+    assert data["report"]["files_added"] == 1
+    assert data["report"]["files_updated"] == 1
+    assert data["report"]["files_deleted"] == 1
+    assert data["report"]["files_unchanged"] == 0
+    assert data["report"]["blocks_upserted"] == 1
+    assert data["report"]["blocks_deleted"] == 1
+    # 终态进度用增量形态（files_processed = 新增+更新+删除）
+    assert data["progress"]["files_processed"] == 3
 
 
-def test_import_invalid_dir_400(client: TestClient) -> None:
-    """目录不存在 -> 400，不启动任务。"""
-    resp = client.post("/api/import", json={"dir": "C:/no/such/dir"})
+def test_import_incremental_invalid_dir_400(client: TestClient) -> None:
+    """incremental 模式目录不存在 -> 400，不启动任务。"""
+    resp = client.post("/api/import", json={"dir": "C:/no/such/dir", "mode": "incremental"})
     assert resp.status_code == 400
     assert "目录不存在" in resp.json()["detail"]
 
@@ -157,6 +220,36 @@ def test_import_mode_invalid_422(client: TestClient, tmp_path: Path) -> None:
     _write_md(root)
     resp = client.post("/api/import", json={"dir": str(root), "mode": "garbage"})
     assert resp.status_code == 422
+
+
+# ---------------------------------------------------------------- 3. /api/sync 一键同步
+
+
+def test_sync_without_registered_roots_400(client: TestClient) -> None:
+    """未登记任何知识库目录 -> /api/sync 400 + 清晰提示。"""
+    resp = client.post("/api/sync")
+    assert resp.status_code == 400
+    assert "尚未导入过" in resp.json()["detail"]
+
+
+def test_sync_all_registered_roots_completes(client: TestClient, tmp_path: Path) -> None:
+    """已登记一个来源根 -> /api/sync 202 + 完成，报告为增量形态且聚合所有根。"""
+    state = DocumentStateStore(tmp_path / "state.db")
+    app.dependency_overrides[deps.get_state_store] = lambda: state
+    try:
+        state.register_source(tmp_path / "vault", synced_at="2026-08-12T00:00:00+00:00")
+        resp = client.post("/api/sync")
+        assert resp.status_code == 202
+        task_id = resp.json()["task_id"]
+
+        data = _wait_done(client, task_id)
+        assert data["status"] == "done"
+        assert data["report"]["files_added"] == 1
+        assert data["report"]["files_updated"] == 1
+        assert data["report"]["files_deleted"] == 1
+        assert data["progress"]["files_processed"] == 3
+    finally:
+        state.close()
 
 
 # ---------------------------------------------------------------- 3. /api/status 知识计数
@@ -198,7 +291,11 @@ def _upload_files(
 
 
 def test_upload_import_returns_task_and_completes(client: TestClient) -> None:
-    """上传 2 个 .md（含子目录相对路径）-> 202 + task_id；轮询到 done，报告齐全。"""
+    """上传 2 个 .md（含子目录相对路径）-> 202 + done；报告为增量形态；文件落规范根。"""
+    import shutil
+
+    from app.core.config import settings
+
     resp = _upload_files(
         client,
         [("a.md", "# A\n\n内容\n".encode()), ("sub/b.md", "# B\n\n内容\n".encode())],
@@ -209,16 +306,44 @@ def test_upload_import_returns_task_and_completes(client: TestClient) -> None:
     try:
         data = _wait_done(client, task_id)
         assert data["status"] == "done"
-        assert data["report"]["files_scanned"] == 2
-        assert data["report"]["files_parsed"] == 2
-        assert data["report"]["chunks"] == 3
+        assert data["error"] is None
+        # 上传走 sync_upload -> 报告为增量形态（FakeSyncService 固定报告）
+        assert data["report"]["files_added"] == 1
+        assert data["report"]["files_updated"] == 1
+        assert data["report"]["files_deleted"] == 1
+        # 文件持久落规范根（相对路径身份，非 task_id 目录）
+        docs = settings.data_dir / "documents"
+        assert (docs / "a.md").is_file()
+        assert (docs / "sub" / "b.md").is_file()
     finally:
-        # 上传文档持久在 data_dir/documents/<task_id>，测试后清理避免污染真实数据目录
-        import shutil
+        shutil.rmtree(settings.data_dir / "documents", ignore_errors=True)
 
-        from app.core.config import settings
 
-        shutil.rmtree(settings.data_dir / "documents" / task_id, ignore_errors=True)
+def test_upload_registers_source_and_enables_sync(client: TestClient) -> None:
+    """上传式导入成功后登记 documents_root 为来源根：一键同步 /api/sync 不再 400。
+
+    回归：sync_upload 此前不 register_source，sources 表恒空 -> /api/sync 永远 400
+    「尚未导入过任何知识库目录」。上传式导入后应登记规范根，一键同步可对全部已
+    上传内容增量对账（对齐目录式 ingest 末尾的 register_source）。
+    """
+    import shutil
+
+    from app.core.config import settings
+
+    resp = _upload_files(client, [("a.md", b"# A\n"), ("sub/b.md", b"# B\n")])
+    assert resp.status_code == 202
+    task_id = resp.json()["task_id"]
+    try:
+        data = _wait_done(client, task_id)
+        assert data["status"] == "done"
+        assert data["error"] is None
+
+        # 关键断言：一键同步不再被「未导入过任何目录」拒绝
+        sync_resp = client.post("/api/sync")
+        assert sync_resp.status_code == 202
+        assert "task_id" in sync_resp.json()
+    finally:
+        shutil.rmtree(settings.data_dir / "documents", ignore_errors=True)
 
 
 def test_upload_rejects_path_traversal(client: TestClient) -> None:
@@ -267,9 +392,9 @@ def test_upload_dedupes_colliding_filenames(client: TestClient) -> None:
     try:
         data = _wait_done(client, task_id)
         assert data["status"] == "done"
-        doc_dir = settings.data_dir / "documents" / task_id
-        # 两个同名文件都保留，第二个加序号
-        assert (doc_dir / "a.md").is_file()
-        assert (doc_dir / "a (1).md").is_file()
+        docs = settings.data_dir / "documents"
+        # 两个同名文件都保留，第二个加序号（规范根下）
+        assert (docs / "a.md").is_file()
+        assert (docs / "a (1).md").is_file()
     finally:
-        shutil.rmtree(settings.data_dir / "documents" / task_id, ignore_errors=True)
+        shutil.rmtree(settings.data_dir / "documents", ignore_errors=True)

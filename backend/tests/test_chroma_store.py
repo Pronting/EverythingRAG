@@ -97,11 +97,10 @@ def test_upsert_and_query_roundtrip(tmp_path: Path) -> None:
 # ---------------------------------------------------------------- 2. collection 命名
 
 
-def test_collection_naming_default(tmp_path: Path) -> None:
-    """工厂默认 collection 名精确等于 chunks__bge-m3__v1（真模型指纹）。"""
-    store = create_vector_store(persist_dir=tmp_path)  # 默认 embedder = FastEmbedEmbedder（惰性，不下载）
-    assert store._collection_name == "chunks__bge-m3__v1"
-    assert store._collection.name == "chunks__bge-m3__v1"
+def test_create_vector_store_requires_embedder(tmp_path: Path) -> None:
+    """工厂无 embedder 时抛错（本地嵌入已移除，云端嵌入需显式配置）。"""
+    with pytest.raises(ValueError):
+        create_vector_store(persist_dir=tmp_path)
 
 
 def test_collection_naming_custom_fingerprint(tmp_path: Path) -> None:
@@ -111,7 +110,7 @@ def test_collection_naming_custom_fingerprint(tmp_path: Path) -> None:
 
 
 def test_collection_isolated_by_embed_model(tmp_path: Path) -> None:
-    """本地 bge-m3 与云端嵌入指向不同 collection（切换嵌入模型=需重新导入）。"""
+    """不同嵌入模型指向不同 collection（切换嵌入模型 = 需重新导入）。"""
     from app.vectorstore.embedder import CloudEmbedder
 
     local = create_vector_store(persist_dir=tmp_path, embedder=FakeEmbedder())

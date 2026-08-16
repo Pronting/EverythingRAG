@@ -16,11 +16,12 @@ dependencies = [
     "pydantic-settings>=2.6",
     # 文档解析与切块
     "markdown-it-py>=3.0",
-    # 向量化与向量库
-    "fastembed>=0.4",
+    # 向量库
     "chromadb>=0.5",
     # 模型调用（OpenAI 兼容）
     "openai>=1.54",
+    # 联网搜索 provider 的 HTTP 客户端（Tavily / SearXNG）
+    "httpx>=0.27",
     # 文件上传表单解析（/api/import/upload multipart）
     "python-multipart>=0.0.9",
     # 增量同步指纹 / 编码 / 图片

@@ -42,17 +42,41 @@ def test_blocks_paragraph() -> None:
 
 
 def test_blocks_code_fence_and_indented() -> None:
-    """代码块：围栏与缩进代码均独立成块，text 为代码内容。"""
+    """围栏代码仍为代码块；4 空格缩进不再是代码块（disable("code")，工程文档缩进是排版）。"""
     parsed = parse_markdown('```python\nprint("hi")\n```\n\n缩进块：\n\n    indent line\n')
     code = [b for b in parsed.blocks if b.kind == "code"]
-    assert [b.text for b in code] == ['print("hi")', "indent line"]
+    assert [b.text for b in code] == ['print("hi")']  # 仅围栏代码
+    # 缩进行现在作为段落（不再误判为代码，避免产出零信息块）
+    assert any(b.kind == "paragraph" and b.text == "indent line" for b in parsed.blocks)
+
+
+def test_plain_fence_treated_as_text() -> None:
+    """```plain``` / ```text``` 围栏按正文处理（Yuque 把 canned 回复包成 plain 代码块），真正代码围栏仍是 code。"""
+    parsed = parse_markdown("```plain\n直接转\n```\n\n```python\nprint('x')\n```")
+    kinds = [(b.kind, b.text) for b in parsed.blocks]
+    assert ("paragraph", "直接转") in kinds
+    assert ("code", "print('x')") in kinds
 
 
 def test_blocks_table() -> None:
-    """表格块：每行一个块，行内单元格以 | 连接（行级粒度，避免单元格碎片化）。"""
+    """表格块：表头首行不产块，数据行按「表头：值」语义化（header-aware）。"""
     parsed = parse_markdown("| a | b |\n|---|---|\n| 1 | 2 |")
     tables = [b for b in parsed.blocks if b.kind == "table"]
-    assert [b.text for b in tables] == ["a | b", "1 | 2"]
+    assert [b.text for b in tables] == ["a：1；b：2"]
+
+
+def test_blocks_table_strips_fake_heading_markers() -> None:
+    """表格单元格里作者手写的假标题标记（##### 事件）被剥离，且表头语义化。"""
+    parsed = parse_markdown("| ##### 事件 | ##### 原版属性 |\n| --- | --- |\n| product_click | spu |")
+    tables = [b for b in parsed.blocks if b.kind == "table"]
+    assert [b.text for b in tables] == ["事件：product_click；原版属性：spu"]
+
+
+def test_table_rowspan_empty_cell_inherits_only_on_continuation() -> None:
+    """表格合并单元格：首列为空（延续行）继承上一行同列值；首列非空（新行）不继承。"""
+    md = "| 事件 | 原版属性 |\n|---|---|\n| a | x |\n| | y |\n| b | |"
+    tables = [b.text for b in parse_markdown(md).blocks if b.kind == "table"]
+    assert tables == ["事件：a；原版属性：x", "事件：a；原版属性：y", "事件：b"]
 
 
 def test_blocks_list() -> None:

@@ -14,7 +14,7 @@ from chromadb.config import Settings as ChromaSettings
 from chromadb.errors import NotFoundError
 
 from app.models.schemas import BlockMetadata
-from app.vectorstore.embedder import Embedder, FastEmbedEmbedder
+from app.vectorstore.embedder import Embedder
 
 
 def _serialize_metadata(metadata: BlockMetadata) -> dict[str, Any]:
@@ -188,6 +188,13 @@ class ChromaVectorStore:
         files.discard(None)
         return len(files)
 
+    def count_images(self) -> int:
+        """返回库中图片描述块数（source_type=image_description；/api/status 展示用）。"""
+        result = self._collection_guard(
+            lambda c: c.get(where={"source_type": "image_description"}, include=["metadatas"])
+        )
+        return len(result.get("ids") or [])
+
 
 def create_vector_store(
     persist_dir: Path,
@@ -196,11 +203,11 @@ def create_vector_store(
 ) -> ChromaVectorStore:
     """工厂：创建 ChromaVectorStore。
 
-    collection_name 缺省为 chunks__{embedder.fingerprint}__v1（真模型 = chunks__bge-m3__v1）；
-    embedder 缺省 FastEmbedEmbedder（惰性，构造零加载零下载）。
+    collection_name 缺省为 chunks__{embedder.fingerprint}__v1（云端 = chunks__cloud-{model}__v1）。
+    embedder 必填（云端嵌入）；未提供时抛错，避免无嵌入器误建库。
     """
     if embedder is None:
-        embedder = FastEmbedEmbedder()
+        raise ValueError("嵌入器未提供：请先配置云端嵌入（base_url + model + api_key）")
     if collection_name is None:
         collection_name = f"chunks__{embedder.fingerprint}__v1"
     return ChromaVectorStore(

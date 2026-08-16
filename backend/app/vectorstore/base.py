@@ -67,12 +67,16 @@ class VectorStore(Protocol):
         """返回库中去重后的源文件数（同一文件多块只算 1；/api/status 展示用）。"""
         ...
 
+    def count_images(self) -> int:
+        """返回库中图片描述块数（source_type=image_description；/api/status 展示用）。"""
+        ...
+
 
 def create_vector_store(**kwargs: Any) -> VectorStore:
     """工厂：MVP 返回 ChromaVectorStore；后续可替换为 LanceDB/Qdrant。
 
     参数透传给 chroma 工厂（persist_dir / collection_name / embedder）：
-    collection_name 缺省 = chunks__bge-m3__v1，embedder 缺省惰性 FastEmbedEmbedder。
+    collection_name 缺省 = chunks__{embedder.fingerprint}__v1；embedder 必填（云端嵌入）。
     """
     from app.vectorstore.chroma_store import create_vector_store as _chroma_factory
 

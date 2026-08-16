@@ -13,12 +13,14 @@ from fastapi.staticfiles import StaticFiles
 
 from app.api.deps import get_import_task_store, get_vector_store
 from app.api.routes.audit import router as audit_router
+from app.api.routes.avatars import router as avatars_router
 from app.api.routes.chat import router as chat_router
 from app.api.routes.conversations import router as conversations_router
 from app.api.routes.imports import router as import_router
 from app.api.routes.settings import router as settings_router
 from app.core.config import settings
 from app.core.outbound import outbound_client
+from app.core.settings_store import get_settings_store, is_search_configured, is_vision_configured
 from app.ingestion.import_task import ImportTaskStore
 from app.vectorstore.base import VectorStore
 
@@ -31,6 +33,7 @@ app = FastAPI(
 # 业务路由
 app.include_router(chat_router)
 app.include_router(audit_router)
+app.include_router(avatars_router)
 app.include_router(import_router)
 app.include_router(settings_router)
 app.include_router(conversations_router)
@@ -56,6 +59,9 @@ async def status(
     知识计数来自真实向量库（块数 / 去重文件数）与最近成功导入时间。
     """
     last_sync = task_store.last_success_at
+    _app_settings = get_settings_store().load()
+    _search_config = _app_settings.search
+    _vision = _app_settings.vision
     return {
         "app": {
             "name": "everything-rag",
@@ -63,17 +69,20 @@ async def status(
         },
         "config": {
             "wizard_completed": settings.wizard_completed,
-            # 嵌入：本地 bge-m3 自动可用（首次真实嵌入惰性下载），无需配置
-            "embed_configured": True,
+            # 嵌入：云端 OpenAI 兼容 /embeddings；base_url 与 model 都配好才算就绪
+            "embed_configured": bool(settings.embed_base_url and settings.embed_model),
             # 对话：base_url 与 model 都配好才算就绪（key 走 SecretStr，不在此回显）
             "chat_configured": bool(settings.chat_base_url and settings.chat_model),
-            "vision_configured": False,
+            "vision_configured": is_vision_configured(_vision),
             "vision_enabled": settings.vision_enabled,
+            # 联网搜索：显式启用 + provider 凭证齐备才算可用（config.json 权威）
+            "search_enabled": _search_config.enabled,
+            "search_configured": is_search_configured(_search_config),
         },
         "knowledge": {
             "file_count": vectorstore.count_files(),
             "chunk_count": vectorstore.count(),
-            "image_count": 0,
+            "image_count": vectorstore.count_images(),
             "last_sync_at": last_sync.isoformat() if last_sync is not None else None,
             "needs_rebuild": False,
         },

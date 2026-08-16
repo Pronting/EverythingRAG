@@ -89,3 +89,18 @@ def test_put_partial_preserves_other_fields() -> None:
     data = client.get("/api/settings").json()
     assert data["chat"]["model"] == "keep-me"
     assert data["embed"]["mode"] == "cloud"
+
+
+def test_get_settings_default_theme_light() -> None:
+    """默认主题为浅色。"""
+    client = _client()
+    assert client.get("/api/settings").json()["theme"] == "light"
+
+
+def test_put_theme_saves_and_returns() -> None:
+    """PUT theme=dark -> 保存并回显 dark。"""
+    client = _client()
+    resp = client.put("/api/settings", json={"theme": "dark"})
+    assert resp.status_code == 200
+    assert resp.json()["theme"] == "dark"
+    assert client.get("/api/settings").json()["theme"] == "dark"

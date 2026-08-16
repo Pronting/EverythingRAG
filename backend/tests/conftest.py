@@ -17,12 +17,16 @@ from tests.fakes import FakeVectorStore
 
 
 @pytest.fixture(autouse=True)
-def _isolate_local_deps(tmp_path: Path) -> None:
-    """每测试：注入空向量库替身 + 清空任务存储 + 隔离设置/会话存储（tmp 目录）；
+def _isolate_local_deps(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """每测试：注入空向量库替身 + 清空任务存储 + 隔离设置/会话/增量状态存储（tmp 目录）；
     结束后清空全部 overrides。"""
     deps.import_task_store.clear()
     app.dependency_overrides[deps.get_vector_store] = lambda: FakeVectorStore()
     from app.core import settings_store as settings_store_mod
+    from app.core.config import settings
+
+    # 隔离真实数据目录（~/.everything-rag）：上传规范根/状态库/会话都不触碰真实数据
+    monkeypatch.setattr(settings, "data_dir", tmp_path / "erag-data")
 
     tmp_store = settings_store_mod.SettingsStore(tmp_path / "data")
     app.dependency_overrides[settings_store_mod.get_settings_store] = lambda: tmp_store
@@ -32,5 +36,9 @@ def _isolate_local_deps(tmp_path: Path) -> None:
     app.dependency_overrides[conversations_mod.get_conversation_store] = lambda: ConversationStore(
         tmp_path / "conv-data"
     )
+    # 增量同步状态库也隔离到 tmp（避免触碰真实 ~/.everything-rag/state.db）
+    from app.ingestion.state_store import DocumentStateStore
+
+    app.dependency_overrides[deps.get_state_store] = lambda: DocumentStateStore(tmp_path / "state.db")
     yield
     app.dependency_overrides.clear()

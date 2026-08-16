@@ -199,18 +199,19 @@ def test_key_absent_uses_local_placeholder(monkeypatch: pytest.MonkeyPatch) -> N
 
 
 class _FakeDelta:
-    def __init__(self, content: str) -> None:
+    def __init__(self, content: str, reasoning_content: str | None = None) -> None:
         self.content = content
+        self.reasoning_content = reasoning_content
 
 
 class _FakeChoice:
-    def __init__(self, content: str) -> None:
-        self.delta = _FakeDelta(content)
+    def __init__(self, content: str, reasoning_content: str | None = None) -> None:
+        self.delta = _FakeDelta(content, reasoning_content)
 
 
 class _FakeChunk:
-    def __init__(self, content: str) -> None:
-        self.choices = [_FakeChoice(content)]
+    def __init__(self, content: str, reasoning_content: str | None = None) -> None:
+        self.choices = [_FakeChoice(content, reasoning_content)]
 
 
 class _AsyncChunks:
@@ -255,20 +256,39 @@ class _FakeClient:
 async def test_stream_maps_chunks_and_skips_empty(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """chunk.delta.content 逐段映射为 AsyncIterator[str]；空 content chunk 跳过。"""
+    """chunk.delta.content 逐段映射为 kind=content 的 ChatChunk；空 content 跳过。"""
     chunks = [_FakeChunk("你"), _FakeChunk("好"), _FakeChunk(""), _FakeChunk("世界")]
     completions = _FakeCompletions(chunks)
     monkeypatch.setattr(providers, "AsyncOpenAI", lambda **kwargs: _FakeClient(completions))
 
     model = OpenAICompatChatModel(base_url="http://localhost:9999/v1", model="gpt-4o-mini")
     messages = [{"role": "user", "content": "你好"}]
-    tokens = [token async for token in model.stream_chat(messages)]
+    got = [chunk async for chunk in model.stream_chat(messages)]
 
-    assert tokens == ["你", "好", "世界"]  # 空 content chunk 被跳过
+    assert [(c.kind, c.text) for c in got] == [
+        ("content", "你"),
+        ("content", "好"),
+        ("content", "世界"),
+    ]
     called_model, called_messages, stream_arg = completions.calls[0]
     assert called_model == "gpt-4o-mini"
     assert called_messages == messages
     assert stream_arg is True
+
+
+async def test_stream_maps_reasoning_content(monkeypatch: pytest.MonkeyPatch) -> None:
+    """delta.reasoning_content 映射为 kind=reasoning 的 ChatChunk（思维链透传）。"""
+    chunks = [_FakeChunk("", reasoning_content="让我想想"), _FakeChunk("答案是42")]
+    completions = _FakeCompletions(chunks)
+    monkeypatch.setattr(providers, "AsyncOpenAI", lambda **kwargs: _FakeClient(completions))
+
+    model = OpenAICompatChatModel(base_url="http://localhost:9999/v1", model="deepseek")
+    got = [chunk async for chunk in model.stream_chat([{"role": "user", "content": "q"}])]
+
+    assert [(c.kind, c.text) for c in got] == [
+        ("reasoning", "让我想想"),
+        ("content", "答案是42"),
+    ]
 
 
 async def test_stream_zero_outbound_with_socket_block(
@@ -281,8 +301,8 @@ async def test_stream_zero_outbound_with_socket_block(
     monkeypatch.setattr(providers, "AsyncOpenAI", lambda **kwargs: _FakeClient(completions))
 
     model = OpenAICompatChatModel(base_url="http://localhost:9999/v1", model="m")
-    tokens = [token async for token in model.stream_chat([{"role": "user", "content": "q"}])]
-    assert tokens == ["a", "b"]
+    got = [chunk async for chunk in model.stream_chat([{"role": "user", "content": "q"}])]
+    assert [c.text for c in got] == ["a", "b"]
 
 
 # ---------------------------------------------------------------- 5. 占位模型：stream 阶段才报错

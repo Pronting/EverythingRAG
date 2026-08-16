@@ -18,7 +18,9 @@ from app.core.settings_store import (
     AppSettings,
     ChatModelConfig,
     EmbedModelConfig,
+    SearchConfig,
     SettingsStore,
+    VisionModelConfig,
     get_settings_store,
 )
 
@@ -32,19 +34,38 @@ class ChatSettingsUpdate(BaseModel):
     base_url: str | None = None
     model: str | None = None
     api_key: SecretStr | None = None  # None=不改；""=清除；值=设置
+    supports_image: bool | None = None  # 是否多模态（直接收图片输入）
 
 
 class EmbedSettingsUpdate(BaseModel):
-    mode: Literal["local", "cloud"] | None = None
+    mode: Literal["cloud"] | None = None
     base_url: str | None = None
     model: str | None = None
     api_key: SecretStr | None = None
 
 
+class SearchSettingsUpdate(BaseModel):
+    provider_type: Literal["tavily", "searxng"] | None = None
+    enabled: bool | None = None
+    base_url: str | None = None
+    api_key: SecretStr | None = None
+    max_results: int | None = Field(default=None, ge=1, le=10)
+
+
+class VisionSettingsUpdate(BaseModel):
+    provider_type: str | None = None
+    base_url: str | None = None
+    model: str | None = None
+    api_key: SecretStr | None = None  # None=不改；""=清除；值=设置
+
+
 class SettingsUpdate(BaseModel):
     chat: ChatSettingsUpdate | None = None
     embed: EmbedSettingsUpdate | None = None
+    vision: VisionSettingsUpdate | None = None
+    search: SearchSettingsUpdate | None = None
     system_prompt: str | None = Field(default=None, max_length=8000)
+    theme: Literal["light", "dark"] | None = None
 
     @model_validator(mode="after")
     def _validate_base_urls(self) -> SettingsUpdate:
@@ -56,6 +77,14 @@ class SettingsUpdate(BaseModel):
             self.embed.base_url
         ):
             raise ValueError("嵌入模型 Base URL 需为 http(s) 地址")
+        if self.search is not None and self.search.base_url is not None and not _BASE_URL_RE.match(
+            self.search.base_url
+        ):
+            raise ValueError("联网搜索 Base URL 需为 http(s) 地址")
+        if self.vision is not None and self.vision.base_url is not None and not _BASE_URL_RE.match(
+            self.vision.base_url
+        ):
+            raise ValueError("识图模型 Base URL 需为 http(s) 地址")
         if (
             self.embed is not None
             and self.embed.mode == "cloud"
@@ -93,10 +122,20 @@ def _apply(current: AppSettings, update: SettingsUpdate) -> AppSettings:
     embed = current.embed
     if update.embed is not None:
         embed = _overlay_embed(embed, update.embed)
+    vision = current.vision
+    if update.vision is not None:
+        vision = _overlay_vision(vision, update.vision)
+    search = current.search
+    if update.search is not None:
+        search = _overlay_search(search, update.search)
     return AppSettings(
         chat=chat,
         embed=embed,
+        vision=vision,
+        search=search,
         system_prompt=update.system_prompt if update.system_prompt is not None else current.system_prompt,
+        avatars=current.avatars,  # 保留头像（覆盖式更新不得重置）
+        theme=update.theme if update.theme is not None else current.theme,
     )
 
 
@@ -105,6 +144,7 @@ def _overlay_chat(current: ChatModelConfig, update: ChatSettingsUpdate) -> ChatM
         "provider_type": update.provider_type if update.provider_type is not None else current.provider_type,
         "base_url": update.base_url if update.base_url is not None else current.base_url,
         "model": update.model if update.model is not None else current.model,
+        "supports_image": update.supports_image if update.supports_image is not None else current.supports_image,
     }
     if update.api_key is not None:
         # 空串=清除，非空=设置
@@ -127,13 +167,52 @@ def _overlay_embed(current: EmbedModelConfig, update: EmbedSettingsUpdate) -> Em
     return EmbedModelConfig(**data)
 
 
+def _overlay_vision(current: VisionModelConfig, update: VisionSettingsUpdate) -> VisionModelConfig:
+    data = {
+        "provider_type": update.provider_type if update.provider_type is not None else current.provider_type,
+        "base_url": update.base_url if update.base_url is not None else current.base_url,
+        "model": update.model if update.model is not None else current.model,
+    }
+    if update.api_key is not None:
+        data["api_key"] = None if update.api_key.get_secret_value() == "" else update.api_key
+    else:
+        data["api_key"] = current.api_key
+    return VisionModelConfig(**data)
+
+
+def _overlay_search(current: SearchConfig, update: SearchSettingsUpdate) -> SearchConfig:
+    data = {
+        "provider_type": update.provider_type if update.provider_type is not None else current.provider_type,
+        "enabled": update.enabled if update.enabled is not None else current.enabled,
+        "base_url": update.base_url if update.base_url is not None else current.base_url,
+        "max_results": update.max_results if update.max_results is not None else current.max_results,
+    }
+    if update.api_key is not None:
+        data["api_key"] = None if update.api_key.get_secret_value() == "" else update.api_key
+    else:
+        data["api_key"] = current.api_key
+    return SearchConfig(**data)
+
+
 def _settings_view(settings: AppSettings) -> dict:
-    """脱敏视图：key 只回显是否已设置 + 尾4位。"""
+    """脱敏视图：key 只回显是否已设置 + 尾4位；头像给可访问 URL 或 null。"""
     return {
         "chat": _chat_view(settings.chat),
         "embed": _embed_view(settings.embed),
+        "vision": _vision_view(settings.vision),
+        "search": _search_view(settings.search),
         "system_prompt": settings.system_prompt,
+        "avatars": {
+            "user": _avatar_url(settings.avatars.user),
+            "agent": _avatar_url(settings.avatars.agent),
+        },
+        "theme": settings.theme,
     }
+
+
+def _avatar_url(filename: str | None) -> str | None:
+    """头像相对文件名 -> 访问 URL；未设置返回 None（前端用内置 SVG）。"""
+    return f"/api/avatars/{filename}" if filename else None
 
 
 def _chat_view(chat: ChatModelConfig) -> dict:
@@ -144,6 +223,7 @@ def _chat_view(chat: ChatModelConfig) -> dict:
         "model": chat.model,
         "api_key_set": key is not None,
         "api_key_hint": f"...{key[-4:]}" if key else None,
+        "supports_image": chat.supports_image,
     }
 
 
@@ -153,6 +233,29 @@ def _embed_view(embed: EmbedModelConfig) -> dict:
         "mode": embed.mode,
         "base_url": embed.base_url,
         "model": embed.model,
+        "api_key_set": key is not None,
+        "api_key_hint": f"...{key[-4:]}" if key else None,
+    }
+
+
+def _vision_view(vision: VisionModelConfig) -> dict:
+    key = vision.api_key.get_secret_value() if vision.api_key is not None else None
+    return {
+        "provider_type": vision.provider_type,
+        "base_url": vision.base_url,
+        "model": vision.model,
+        "api_key_set": key is not None,
+        "api_key_hint": f"...{key[-4:]}" if key else None,
+    }
+
+
+def _search_view(search: SearchConfig) -> dict:
+    key = search.api_key.get_secret_value() if search.api_key is not None else None
+    return {
+        "provider_type": search.provider_type,
+        "enabled": search.enabled,
+        "base_url": search.base_url,
+        "max_results": search.max_results,
         "api_key_set": key is not None,
         "api_key_hint": f"...{key[-4:]}" if key else None,
     }

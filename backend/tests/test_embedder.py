@@ -1,166 +1,19 @@
-"""FastEmbedEmbedder 惰性加载与注册回退测试（fake TextEmbedding，零网络）。
+"""CloudEmbedder 云端嵌入（OpenAI 兼容 /embeddings）测试（fake OpenAI client，零网络）。
 
-隐私红线：全部用 fake 替代 fastembed.TextEmbedding，不触发任何真实模型
-加载/下载/出网；验证「创建实例零副作用、首次 embed 才加载、之后缓存」。
+本地 fastembed/bge-m3 已移除；嵌入统一走云端。验证：
+- 构造零出网（不实例化 client）
+- 首次 embed 才建连并推导 dim，之后缓存
+- fingerprint 含模型名（斜杠转连字符，隔离 collection）
+- 工厂 create_embedder_from_config 只在配置完整时返回 CloudEmbedder
 """
 
 from __future__ import annotations
 
-from pathlib import Path
 from types import SimpleNamespace
 
-import numpy as np
 import pytest
 
 import app.vectorstore.embedder as embedder_mod
-from app.vectorstore.embedder import FastEmbedEmbedder
-
-
-class FakeTextEmbedding:
-    """记录实例化次数、最近 cache_dir 与收到的输入；embed 返回 dim=1024 伪向量。"""
-
-    instances = 0
-    last_cache_dir: str | None = None
-    last_texts: list[str] | None = None
-    last_batch_size: int | None = None
-
-    def __init__(self, model_name: str, cache_dir: str | None = None) -> None:
-        type(self).instances += 1
-        self.model_name = model_name
-        self.cache_dir = cache_dir
-        type(self).last_cache_dir = cache_dir
-
-    def embed(self, texts: list[str], batch_size: int | None = None) -> list[np.ndarray]:
-        type(self).last_texts = list(texts)
-        type(self).last_batch_size = batch_size
-        return [np.zeros(FastEmbedEmbedder.dim, dtype=np.float32) for _ in texts]
-
-
-def test_constants() -> None:
-    """指纹与维度常量：bge-m3 / 1024；collection 命名与维度校验依赖它们。"""
-    assert FastEmbedEmbedder.fingerprint == "bge-m3"
-    assert FastEmbedEmbedder.dim == 1024
-    assert FastEmbedEmbedder().model_name == "BAAI/bge-m3"
-
-
-def test_creation_does_not_instantiate_model(monkeypatch: pytest.MonkeyPatch) -> None:
-    """创建实例零副作用：不加载、不下载、不实例化底层模型。"""
-    monkeypatch.setattr(embedder_mod, "TextEmbedding", FakeTextEmbedding)
-    FastEmbedEmbedder()
-    assert FakeTextEmbedding.instances == 0
-
-
-def test_lazy_load_once_then_cached(monkeypatch: pytest.MonkeyPatch) -> None:
-    """惰性加载：首次 embed_texts 实例化一次，之后缓存复用。"""
-    monkeypatch.setattr(embedder_mod, "TextEmbedding", FakeTextEmbedding)
-    embedder = FastEmbedEmbedder()
-    vectors = embedder.embed_texts(["第一条", "第二条"])
-    assert FakeTextEmbedding.instances == 1
-    assert len(vectors) == 2
-    assert all(len(vector) == FastEmbedEmbedder.dim for vector in vectors)
-
-    embedder.embed_texts(["第三条"])
-    assert FakeTextEmbedding.instances == 1  # 缓存，不重复实例化
-
-
-# ---------------------------------------------------------------- 内存安全（优化① 提速配套）
-
-
-def test_safe_embed_defaults() -> None:
-    """安全默认：输入长度上限 2000 字符、batch_size=8（小 batch 省内存且防 padding 浪费）。"""
-    assert FastEmbedEmbedder.max_chars == 2000
-    assert FastEmbedEmbedder.batch_size == 8
-
-
-def test_embed_truncates_oversized_input(monkeypatch: pytest.MonkeyPatch) -> None:
-    """超长输入（巨型代码块/配置转储）截断到上限再嵌入，杜绝 OOM。"""
-    monkeypatch.setattr(embedder_mod, "TextEmbedding", FakeTextEmbedding)
-    embedder = FastEmbedEmbedder()
-    vectors = embedder.embed_texts(["长" * 50000, "短文本"])
-    assert len(vectors) == 2
-    assert all(len(v) == FastEmbedEmbedder.dim for v in vectors)
-    assert FakeTextEmbedding.last_texts is not None
-    assert len(FakeTextEmbedding.last_texts[0]) == FastEmbedEmbedder.max_chars  # 被截断
-    assert FakeTextEmbedding.last_texts[1] == "短文本"  # 短文本不受影响
-
-
-def test_embed_passes_batch_size(monkeypatch: pytest.MonkeyPatch) -> None:
-    """batch_size 透传给底层模型（受控 batch，防 padding 内存爆炸）。"""
-    monkeypatch.setattr(embedder_mod, "TextEmbedding", FakeTextEmbedding)
-    embedder = FastEmbedEmbedder()
-    embedder.embed_texts(["a", "b"])
-    assert FakeTextEmbedding.last_batch_size == FastEmbedEmbedder.batch_size
-
-
-def test_embed_oversized_input_keeps_vector_count(monkeypatch: pytest.MonkeyPatch) -> None:
-    """截断不改变向量个数：输入 N 条 -> 输出 N 条向量。"""
-    monkeypatch.setattr(embedder_mod, "TextEmbedding", FakeTextEmbedding)
-    embedder = FastEmbedEmbedder()
-    texts = ["x" * 10000, "正常", "y" * 3000]
-    assert len(embedder.embed_texts(texts)) == 3
-
-
-class FakeUnregisteredTextEmbedding:
-    """模拟「模型未内置」：首次构造抛 ValueError，注册后第二次构造成功。"""
-
-    instances = 0
-    registered = False
-
-    def __init__(self, model_name: str, cache_dir: str | None = None) -> None:
-        type(self).instances += 1
-        if not type(self).registered:
-            raise ValueError(f"Model {model_name} is not supported")
-        self.model_name = model_name
-        self.cache_dir = cache_dir
-
-    def embed(self, texts: list[str], batch_size: int | None = None) -> list[np.ndarray]:
-        return [np.zeros(FastEmbedEmbedder.dim, dtype=np.float32) for _ in texts]
-
-    @classmethod
-    def list_supported_models(cls) -> list[dict]:
-        return []
-
-    @classmethod
-    def add_custom_model(cls, **kwargs: object) -> None:
-        cls.registered = True
-
-
-def test_register_fallback_when_model_not_bundled(monkeypatch: pytest.MonkeyPatch) -> None:
-    """fastembed 未内置 bge-m3 时：构造抛错 -> add_custom_model 注册 -> 重试成功。"""
-    monkeypatch.setattr(embedder_mod, "TextEmbedding", FakeUnregisteredTextEmbedding)
-    embedder = FastEmbedEmbedder()
-    vectors = embedder.embed_texts(["text"])
-    assert FakeUnregisteredTextEmbedding.instances == 2
-    assert FakeUnregisteredTextEmbedding.registered is True
-    assert len(vectors) == 1
-    assert len(vectors[0]) == FastEmbedEmbedder.dim
-
-
-def test_cache_dir_defaults_to_persistent_data_dir(monkeypatch: pytest.MonkeyPatch) -> None:
-    """缺省缓存目录落到 data_dir/models（持久），不落在系统临时目录。
-
-    修复：fastembed 默认把模型下载进 tempfile.gettempdir()/fastembed_cache，
-    Windows 会定期清理 Temp 导致 2GB+ 模型反复重下。
-    """
-    import app.core.config as config_mod
-
-    class _FakeSettings:
-        embed_cache_dir = None
-        data_dir = Path("C:/fake-data")
-
-    monkeypatch.setattr(config_mod, "get_settings", lambda: _FakeSettings())
-    assert embedder_mod._default_cache_dir() == str(Path("C:/fake-data") / "models")
-
-
-def test_cache_dir_passed_through_to_model(monkeypatch: pytest.MonkeyPatch) -> None:
-    """显式 cache_dir 透传给底层 TextEmbedding。"""
-    monkeypatch.setattr(embedder_mod, "TextEmbedding", FakeTextEmbedding)
-    embedder = FastEmbedEmbedder(cache_dir="C:/persistent/models")
-    embedder.embed_texts(["text"])
-    assert FakeTextEmbedding.last_cache_dir == "C:/persistent/models"
-
-
-# ---------------------------------------------------------------- 云端嵌入（OpenAI 兼容）
 
 
 class _FakeEmbeddings:
@@ -231,22 +84,14 @@ def test_cloud_embedder_model_name_normalized_in_fingerprint() -> None:
 # ---------------------------------------------------------------- 嵌入器工厂（按设置）
 
 
-def test_create_embedder_local_returns_fastembed() -> None:
-    """mode=local -> FastEmbedEmbedder（本地 bge-m3）。"""
-    from app.core.settings_store import EmbedModelConfig
-
-    emb = embedder_mod.create_embedder_from_config(EmbedModelConfig(mode="local"))
-    assert isinstance(emb, FastEmbedEmbedder)
-
-
 def test_create_embedder_cloud_returns_cloud() -> None:
-    """mode=cloud 且配置完整 -> CloudEmbedder。"""
+    """配置完整 -> CloudEmbedder；model 与 fingerprint 正确透传。"""
     from pydantic import SecretStr
 
     from app.core.settings_store import EmbedModelConfig
 
     emb = embedder_mod.create_embedder_from_config(
-        EmbedModelConfig(mode="cloud", base_url="http://e.test/v1", model="bge-m3", api_key=SecretStr("sk-x"))
+        EmbedModelConfig(base_url="http://e.test/v1", model="bge-m3", api_key=SecretStr("sk-x"))
     )
     assert isinstance(emb, embedder_mod.CloudEmbedder)
     assert emb.model == "bge-m3"
@@ -254,8 +99,12 @@ def test_create_embedder_cloud_returns_cloud() -> None:
 
 
 def test_create_embedder_cloud_incomplete_raises() -> None:
-    """mode=cloud 但缺 base_url/model -> ValueError。"""
+    """缺 base_url/model -> ValueError（统一云端后不允许缺省构造）。"""
     from app.core.settings_store import EmbedModelConfig
 
     with pytest.raises(ValueError):
-        embedder_mod.create_embedder_from_config(EmbedModelConfig(mode="cloud"))
+        embedder_mod.create_embedder_from_config(EmbedModelConfig())
+    with pytest.raises(ValueError):
+        embedder_mod.create_embedder_from_config(EmbedModelConfig(base_url="http://e.test/v1"))
+    with pytest.raises(ValueError):
+        embedder_mod.create_embedder_from_config(EmbedModelConfig(model="bge-m3"))

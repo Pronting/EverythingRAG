@@ -136,8 +136,9 @@ async def _ai_title(conv: Any) -> str:
             "不要加引号、标点或解释。\n用户：" + "\n用户：".join(user_texts)
         )
         tokens: list[str] = []
-        async for token in chat.stream_chat([{"role": "user", "content": prompt}]):
-            tokens.append(token)
+        async for chunk in chat.stream_chat([{"role": "user", "content": prompt}]):
+            if chunk.kind == "content":
+                tokens.append(chunk.text)
         title = "".join(tokens).strip()
         if title:
             return title[:60]

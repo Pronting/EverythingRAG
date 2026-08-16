@@ -5,6 +5,7 @@ from __future__ import annotations
 from fastapi.testclient import TestClient
 
 from app.api.routes import conversations as conversations_mod
+from app.generation.base import ChatChunk
 from app.main import app
 
 
@@ -21,7 +22,7 @@ class FakeTitleModel:
 
     async def stream_chat(self, messages: list, **kwargs: object):  # type: ignore[no-untyped-def]
         for token in ("测试", "标题"):
-            yield token
+            yield ChatChunk("content", token)
 
 
 def test_list_empty_and_create() -> None:

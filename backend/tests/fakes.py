@@ -10,11 +10,12 @@ from typing import Any
 
 
 class FakeVectorStore:
-    """可控计数的向量库替身：count / count_files 可配置，其余为安全 no-op。"""
+    """可控计数的向量库替身：count / count_files / count_images 可配置，其余为安全 no-op。"""
 
-    def __init__(self, file_count: int = 0, chunk_count: int = 0) -> None:
+    def __init__(self, file_count: int = 0, chunk_count: int = 0, image_count: int = 0) -> None:
         self._files = file_count
         self._chunks = chunk_count
+        self._images = image_count
 
     def upsert(self, blocks: list[tuple[str, str, list[float], Any]]) -> None:
         pass
@@ -24,6 +25,9 @@ class FakeVectorStore:
 
     def delete_by_where(self, where: dict[str, Any]) -> None:
         pass
+
+    def get_blocks_by_source(self, source_file: str) -> dict[str, str]:
+        return {}
 
     def query(
         self,
@@ -38,3 +42,6 @@ class FakeVectorStore:
 
     def count_files(self) -> int:
         return self._files
+
+    def count_images(self) -> int:
+        return self._images
