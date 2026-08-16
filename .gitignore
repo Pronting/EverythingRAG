@@ -23,7 +23,9 @@ models/
 
 # ---- 施工/内部开发过程（不进公开仓库）----
 .claude/
+.spec-workflow/
 docs/loop/
+docs/superpowers/
 
 # ---- 敏感信息（环境变量/凭据/密钥，禁止入库）----
 .env
@@ -41,6 +43,7 @@ config.local.*
 
 # ---- 个人/工具 ----
 .playwright-mcp/
+.playwright/
 
 # ---- IDE / OS ----
 .vscode/
