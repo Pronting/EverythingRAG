@@ -57,6 +57,31 @@ def test_append_messages_and_read_back() -> None:
     assert conv["messages"][0]["content"] == "你好"
 
 
+def test_reasoning_is_not_persisted_but_answer_metadata_is() -> None:
+    client = _client()
+    conv_id = client.post("/api/conversations").json()["id"]
+    resp = client.post(
+        f"/api/conversations/{conv_id}/messages",
+        json={
+            "messages": [
+                {
+                    "role": "assistant",
+                    "content": "最终答案",
+                    "thinking": "不应落盘的原始思维链",
+                    "answer_basis": "knowledge",
+                    "policy_version": "rag-policy-v3",
+                }
+            ]
+        },
+    )
+    assert resp.status_code == 200
+    stored = client.get(f"/api/conversations/{conv_id}").json()["messages"][0]
+    assert "thinking" not in stored
+    assert "原始思维链" not in repr(stored)
+    assert stored["answer_basis"] == "knowledge"
+    assert stored["policy_version"] == "rag-policy-v3"
+
+
 def test_set_title_manual() -> None:
     client = _client()
     conv_id = client.post("/api/conversations").json()["id"]
@@ -101,3 +126,22 @@ def test_delete_conversation() -> None:
     assert client.delete(f"/api/conversations/{conv_id}").status_code == 204
     assert client.get(f"/api/conversations/{conv_id}").status_code == 404
     assert client.delete(f"/api/conversations/{conv_id}").status_code == 404
+
+
+def test_search_matches_message_content_and_returns_excerpt():
+    client = _client()
+    conv = client.post("/api/conversations").json()
+    client.put(f"/api/conversations/{conv['id']}/title", json={"title": "项目讨论"})
+    client.post(f"/api/conversations/{conv['id']}/messages", json={"messages": [
+        {"role": "user", "content": "需要优化上传速度"},
+        {"role": "assistant", "content": "使用 ThreadPool 并行导入可以改善速度"},
+    ]})
+    for query in ["项目", "上传", "threadpool", "项目 并行"]:
+        results = client.get("/api/conversations", params={"q": query}).json()
+        assert len(results) == 1
+        assert results[0]["id"] == conv["id"]
+        assert "messages" not in results[0]
+    results = client.get("/api/conversations", params={"q": "threadpool"}).json()
+    assert "ThreadPool" in results[0]["match_excerpt"]
+    assert client.get("/api/conversations", params={"q": "不存在的内容"}).json() == []
+    assert len(client.get("/api/conversations", params={"q": "  "}).json()) == 1

@@ -1,7 +1,13 @@
 import { expect, test } from "@playwright/test";
 
 const SSE_FRAMES = [
-  { type: "meta", sources: [] },
+  {
+    type: "meta",
+    sources: [],
+    answer_basis: "general",
+    policy_version: "rag-policy-v3",
+    query_mode: "CONTENT_QA",
+  },
   { type: "token", text: "你好" },
   { type: "token", text: "世界" },
   { type: "done" },
@@ -62,7 +68,7 @@ test("会话历史：新对话、交换持久化、AI 标题更新侧边栏", as
   await page.goto("/");
 
   // 加载时侧边栏显示历史会话
-  await expect(page.getByText("历史对话")).toBeVisible();
+  await expect(page.getByRole("button", { name: "历史对话", exact: true })).toBeVisible();
 
   // 新对话 -> 会话列表出现「新对话」项
   await page.getByRole("button", { name: "新对话" }).click();
@@ -76,4 +82,19 @@ test("会话历史：新对话、交换持久化、AI 标题更新侧边栏", as
 
   // 侧边栏标题由「新对话」变为 AI 生成标题
   await expect(page.getByText("AI 标题")).toBeVisible();
+});
+
+
+test("对话搜索显示正文命中片段并可打开历史", async ({ page }) => {
+  await stubConversations(page);
+  await page.route("**/api/conversations?*", route => route.fulfill({ json: [{ id: "c1", title: "历史对话", message_count: 2, match_excerpt: "这里讨论了并行上传的实现" }] }));
+  await page.route("**/api/conversations/c1", route => route.fulfill({ json: { id: "c1", title: "历史对话", messages: [{ role: "user", content: "并行上传如何实现？", created_at: "2026-09-05" }] } }));
+  await page.goto("/");
+  await page.getByRole("textbox", { name: "搜索对话" }).fill("并行上传");
+  await expect(page.getByText("这里讨论了并行上传的实现")).toBeVisible();
+  await page.getByRole("button", { name: /历史对话.*并行上传/ }).click();
+  await expect(page.getByText("并行上传如何实现？")).toBeVisible();
+  await page.getByRole("textbox", { name: "搜索对话" }).fill("");
+  await expect(page.getByText("这里讨论了并行上传的实现")).not.toBeVisible();
+  await expect(page.getByText("隐私基线", { exact: false })).not.toBeVisible();
 });

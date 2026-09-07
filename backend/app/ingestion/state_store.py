@@ -18,6 +18,8 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
+from app.ingestion.index_schema import INGESTION_SCHEMA_VERSION
+
 
 @dataclass(frozen=True)
 class DocFingerprint:
@@ -28,6 +30,8 @@ class DocFingerprint:
     mtime: float
     size: int
     chunk_count: int
+    schema_version: int
+    index_fingerprint: str
     imported_at: str
 
 
@@ -54,13 +58,15 @@ class DocumentStateStore:
     def _init_schema(self) -> None:
         with self._lock:
             self._conn.executescript(
-                """
+                f"""
                 CREATE TABLE IF NOT EXISTS documents (
                     path TEXT PRIMARY KEY,
                     content_hash TEXT NOT NULL,
                     mtime REAL NOT NULL,
                     size INTEGER NOT NULL,
                     chunk_count INTEGER NOT NULL DEFAULT 0,
+                    schema_version INTEGER NOT NULL DEFAULT {INGESTION_SCHEMA_VERSION},
+                    index_fingerprint TEXT NOT NULL DEFAULT '',
                     imported_at TEXT NOT NULL
                 );
 
@@ -70,6 +76,20 @@ class DocumentStateStore:
                 );
                 """
             )
+            columns = {
+                str(row[1]) for row in self._conn.execute("PRAGMA table_info(documents)").fetchall()
+            }
+            if "schema_version" not in columns:
+                # 历史行先标为 v1；下一次同步会识别版本落后并完整重处理一次。
+                self._conn.execute(
+                    "ALTER TABLE documents ADD COLUMN schema_version INTEGER NOT NULL DEFAULT 1"
+                )
+            if "index_fingerprint" not in columns:
+                # An empty value is intentionally incompatible with every real index.
+                # The next sync rebuilds each legacy row once, then writes the current value.
+                self._conn.execute(
+                    "ALTER TABLE documents ADD COLUMN index_fingerprint TEXT NOT NULL DEFAULT ''"
+                )
             self._conn.commit()
 
     # ---------------------------------------------------------------- documents
@@ -78,7 +98,8 @@ class DocumentStateStore:
         """返回全部已知文档指纹：{path: DocFingerprint}。"""
         with self._lock:
             rows = self._conn.execute(
-                "SELECT path, content_hash, mtime, size, chunk_count, imported_at FROM documents"
+                "SELECT path, content_hash, mtime, size, chunk_count, schema_version, "
+                "index_fingerprint, imported_at FROM documents"
             ).fetchall()
         return {
             row["path"]: DocFingerprint(
@@ -87,6 +108,8 @@ class DocumentStateStore:
                 mtime=row["mtime"],
                 size=row["size"],
                 chunk_count=row["chunk_count"],
+                schema_version=row["schema_version"],
+                index_fingerprint=row["index_fingerprint"],
                 imported_at=row["imported_at"],
             )
             for row in rows
@@ -99,18 +122,55 @@ class DocumentStateStore:
         mtime: float,
         size: int,
         chunk_count: int,
+        schema_version: int = INGESTION_SCHEMA_VERSION,
+        index_fingerprint: str = "",
     ) -> None:
         """写入/更新单文档指纹（幂等：INSERT OR REPLACE）。"""
         with self._lock:
             self._conn.execute(
                 """
                 INSERT OR REPLACE INTO documents
-                    (path, content_hash, mtime, size, chunk_count, imported_at)
-                VALUES (?, ?, ?, ?, ?, ?)
+                    (path, content_hash, mtime, size, chunk_count, schema_version,
+                     index_fingerprint, imported_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                (path, content_hash, mtime, size, chunk_count, _now_iso()),
+                (
+                    path,
+                    content_hash,
+                    mtime,
+                    size,
+                    chunk_count,
+                    schema_version,
+                    index_fingerprint,
+                    _now_iso(),
+                ),
             )
             self._conn.commit()
+
+    def needs_rebuild(
+        self,
+        *,
+        index_fingerprint: str,
+        current_chunk_count: int,
+        schema_version: int = INGESTION_SCHEMA_VERSION,
+    ) -> bool:
+        """Return whether persisted documents are incompatible with the current index.
+
+        A non-empty manifest with an empty current collection is also incomplete even if
+        every stored fingerprint matches (for example after a collection was recreated).
+        """
+
+        documents = self.load_all().values()
+        records = list(documents)
+        if not records:
+            return False
+        if current_chunk_count == 0:
+            return True
+        return any(
+            record.schema_version != schema_version
+            or record.index_fingerprint != index_fingerprint
+            for record in records
+        )
 
     def touch_mtime(self, path: str, mtime: float) -> None:
         """内容未变仅 mtime 变化时，只更新时间戳（保留内容指纹）。"""
@@ -126,6 +186,17 @@ class DocumentStateStore:
         with self._lock:
             self._conn.execute("DELETE FROM documents WHERE path = ?", (path,))
             self._conn.commit()
+
+    def delete_many(self, paths: list[str]) -> int:
+        """批量删除文档指纹；历史去重避免逐行提交数百次事务。"""
+
+        if not paths:
+            return 0
+        with self._lock:
+            before = self._conn.total_changes
+            self._conn.executemany("DELETE FROM documents WHERE path = ?", ((p,) for p in paths))
+            self._conn.commit()
+            return self._conn.total_changes - before
 
     # ---------------------------------------------------------------- sources
 

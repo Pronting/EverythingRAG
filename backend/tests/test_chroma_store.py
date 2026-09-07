@@ -7,11 +7,17 @@ Chroma 客户端显式禁用匿名遥测（零出网），并由阻断 socket �
 from __future__ import annotations
 
 import socket
+from collections.abc import Iterator
+from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
 from pathlib import Path
+from typing import Any
 
 import pytest
 
+from app.ingestion.index_schema import INGESTION_SCHEMA_VERSION
 from app.models.schemas import BlockMetadata, SourceType
+from app.vectorstore import chroma_store as chroma_store_mod
 from app.vectorstore.chroma_store import ChromaVectorStore, _serialize_metadata, create_vector_store
 
 
@@ -94,6 +100,123 @@ def test_upsert_and_query_roundtrip(tmp_path: Path) -> None:
     assert all(0.0 <= hit["similarity"] <= 1.0 for hit in hits)
 
 
+def test_bulk_upsert_repairs_logical_record_missing_from_ann(tmp_path: Path) -> None:
+    """Chroma 批量写入若只落逻辑记录、漏 ANN 节点，应逐条补写后再成功返回。"""
+
+    class FlakyCollection:
+        def __init__(self) -> None:
+            self.all_ids: set[str] = set()
+            self.searchable: set[str] = set()
+            self.vector_to_id: dict[tuple[float, ...], str] = {}
+            self.single_upserts: list[str] = []
+
+        def count(self) -> int:
+            return len(self.all_ids)
+
+        def upsert(
+            self,
+            *,
+            ids: list[str],
+            documents: list[str],
+            embeddings: list[list[float]],
+            metadatas: list[dict[str, object]],
+        ) -> None:
+            del documents, metadatas
+            self.all_ids.update(ids)
+            self.vector_to_id.update(
+                {tuple(vector): block_id for block_id, vector in zip(ids, embeddings, strict=True)}
+            )
+            if len(ids) == 1:
+                self.single_upserts.extend(ids)
+                self.searchable.update(ids)
+            else:
+                self.searchable.update(block_id for block_id in ids if block_id != "block-b")
+
+        def query(
+            self,
+            *,
+            query_embeddings: list[list[float]],
+            n_results: int,
+            include: list[str],
+        ) -> dict[str, list[list[str]]]:
+            del n_results, include
+            rows: list[list[str]] = []
+            for vector in query_embeddings:
+                expected = self.vector_to_id[tuple(vector)]
+                rows.append([expected] if expected in self.searchable else [])
+            return {"ids": rows}
+
+    store = _store(tmp_path)
+    flaky = FlakyCollection()
+    store._collection = flaky  # type: ignore[assignment]
+
+    _seed(store)
+
+    assert flaky.single_upserts == ["block-b"]
+    assert flaky.searchable == {"block-a", "block-b", "block-c"}
+
+
+def test_full_ann_repair_fixes_record_evicted_by_a_later_batch(tmp_path: Path) -> None:
+    """后续批次使早期节点不可达时，导入末尾的全库修复必须把它补回。"""
+
+    class LateEvictionCollection:
+        def __init__(self) -> None:
+            self.ids = ["block-a", "block-b", "block-c"]
+            self.documents = ["text a", "text b", "text c"]
+            self.embeddings = [VECTORS[block_id] for block_id in self.ids]
+            self.metadatas = [{"source_file": f"{block_id}.md"} for block_id in self.ids]
+            self.vector_to_id = {
+                tuple(vector): block_id
+                for block_id, vector in zip(self.ids, self.embeddings, strict=True)
+            }
+            self.searchable = {"block-a", "block-c"}
+            self.single_upserts: list[str] = []
+
+        def get(self, *, include: list[str]) -> dict[str, object]:
+            del include
+            return {
+                "ids": self.ids,
+                "documents": self.documents,
+                "embeddings": self.embeddings,
+                "metadatas": self.metadatas,
+            }
+
+        def query(
+            self,
+            *,
+            query_embeddings: list[list[float]],
+            n_results: int,
+            include: list[str],
+        ) -> dict[str, list[list[str]]]:
+            del n_results, include
+            rows = []
+            for vector in query_embeddings:
+                expected = self.vector_to_id[tuple(vector)]
+                rows.append([expected] if expected in self.searchable else [])
+            return {"ids": rows}
+
+        def upsert(
+            self,
+            *,
+            ids: list[str],
+            documents: list[str],
+            embeddings: list[list[float]],
+            metadatas: list[dict[str, object]],
+        ) -> None:
+            del documents, embeddings, metadatas
+            self.single_upserts.extend(ids)
+            self.searchable.update(ids)
+
+    store = _store(tmp_path)
+    flaky = LateEvictionCollection()
+    store._collection = flaky  # type: ignore[assignment]
+
+    assert store.repair_ann_index() == 1
+    assert flaky.single_upserts == ["block-b"]
+    assert flaky.searchable == {"block-a", "block-b", "block-c"}
+    assert store.repair_ann_index() == 0
+
+
 # ---------------------------------------------------------------- 2. collection 命名
 
 
@@ -104,9 +227,9 @@ def test_create_vector_store_requires_embedder(tmp_path: Path) -> None:
 
 
 def test_collection_naming_custom_fingerprint(tmp_path: Path) -> None:
-    """自定义 embedder 时 collection 名 = chunks__{fingerprint}__v1。"""
+    """默认 collection 同时按 embedder 和入库结构版本隔离。"""
     store = _store(tmp_path)
-    assert store._collection_name == "chunks__fake__v1"
+    assert store._collection_name == f"chunks__fake__v{INGESTION_SCHEMA_VERSION}"
 
 
 def test_collection_isolated_by_embed_model(tmp_path: Path) -> None:
@@ -114,9 +237,13 @@ def test_collection_isolated_by_embed_model(tmp_path: Path) -> None:
     from app.vectorstore.embedder import CloudEmbedder
 
     local = create_vector_store(persist_dir=tmp_path, embedder=FakeEmbedder())
-    cloud = create_vector_store(persist_dir=tmp_path, embedder=CloudEmbedder(base_url="http://e.test/v1", model="bge-m3"))
-    assert local._collection_name == "chunks__fake__v1"
-    assert cloud._collection_name == "chunks__cloud-bge-m3__v1"
+    cloud = create_vector_store(
+        persist_dir=tmp_path, embedder=CloudEmbedder(base_url="http://e.test/v1", model="bge-m3")
+    )
+    assert local._collection_name == f"chunks__fake__v{INGESTION_SCHEMA_VERSION}"
+    assert cloud._collection_name == (
+        f"chunks__{cloud._embedder.fingerprint}__v{INGESTION_SCHEMA_VERSION}"
+    )
     assert local._collection_name != cloud._collection_name
 
 
@@ -258,6 +385,38 @@ def test_zero_outbound_full_flow(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     assert store._collection.count() == 2
 
 
+def test_two_store_instances_serialize_parallel_writes(tmp_path: Path) -> None:
+    """同数据目录的两个 client 并发写时由文件锁串行化，块不丢失。"""
+
+    left = _store(tmp_path)
+    right = _store(tmp_path)
+
+    def write(store: ChromaVectorStore, prefix: str) -> None:
+        for index in range(10):
+            block_id = f"{prefix}-{index}"
+            store.upsert(
+                [
+                    (
+                        block_id,
+                        f"text {block_id}",
+                        [1.0, float(index), 0.0, 0.0],
+                        _block(block_id, f"{prefix}.md"),
+                    )
+                ]
+            )
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        futures = [
+            executor.submit(write, left, "left"),
+            executor.submit(write, right, "right"),
+        ]
+        for future in futures:
+            future.result()
+
+    assert left.count() == 20
+    assert right.count() == 20
+
+
 def _raise_outbound(*args: object, **kwargs: object) -> None:
     raise AssertionError("Unexpected outbound network call")
 
@@ -302,6 +461,61 @@ def test_list_blocks_empty_store(tmp_path: Path) -> None:
     assert store.list_blocks() == []
 
 
+def test_recovers_raw_image_description_from_retained_collection(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    legacy = store._client.get_or_create_collection(
+        name="chunks__legacy__v1",
+        metadata={"hnsw:space": "cosine"},
+    )
+    url = "https://cdn.example.com/expired.png"
+    legacy.upsert(
+        ids=["legacy-image"],
+        documents=[
+            (
+                "【所属主题】事故影响\n【正文上下文】20 万次请求\n"
+                "【图片描述】\n监控截图显示 503 请求集中爆发。"
+            )
+        ],
+        embeddings=[[1.0, 0.0, 0.0, 0.0]],
+        metadatas=[
+            {
+                "block_id": "legacy-image",
+                "chunk_type": "image_description",
+                "image_path": url,
+                "image_content_hash": "old-hash",
+                "source_file": "事故.md",
+            }
+        ],
+    )
+
+    assert store.find_cached_image_description_by_source(url) == (
+        "old-hash",
+        "监控截图显示 503 请求集中爆发。",
+    )
+
+
+def test_integrity_report_validates_embeddings_and_ann_without_content(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    _seed(store)
+
+    report = store.inspect_integrity()
+
+    assert report.healthy is True
+    assert report.logical_count == report.unique_id_count == report.embedding_count == 3
+    assert report.ann_result_count == report.ann_unique_id_count == 3
+    assert report.invalid_dimension_count == 0
+    assert report.non_finite_embedding_count == 0
+    assert "text a" not in str(report.to_dict())
+
+
+def test_empty_index_is_not_a_healthy_release_artifact(tmp_path: Path) -> None:
+    report = _store(tmp_path).inspect_integrity()
+
+    assert report.healthy is False
+    assert report.logical_count == 0
+    assert report.errors == ("EmptyIndex",)
+
+
 # ---------------------------------------------------------------- 11. collection 失效自愈（崩溃根因回归）
 
 
@@ -335,3 +549,75 @@ def test_upsert_self_heals_after_collection_deleted(tmp_path: Path) -> None:
     assert store.count() == 1
     assert store.count_files() == 1
     assert [hit["block_id"] for hit in store.query(QUERY, top_k=3)] == ["block-a"]
+
+
+def test_read_self_heal_recreates_collection_under_cross_process_lock(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """读路径 NotFound 的 get_or_create 必须在跨进程写锁范围内执行。"""
+
+    store = _store(tmp_path)
+    store._client.delete_collection(store._collection_name)
+    active_locks = 0
+    lock_entries = 0
+    original_get_or_create = store._client.get_or_create_collection
+
+    @contextmanager
+    def tracking_lock(_path: Path) -> Iterator[None]:
+        nonlocal active_locks, lock_entries
+        if active_locks:
+            raise AssertionError("exclusive_write_lock must not be nested")
+        active_locks += 1
+        lock_entries += 1
+        try:
+            yield
+        finally:
+            active_locks -= 1
+
+    def guarded_get_or_create(*args: Any, **kwargs: Any) -> Any:
+        assert active_locks == 1
+        return original_get_or_create(*args, **kwargs)
+
+    monkeypatch.setattr(chroma_store_mod, "exclusive_write_lock", tracking_lock)
+    monkeypatch.setattr(store._client, "get_or_create_collection", guarded_get_or_create)
+
+    assert store.count() == 0
+    assert lock_entries == 1
+
+
+def test_write_self_heal_reuses_existing_lock_without_nested_entry(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """写路径已持锁时，自愈复用该锁而不是再次获取文件锁。"""
+
+    store = _store(tmp_path)
+    store._client.delete_collection(store._collection_name)
+    active_locks = 0
+    lock_entries = 0
+    original_get_or_create = store._client.get_or_create_collection
+
+    @contextmanager
+    def non_reentrant_lock(_path: Path) -> Iterator[None]:
+        nonlocal active_locks, lock_entries
+        if active_locks:
+            raise AssertionError("exclusive_write_lock must not be nested")
+        active_locks += 1
+        lock_entries += 1
+        try:
+            yield
+        finally:
+            active_locks -= 1
+
+    def guarded_get_or_create(*args: Any, **kwargs: Any) -> Any:
+        assert active_locks == 1
+        return original_get_or_create(*args, **kwargs)
+
+    monkeypatch.setattr(chroma_store_mod, "exclusive_write_lock", non_reentrant_lock)
+    monkeypatch.setattr(store._client, "get_or_create_collection", guarded_get_or_create)
+
+    store.upsert([("block-a", "text a", VECTORS["block-a"], _block("block-a", "a.md"))])
+
+    assert store.count() == 1
+    assert lock_entries == 1

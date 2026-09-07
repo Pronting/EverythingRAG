@@ -22,13 +22,19 @@ class RetrievedChunk:
 
     block_id: str
     text: str
-    similarity: float
+    # Dense cosine similarity is optional for BM25-only and parent-expansion results.  Keeping
+    # the missing value as None prevents API consumers from presenting "0%" as a real score.
+    similarity: float | None
     source_file: str
     platform: str
     chunk_type: str
     anchor: str | None
     heading_path: str | None
     metadata: dict[str, Any]  # 原始元数据（标量 dict）
+    match_type: str = "dense"
+    # A short atomic block remains the citation target, while this optional same-section view
+    # gives the model and source panel enough surrounding meaning to interpret it correctly.
+    context_text: str | None = None
 
 
 # 缺失字段的安全默认值（真实索引源_file 必有；mock/历史数据可缺）

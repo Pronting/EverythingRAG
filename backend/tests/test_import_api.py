@@ -15,12 +15,13 @@ from fastapi.testclient import TestClient
 
 from app.api import deps
 from app.api.routes import imports as imports_mod
+from app.ingestion.index_schema import make_index_fingerprint
 from app.ingestion.pipeline import IngestReport, ProgressSnapshot
 from app.ingestion.scanner import DiscoveredFile
 from app.ingestion.state_store import DocumentStateStore
 from app.ingestion.sync import SyncProgress, SyncReport
 from app.main import app
-from tests.fakes import FakeVectorStore
+from tests.fakes import FakeEmbedder, FakeVectorStore
 
 
 class FakePipeline:
@@ -265,6 +266,39 @@ def test_status_knowledge_counts_reflect_store() -> None:
     assert data["knowledge"]["image_count"] == 0
     assert data["knowledge"]["last_sync_at"] is None  # 未导入过 -> None
     assert data["knowledge"]["needs_rebuild"] is False
+
+
+@pytest.mark.parametrize(
+    ("stored_fingerprint", "chunk_count", "expected"),
+    [
+        (make_index_fingerprint("fake"), 7, False),
+        (make_index_fingerprint("old-model"), 7, True),
+        (make_index_fingerprint("fake"), 0, True),
+    ],
+)
+def test_status_needs_rebuild_reflects_state_and_current_collection(
+    tmp_path: Path,
+    stored_fingerprint: str,
+    chunk_count: int,
+    expected: bool,
+) -> None:
+    """状态指纹不匹配，或已有文档但当前 collection 为空，均暴露 rebuild。"""
+
+    state = DocumentStateStore(tmp_path / "status-state.db")
+    state.upsert_fingerprint(
+        "/abs/a.md", "hash", 1.0, 10, 1, index_fingerprint=stored_fingerprint
+    )
+    app.dependency_overrides[deps.get_state_store] = lambda: state
+    app.dependency_overrides[deps.get_embedder] = lambda: FakeEmbedder("fake")
+    app.dependency_overrides[deps.get_vector_store] = lambda: FakeVectorStore(
+        file_count=1 if chunk_count else 0,
+        chunk_count=chunk_count,
+    )
+    try:
+        data = TestClient(app).get("/api/status").json()
+        assert data["knowledge"]["needs_rebuild"] is expected
+    finally:
+        state.close()
 
 
 def test_status_last_sync_at_after_import(client: TestClient, tmp_path: Path) -> None:

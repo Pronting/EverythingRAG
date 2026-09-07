@@ -1,5 +1,7 @@
 import type { Source } from "../types";
 import { basename } from "../util/path";
+import { sourceMatchDescription } from "../util/source";
+import { MarkdownContent } from "./MarkdownContent";
 
 interface CitationPanelProps {
   sources: Source[];
@@ -12,7 +14,6 @@ interface CitationPanelProps {
 export function CitationPanel({ sources, index, onClose, onSelect }: CitationPanelProps) {
   const source = sources[index];
   const isWeb = source.source_type === "web";
-  const percent = Math.round(source.similarity * 100);
 
   return (
     <aside className="citation-panel" aria-label="来源详情">
@@ -49,6 +50,9 @@ export function CitationPanel({ sources, index, onClose, onSelect }: CitationPan
         </div>
       </header>
       <div className="citation-panel-body">
+        {source.image_url && /^(https?:\/\/|\/api\/knowledge\/images\/[a-f0-9]{16,64}$)/i.test(source.image_url) && (
+          <a className="citation-panel-link" href={source.image_url} target="_blank" rel="noreferrer noopener">查看原图</a>
+        )}
         {isWeb ? (
           <>
             <div className="citation-panel-file">{source.source_file}</div>
@@ -72,10 +76,12 @@ export function CitationPanel({ sources, index, onClose, onSelect }: CitationPan
             {source.heading_path !== null && source.heading_path !== "" && (
               <div className="citation-panel-heading">{source.heading_path}</div>
             )}
-            <div className="citation-panel-meta">相关度 {percent}%</div>
+            <div className="citation-panel-meta">{sourceMatchDescription(source)}</div>
           </>
         )}
-        <p className="citation-panel-text">{source.text}</p>
+        {source.chunk_type === "image_description" ? (
+          <div className="citation-panel-evidence"><MarkdownContent content={source.text} /></div>
+        ) : <p className="citation-panel-text">{source.text}</p>}
       </div>
     </aside>
   );

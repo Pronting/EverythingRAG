@@ -146,14 +146,14 @@ def test_pipeline_ingest_retrieval_closed_loop(tmp_path: Path) -> None:
     )
     report = IngestionPipeline(embedder=embedder, vectorstore=store).ingest(root)
 
-    # 计数与 store 一致（apple=1、orange=2 含代码块、polar 短区合并为 1）
+    # 计数与 store 一致（apple=1、orange=2 含代码块、polar 两个标题区间各 1）
     assert report.files_scanned == 3
     assert report.files_parsed == 3
     assert report.files_skipped == 0
-    assert report.chunks == 4
-    assert report.blocks_upserted == 4
+    assert report.chunks == 5
+    assert report.blocks_upserted == 5
     assert report.errors == ()
-    assert store.count() == 4
+    assert store.count() == 5
 
     # 检索：关键字「橘子」命中含该词的块，来源指向 fixture 文件
     retriever = VectorRetriever(store)
@@ -228,7 +228,7 @@ def test_zero_outbound_full_closed_loop(tmp_path: Path, monkeypatch: pytest.Monk
         embedder=embedder,
     )
     report = IngestionPipeline(embedder=embedder, vectorstore=store).ingest(root)
-    assert report.blocks_upserted == 4
+    assert report.blocks_upserted == 5
 
     retriever = VectorRetriever(store)
     service = ChatService(embedder=embedder, retriever=retriever, chat_model=FakeChatModel())

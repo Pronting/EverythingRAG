@@ -8,7 +8,7 @@ from __future__ import annotations
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import SecretStr
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 APP_VERSION = "0.1.0"
@@ -26,7 +26,7 @@ class Settings(BaseSettings):
     data_dir: Path = Path.home() / ".everything-rag"
     # 本服务绑定（本地回环，不开放远程访问）
     host: str = "127.0.0.1"
-    port: int = 8000  # 实际运行用随机端口（见 scripts/run.py）
+    port: int = 9999  # 启动脚本固定使用 9999（见 scripts/run.py）
     # CORS：同源部署默认关闭，保留配置位
     enable_cors: bool = False
     cors_origins: list[str] = []
@@ -39,6 +39,9 @@ class Settings(BaseSettings):
     vision_api_key: SecretStr | None = None  # env: EVERYTHING_RAG_VISION_API_KEY
     # 识图并发度（云端 VLM 多线程并发请求数；受服务商限流约束，默认 5）
     vision_concurrency: int = 5  # env: EVERYTHING_RAG_VISION_CONCURRENCY
+    # 有界导入并发；设为 1 可回退串行，避免触发服务商限流。
+    ingest_embed_workers: int = Field(default=4, ge=1, le=16)
+    ingest_parse_workers: int = Field(default=4, ge=1, le=16)
     # 对话 provider（OpenAI 兼容云端；API key 仅运行期从环境读取，绝不落本类值）
     chat_provider_type: str = "openai_compatible"
     chat_base_url: str | None = None  # env: EVERYTHING_RAG_CHAT_BASE_URL

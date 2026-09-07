@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
+from html.parser import HTMLParser
+from threading import local
 
 from markdown_it import MarkdownIt
 from markdown_it.token import Token
@@ -17,7 +19,15 @@ from markdown_it.token import Token
 #: disable("code")：关闭「4 空格缩进 = 代码块」——Yuque/Obsidian 导出的工程文档
 #: 常用缩进做视觉排版（如加粗标签行、eventType 列表），被误判成代码块会产出
 #: 「只有标签、零信息」的噪声块，且代码块在切块时永不被合并/去 ** 标记。
-_MD = MarkdownIt("default").disable("code")
+_PARSERS = local()
+
+
+def _markdown_parser() -> MarkdownIt:
+    parser = getattr(_PARSERS, "markdown", None)
+    if parser is None:
+        parser = MarkdownIt("default").disable("code")
+        _PARSERS.markdown = parser
+    return parser
 
 #: 表格单元格里作者手写的假标题标记（如 ``| ##### 事件 |``）——单元格内 ``#``
 #: 不是真标题（标题是块级），纯噪声，切块时剥离。
@@ -27,6 +37,61 @@ _HEADING_MARKER_RE = re.compile(r"^#{1,6}\s*")
 _PUNCT_RE = re.compile(r"[^\w\s-]")
 _SPACE_RUN_RE = re.compile(r"\s+")
 _INLINE_SPACES_RE = re.compile(r"\s{2,}")
+
+# 文档来自 Obsidian / 语雀 / 富文本编辑器时，经常在 Markdown 中混入 HTML。
+# 先把围栏代码以外的 HTML 转成等价 Markdown，再交给 markdown-it，避免 ``<br>``
+# 把表格单元格直接粘成一个词，也避免 script/style 等不可见内容进入 embedding。
+_HTML_TRIGGER_RE = re.compile(
+    r"<!--|</?[A-Za-z][A-Za-z0-9-]*(?:\s[^<>]*?)?\s*/?>|"
+    r"&(?:#[0-9]+|#x[0-9A-Fa-f]+|[A-Za-z][A-Za-z0-9]+);"
+)
+_FENCE_LINE_RE = re.compile(r"^[ \t]{0,3}(?P<fence>`{3,}|~{3,})(?P<rest>.*)$")
+_PROTECTED_INLINE_RE = re.compile(
+    r"(?P<code>(?P<ticks>`+)[^\n]*?(?P=ticks))|"
+    r"(?P<autolink><(?:https?://|mailto:)[^>\n]+>)",
+    re.IGNORECASE,
+)
+_INLINE_PRESENTATION_TAG_RE = re.compile(r"</?(?:font|span)\b(?:\s[^>]*)?>", re.IGNORECASE)
+_RESIDUAL_MARKER_RE = re.compile(r"(?<!\\)(?:\*{2,3}|_{2,3}|~{2})")
+_ZERO_WIDTH_RE = re.compile("[\u200b\u200c\u200d\ufeff]")
+
+_HTML_DROP_CONTENT = frozenset({"script", "style", "template", "noscript"})
+_HTML_BLOCK_TAGS = frozenset(
+    {
+        "address",
+        "article",
+        "aside",
+        "blockquote",
+        "details",
+        "div",
+        "footer",
+        "header",
+        "main",
+        "nav",
+        "p",
+        "section",
+        "summary",
+    }
+)
+_HTML_HEADING_TAGS = frozenset(f"h{level}" for level in range(1, 7))
+_HTML_VOID_TAGS = frozenset(
+    {
+        "area",
+        "base",
+        "br",
+        "col",
+        "embed",
+        "hr",
+        "img",
+        "input",
+        "link",
+        "meta",
+        "param",
+        "source",
+        "track",
+        "wbr",
+    }
+)
 
 #: 噪声行识别（优化①：低信息块不污染向量检索）。
 #: 只作用于「顶层段落」，不碰 list/quote/表格项（避免链接收藏节整节消失）。
@@ -81,6 +146,152 @@ class _MutableNode:
     children: list[_MutableNode] = field(default_factory=list)
 
 
+class _HTMLToMarkdown(HTMLParser):
+    """把富文本 HTML 片段降级成可继续由 markdown-it 解析的 Markdown。
+
+    这里只保留可见语义，不渲染 HTML。HTML 表格会转成标准 Markdown 表格，列表、
+    标题与段落保留结构；未知标签只去标签、保留正文。``script/style/comment`` 内容
+    完全丢弃。调用方负责把围栏代码与行内代码作为 literal 送入，避免误清洗代码。
+    """
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self._parts: list[str] = []
+        self._ignored: list[str] = []
+        self._in_pre = False
+        self._table_depth = 0
+        self._table_rows: list[tuple[list[str], list[bool]]] = []
+        self._table_row: list[str] | None = None
+        self._table_row_headers: list[bool] | None = None
+        self._table_cell: list[str] | None = None
+        self._table_cell_is_header = False
+
+    def _emit(self, text: str) -> None:
+        if not text or self._ignored:
+            return
+        if self._table_depth and self._table_cell is not None:
+            self._table_cell.append(text)
+        else:
+            self._parts.append(text)
+
+    def _block_break(self) -> None:
+        if self._table_depth and self._table_cell is not None:
+            self._emit("；")
+        else:
+            self._parts.append("\n\n")
+
+    def append_literal(self, text: str) -> None:
+        """追加受保护的 Markdown 行内代码 / 自动链接，不把其中 HTML 当标签。"""
+        self._emit(text)
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        tag = tag.lower()
+        if self._ignored:
+            if tag in _HTML_DROP_CONTENT:
+                self._ignored.append(tag)
+            return
+        if tag in _HTML_DROP_CONTENT:
+            self._ignored.append(tag)
+            return
+        if tag == "table":
+            if self._table_depth == 0:
+                self._block_break()
+                self._table_rows = []
+            self._table_depth += 1
+            return
+        if self._table_depth:
+            if tag == "tr":
+                self._table_row = []
+                self._table_row_headers = []
+            elif tag in {"th", "td"}:
+                self._table_cell = []
+                self._table_cell_is_header = tag == "th"
+            elif tag == "br":
+                self._emit("；")
+            return
+        if tag == "br":
+            # 用中文分号保留语义边界；换成空行会破坏 Markdown 表格中的 <br> 单元格。
+            self._emit("；")
+        elif tag == "img":
+            values = {key.lower(): value or "" for key, value in attrs}
+            src = values.get("src", "").strip()
+            alt = values.get("alt", "").strip()
+            if src:
+                self._emit(f"![{alt}]({src})")
+            elif alt:
+                self._emit(alt)
+        elif tag == "li":
+            self._block_break()
+            self._emit("- ")
+        elif tag in {"ul", "ol"}:
+            self._block_break()
+        elif tag in _HTML_HEADING_TAGS:
+            self._block_break()
+            self._emit("#" * int(tag[1:]) + " ")
+        elif tag == "pre":
+            self._block_break()
+            self._emit("```\n")
+            self._in_pre = True
+        elif tag == "code" and not self._in_pre:
+            self._emit("`")
+        elif tag == "hr" or tag in _HTML_BLOCK_TAGS:
+            self._block_break()
+
+    def handle_startendtag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        self.handle_starttag(tag, attrs)
+        if tag.lower() not in _HTML_VOID_TAGS:
+            self.handle_endtag(tag)
+
+    def handle_endtag(self, tag: str) -> None:
+        tag = tag.lower()
+        if self._ignored:
+            if tag == self._ignored[-1]:
+                self._ignored.pop()
+            return
+        if self._table_depth:
+            if tag in {"th", "td"} and self._table_cell is not None:
+                cell = _normalize_html_cell("".join(self._table_cell))
+                if self._table_row is not None and self._table_row_headers is not None:
+                    self._table_row.append(cell)
+                    self._table_row_headers.append(self._table_cell_is_header)
+                self._table_cell = None
+            elif tag == "tr" and self._table_row is not None:
+                if any(self._table_row):
+                    self._table_rows.append((self._table_row, self._table_row_headers or []))
+                self._table_row = None
+                self._table_row_headers = None
+            elif tag == "table":
+                self._table_depth -= 1
+                if self._table_depth == 0:
+                    self._parts.append(_html_table_to_markdown(self._table_rows))
+                    self._block_break()
+            return
+        if (
+            tag == "li"
+            or tag in {"ul", "ol"}
+            or tag in _HTML_BLOCK_TAGS
+            or tag in _HTML_HEADING_TAGS
+        ):
+            self._block_break()
+        elif tag == "pre":
+            self._emit("\n```")
+            self._block_break()
+            self._in_pre = False
+        elif tag == "code" and not self._in_pre:
+            self._emit("`")
+
+    def handle_data(self, data: str) -> None:
+        self._emit(data)
+
+    def handle_comment(self, data: str) -> None:
+        return
+
+    def result(self) -> str:
+        text = "".join(self._parts)
+        text = re.sub(r"[ \t]+\n", "\n", text)
+        return re.sub(r"\n{3,}", "\n\n", text)
+
+
 def parse_markdown(text: str) -> ParsedMarkdown:
     """把 Markdown 文本解析为块结构 + 标题树 + 归一化正文（纯函数，零出网）。
 
@@ -89,8 +300,10 @@ def parse_markdown(text: str) -> ParsedMarkdown:
     """
     text = _to_lf(text).lstrip("﻿")
     meta, body = _split_frontmatter(text)
-    tokens = _MD.parse(body)
-    blocks = _build_blocks(tokens, has_frontmatter=body is not text)
+    has_frontmatter = body is not text
+    body = _sanitize_html_outside_fences(body)
+    tokens = _markdown_parser().parse(body)
+    blocks = _build_blocks(tokens, has_frontmatter=has_frontmatter)
     return ParsedMarkdown(
         title=_resolve_title(meta, tokens),
         heading_tree=_heading_tree_from_blocks(blocks),
@@ -102,6 +315,106 @@ def parse_markdown(text: str) -> ParsedMarkdown:
 def _to_lf(text: str) -> str:
     """统一换行为 LF（CRLF / 独立 CR → LF）。"""
     return text.replace("\r\n", "\n").replace("\r", "\n")
+
+
+def _sanitize_html_outside_fences(text: str) -> str:
+    """清洗围栏代码之外的 HTML；代码围栏逐字保留。
+
+    行扫描而非一个覆盖全文件的正则，支持反引号/波浪线围栏和未闭合围栏。这样
+    `````html`` 内的标签与实体不会被误删，正文中的 HTML 则先转成语义 Markdown。
+    """
+    output: list[str] = []
+    pending: list[str] = []
+    fence_char = ""
+    fence_len = 0
+
+    def flush_pending() -> None:
+        if pending:
+            output.append(_sanitize_html_fragment("".join(pending)))
+            pending.clear()
+
+    for line in text.splitlines(keepends=True):
+        match = _FENCE_LINE_RE.match(line)
+        if not fence_char:
+            if match:
+                flush_pending()
+                fence = match.group("fence")
+                fence_char = fence[0]
+                fence_len = len(fence)
+                output.append(line)
+            else:
+                pending.append(line)
+            continue
+        output.append(line)
+        if match:
+            fence = match.group("fence")
+            if (
+                fence[0] == fence_char
+                and len(fence) >= fence_len
+                and not match.group("rest").strip()
+            ):
+                fence_char = ""
+                fence_len = 0
+    flush_pending()
+    return "".join(output)
+
+
+def _sanitize_html_fragment(text: str) -> str:
+    """清洗单个非围栏片段，并保护 Markdown 行内代码与自动链接。"""
+    if _HTML_TRIGGER_RE.search(text) is None:
+        return text
+    cleaner = _HTMLToMarkdown()
+    pos = 0
+    for match in _PROTECTED_INLINE_RE.finditer(text):
+        cleaner.feed(text[pos : match.start()])
+        literal = match.group(0)
+        if match.group("code") is not None:
+            # Yuque frequently wraps a highlighted identifier as
+            # ``<font style="...">consume</font>``.  The backticks are meaningful, the
+            # presentational wrapper is not.  Other inline HTML/code remains literal.
+            literal = _INLINE_PRESENTATION_TAG_RE.sub("", literal)
+        cleaner.append_literal(literal)
+        pos = match.end()
+    cleaner.feed(text[pos:])
+    cleaner.close()
+    return cleaner.result()
+
+
+def _normalize_html_cell(text: str) -> str:
+    """HTML 表格单元格归一化：折叠空白，保留 <br> 的中文分号语义边界。"""
+    text = re.sub(r"\s*；\s*", "；", text)
+    return _SPACE_RUN_RE.sub(" ", text).strip(" ；")
+
+
+def _escape_markdown_table_cell(text: str) -> str:
+    return text.replace("|", r"\|").replace("\n", "；")
+
+
+def _html_table_to_markdown(rows: list[tuple[list[str], list[bool]]]) -> str:
+    """把 HTML 表格转成标准 Markdown 表格，供既有表头语义化逻辑复用。"""
+    if not rows:
+        return ""
+    width = max(len(cells) for cells, _ in rows)
+    if width <= 0:
+        return ""
+    first_cells, first_flags = rows[0]
+    has_header = any(first_flags)
+    if has_header:
+        header = first_cells + [""] * (width - len(first_cells))
+        data_rows = [cells + [""] * (width - len(cells)) for cells, _ in rows[1:]]
+    else:
+        header = [f"列{idx}" for idx in range(1, width + 1)]
+        data_rows = [cells + [""] * (width - len(cells)) for cells, _ in rows]
+    # 只有表头没有数据时仍保留可见标题，避免标准 Markdown 表头在 parser 中不产正文块。
+    if not data_rows:
+        return "\n\n" + "；".join(cell for cell in header if cell) + "\n\n"
+
+    def row_text(cells: list[str]) -> str:
+        return "| " + " | ".join(_escape_markdown_table_cell(cell) for cell in cells) + " |"
+
+    rendered = [row_text(header), row_text(["---"] * width)]
+    rendered.extend(row_text(row) for row in data_rows)
+    return "\n\n" + "\n".join(rendered) + "\n\n"
 
 
 def _split_frontmatter(text: str) -> tuple[dict[str, str], str]:
@@ -267,7 +580,10 @@ def _inline_text_no_images(tok: Token) -> str:
     """inline token 的非图片文本（图片 alt 不进正文，图片已单独成块）。"""
     parts: list[str] = []
     for child in tok.children or []:
-        if child.type in ("text", "code_inline"):
+        if child.type == "text":
+            parts.append(_clean_visible_text(child.content))
+        elif child.type == "code_inline":
+            # Markdown 代码已被 tokenizer 确认，内部 ** / HTML / URL 必须原样保留。
             parts.append(child.content)
         elif child.type == "image":
             continue
@@ -331,7 +647,9 @@ def _inline_token_text(tok: Token) -> str:
     """从 inline token 的子 token 提取纯文本：去标记、保可读内容。"""
     parts: list[str] = []
     for child in tok.children or []:
-        if child.type in ("text", "code_inline"):
+        if child.type == "text":
+            parts.append(_clean_visible_text(child.content))
+        elif child.type == "code_inline":
             parts.append(child.content)
         elif child.type == "image":
             alt = _image_alt(child)
@@ -367,8 +685,19 @@ def _is_noise_text(text: str) -> bool:
 def _image_alt(tok: Token) -> str:
     """图片 token 的 alt 文本（无 alt 返回空串）。"""
     if tok.children:
-        return "".join(c.content for c in tok.children)
-    return tok.content
+        return _clean_visible_text("".join(c.content for c in tok.children))
+    return _clean_visible_text(tok.content)
+
+
+def _clean_visible_text(text: str) -> str:
+    """删除 tokenizer 未消费的展示标记；不作用于代码 token 或 URL token。
+
+    合法 Markdown 强调/删除线通常已被 markdown-it 拆成标记 token；这里只处理导出文档
+    常见的残缺 ``**`` / ``__`` / ``~~``，同时去掉零宽字符。单星号、下划线词与 URL
+    均保留，避免过度清洗损坏正文。
+    """
+    text = _ZERO_WIDTH_RE.sub("", text)
+    return _RESIDUAL_MARKER_RE.sub("", text)
 
 
 def _normalize_text(text: str) -> str:

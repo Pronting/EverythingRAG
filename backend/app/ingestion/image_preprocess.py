@@ -22,7 +22,9 @@ class ImageDecodeError(Exception):
     """图片无法解码 / 损坏 / 空内容（调用方据此标记「不可读」并跳过）。"""
 
 
-def preprocess_image(data: bytes) -> bytes:
+def preprocess_image(
+    data: bytes, *, max_edge: int = MAX_EDGE, max_pixels: int = MAX_PIXELS,
+) -> bytes:
     """把任意图片字节解码并重编码为降采样后的 JPEG（纯函数，零出网）。
 
     - 先 verify() 校验完整性（半截文件 / 非图字节在此即抛，而非转换期才炸）；
@@ -40,20 +42,22 @@ def preprocess_image(data: bytes) -> bytes:
     with Image.open(io.BytesIO(data)) as img:
         img = ImageOps.exif_transpose(img)
         img = img.convert("RGB")
-        img = _downsample(img)
+        img = _downsample(img, max_edge=max_edge, max_pixels=max_pixels)
         out = io.BytesIO()
         img.save(out, format="JPEG", quality=JPEG_QUALITY)
         return out.getvalue()
 
 
-def _downsample(img: Image.Image) -> Image.Image:
+def _downsample(
+    img: Image.Image, *, max_edge: int = MAX_EDGE, max_pixels: int = MAX_PIXELS,
+) -> Image.Image:
     """降采样到最长边 ≤ MAX_EDGE 且总像素 ≤ MAX_PIXELS；已达标则原样返回。"""
     width, height = img.size
     longest = max(width, height)
     pixels = width * height
-    if longest <= MAX_EDGE and pixels <= MAX_PIXELS:
+    if longest <= max_edge and pixels <= max_pixels:
         return img
-    scale = min(1.0, MAX_EDGE / longest, (MAX_PIXELS / pixels) ** 0.5)
+    scale = min(1.0, max_edge / longest, (max_pixels / pixels) ** 0.5)
     new_width = max(1, int(width * scale))
     new_height = max(1, int(height * scale))
     return img.resize((new_width, new_height), Image.LANCZOS)

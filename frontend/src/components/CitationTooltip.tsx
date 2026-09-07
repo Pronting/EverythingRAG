@@ -1,5 +1,6 @@
 import type { Source } from "../types";
 import { basename } from "../util/path";
+import { sourceMatchDescription } from "../util/source";
 
 interface CitationTooltipProps {
   source: Source;
@@ -25,7 +26,6 @@ export function CitationTooltip({ source, anchor }: CitationTooltipProps) {
   top = Math.max(8, top);
 
   const isWeb = source.source_type === "web";
-  const percent = Math.round(source.similarity * 100);
 
   return (
     <div className="citation-tooltip" role="tooltip" style={{ left, top, width: TOOLTIP_WIDTH }}>
@@ -38,7 +38,7 @@ export function CitationTooltip({ source, anchor }: CitationTooltipProps) {
       {isWeb && source.url !== null && source.url !== undefined && source.url !== "" && (
         <div className="citation-tooltip-url">{source.url}</div>
       )}
-      {!isWeb && <div className="citation-tooltip-meta">相关度 {percent}%</div>}
+      {!isWeb && <div className="citation-tooltip-meta">{sourceMatchDescription(source)}</div>}
       <p className="citation-tooltip-text">{source.text}</p>
     </div>
   );

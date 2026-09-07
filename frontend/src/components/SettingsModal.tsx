@@ -1,9 +1,30 @@
 import { useEffect, useRef, useState } from "react";
 import { deleteAvatar, getSettings, updateSettings, uploadAvatar } from "../api/settingsApi";
 import type { AvatarKind } from "../api/settingsApi";
-import type { SettingsUpdate, SettingsView, ThemeValue, ToastType } from "../types";
+import type { StatusResponse, SettingsUpdate, SettingsView, ThemeValue, ToastType } from "../types";
+import BrandMark from "./BrandMark";
+import KnowledgeSettings from "./KnowledgeSettings";
+import SettingsSelect from "./SettingsSelect";
+
+const SETTINGS_PAGES = [
+  { id: "knowledge", label: "知识库", icon: "M4 4h6v16H4zM14 4h6v16h-6z" },
+  { id: "appearance", label: "外观与头像", icon: "M12 3a9 9 0 1 0 9 9c0-1.5-1-2-2.5-2H16a2 2 0 0 1-2-2V5.5C14 4 13.5 3 12 3ZM7 10h.01M8 15h.01M12 17h.01" },
+  { id: "models", label: "模型服务", icon: "M5 5h14v14H5zM9 9h6v6H9zM9 2v3m6-3v3M9 19v3m6-3v3M2 9h3m-3 6h3m14-6h3m-3 6h3" },
+  { id: "search", label: "联网搜索", icon: "M3 12h18M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18Zm0 0c5 5 5 13 0 18-5-5-5-13 0-18Z" },
+  { id: "answers", label: "回答偏好", icon: "M4 5h16v12H9l-5 4V5Zm4 4h8m-8 4h5" },
+] as const;
+type SettingsPage = typeof SETTINGS_PAGES[number]["id"];
+
+function ThemePreview({ mode }: { mode: ThemeValue }) {
+  return <span className={`theme-preview theme-preview-${mode}`} aria-hidden="true">
+    <span className="theme-preview-sidebar"><i /><i /><i /></span>
+    <span className="theme-preview-main"><BrandMark /><i /><span className="theme-preview-composer" /></span>
+  </span>;
+}
 
 interface SettingsModalProps {
+  status: StatusResponse | null;
+  onKnowledgeChanged: () => void;
   open: boolean;
   onClose: () => void;
   /** 保存成功后回调（父级刷新 /api/status 等）。 */
@@ -50,16 +71,16 @@ function AvatarField({
       </div>
       <div className="avatar-controls">
         <span className="avatar-label">{label}</span>
-        <span className="avatar-filename">
-          {remove ? "将恢复默认" : file !== null ? file.name : currentUrl !== null ? "已自定义" : "默认头像"}
-        </span>
+        {(remove || file !== null) && <span className="avatar-filename">
+          {remove ? "将恢复默认" : file?.name}
+        </span>}
         <div className="avatar-buttons">
           <button
             type="button"
             className="avatar-pick"
             onClick={() => inputRef.current?.click()}
           >
-            选择图片…
+            选择图片
           </button>
           {(currentUrl !== null || file !== null || remove) && (
             <button type="button" className="avatar-remove" onClick={onRemove}>
@@ -92,16 +113,15 @@ function AvatarFallback({ kind }: { kind: AvatarKind }) {
       <path d="M12 12a5 5 0 1 0 0-10 5 5 0 0 0 0 10Zm0 2c-4.7 0-8 3-8 6 0 1 .8 2 2 2h12c1.2 0 2-1 2-2 0-3-3.3-6-8-6Z" />
     </svg>
   ) : (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
-      <path d="M12 2l1.9 5.6L19.5 9.5l-5.6 1.9L12 17l-1.9-5.6L4.5 9.5l5.6-1.9L12 2Z" />
-      <path d="M19 14l.9 2.6 2.6.9-2.6.9L19 21l-.9-2.6-2.6-.9 2.6-.9L19 14Z" opacity=".7" />
-    </svg>
+    <BrandMark />
   );
 }
 
-/** 设置弹窗：外观 / 对话模型 / 嵌入模型（云端）/ 系统提示词 / 头像。ChatGPT 风格分节表单。 */
+/** 设置弹窗：模型、白名单回答偏好、外观与头像。核心 RAG 策略由后端统一管理。 */
 export default function SettingsModal({
   open,
+  status,
+  onKnowledgeChanged,
   onClose,
   onSaved,
   theme,
@@ -112,6 +132,23 @@ export default function SettingsModal({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  const [activePage, setActivePage] = useState<SettingsPage>("appearance");
+  const [testingModel, setTestingModel] = useState<string | null>(null);
+  const [connectionResult, setConnectionResult] = useState<{ success: boolean; message: string; latency_ms?: number } | null>(null);
+  const connectionDialog = useRef<HTMLDialogElement>(null);
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const modalRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (bodyRef.current) bodyRef.current.scrollTop = 0;
+  }, [activePage]);
+
+  useEffect(() => {
+    if (!open) return;
+    const previousFocus = document.activeElement as HTMLElement | null;
+    modalRef.current?.querySelector<HTMLButtonElement>(".settings-close")?.focus();
+    return () => previousFocus?.focus();
+  }, [open]);
 
   // 对话模型表单
   const [chatBaseUrl, setChatBaseUrl] = useState("");
@@ -138,6 +175,24 @@ export default function SettingsModal({
   const [visionKeySet, setVisionKeySet] = useState(false);
   const [visionKeyHint, setVisionKeyHint] = useState<string | null>(null);
 
+  const testConnection = async (kind: "chat" | "embed" | "vision") => {
+    if (testingModel) return;
+    const config = kind === "chat" ? [chatBaseUrl, chatModel, chatKey, chatKeyCleared] : kind === "embed" ? [embedBaseUrl, embedModel, embedKey, embedKeyCleared] : [visionBaseUrl, visionModel, visionKey, visionKeyCleared];
+    setTestingModel(kind);
+    setConnectionResult(null);
+    connectionDialog.current?.showModal();
+    try {
+      const response = await fetch("/api/settings/test-connection", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ kind, base_url: config[0], model: config[1], api_key: config[3] ? "" : config[2] || undefined }),
+      });
+      if (!response.ok) throw new Error(response.status === 404 || response.status === 405 ? "请更新并重启本地服务后重试" : "测试请求失败，请检查配置后重试");
+      setConnectionResult(await response.json());
+    } catch (cause) {
+      setConnectionResult({ success: false, message: cause instanceof Error ? cause.message : "无法连接本地服务" });
+    } finally { setTestingModel(null); }
+  };
+
   // 联网搜索表单（Tavily）
   const [searchEnabled, setSearchEnabled] = useState(false);
   const [searchProvider, setSearchProvider] = useState<"tavily" | "searxng">("tavily");
@@ -148,7 +203,15 @@ export default function SettingsModal({
   const [searchBaseUrl, setSearchBaseUrl] = useState("");
   const [searchMaxResults, setSearchMaxResults] = useState(5);
 
-  const [systemPrompt, setSystemPrompt] = useState("");
+  // 只影响表达方式的结构化偏好；不能覆盖身份、grounding、防注入和引用规则。
+  const [answerLanguage, setAnswerLanguage] = useState<"auto" | "zh-CN" | "en">("auto");
+  const [answerVerbosity, setAnswerVerbosity] = useState<
+    "concise" | "balanced" | "detailed"
+  >("balanced");
+  const [answerTone, setAnswerTone] = useState<"natural" | "professional">("natural");
+  const [answerFormat, setAnswerFormat] = useState<"auto" | "prose" | "bullets">("auto");
+  const [knowledgeOnly, setKnowledgeOnly] = useState(false);
+  const [customInstructions, setCustomInstructions] = useState("");
   const [originalEmbed, setOriginalEmbed] = useState<SettingsView["embed"] | null>(null);
 
   // 头像：当前 URL（来自设置）+ 待保存的本地选择（文件 / objectURL 预览 / 恢复默认标记）
@@ -166,6 +229,7 @@ export default function SettingsModal({
     if (!open) return;
     let cancelled = false;
     setLoading(true);
+    setActivePage("appearance");
     setError(null);
     setSaved(false);
     setChatKey("");
@@ -206,7 +270,12 @@ export default function SettingsModal({
         setSearchKeyHint(view.search?.api_key_hint ?? null);
         setSearchBaseUrl(view.search?.base_url ?? "");
         setSearchMaxResults(view.search?.max_results ?? 5);
-        setSystemPrompt(view.system_prompt);
+        setAnswerLanguage(view.answer_preferences.language);
+        setAnswerVerbosity(view.answer_preferences.verbosity);
+        setAnswerTone(view.answer_preferences.tone);
+        setAnswerFormat(view.answer_preferences.response_format);
+        setKnowledgeOnly(view.answer_preferences.knowledge_only);
+        setCustomInstructions(view.answer_preferences.custom_instructions ?? "");
         setOriginalEmbed({ ...view.embed });
         setAvatarUser(view.avatars?.user ?? null);
         setAvatarAgent(view.avatars?.agent ?? null);
@@ -230,7 +299,7 @@ export default function SettingsModal({
     };
   }, [avatarUserPreview, avatarAgentPreview]);
 
-  if (!open) return null;
+
 
   // 嵌入模型是否变更（提示需重新导入）
   const embedDirty =
@@ -245,6 +314,7 @@ export default function SettingsModal({
     const embedPartiallyFilled =
       (embedBase !== "" || embedModelT !== "") && !(embedBase !== "" && embedModelT !== "");
     if (embedPartiallyFilled) {
+      setActivePage("models");
       const message = "云端嵌入需同时提供 Base URL 与模型名";
       setError(message);
       onNotify("error", message);
@@ -256,6 +326,7 @@ export default function SettingsModal({
     const visionPartiallyFilled =
       (visionBase !== "" || visionModelT !== "") && !(visionBase !== "" && visionModelT !== "");
     if (visionPartiallyFilled) {
+      setActivePage("models");
       const message = "识图模型需同时提供 Base URL 与模型名";
       setError(message);
       onNotify("error", message);
@@ -296,7 +367,14 @@ export default function SettingsModal({
             : {}),
           ...(searchBaseUrl.trim() !== "" ? { base_url: searchBaseUrl.trim() } : {}),
         },
-        system_prompt: systemPrompt,
+        answer_preferences: {
+          custom_instructions: customInstructions,
+          language: answerLanguage,
+          verbosity: answerVerbosity,
+          tone: answerTone,
+          response_format: answerFormat,
+          knowledge_only: knowledgeOnly,
+        },
         theme,
       };
       // 嵌入仅在完整配置时发送（避免云端嵌入的必填校验阻塞其它项保存）
@@ -344,6 +422,12 @@ export default function SettingsModal({
       setSearchMaxResults(savedView.search?.max_results ?? 5);
       setSearchKeySet(savedView.search?.api_key_set ?? false);
       setSearchKeyHint(savedView.search?.api_key_hint ?? null);
+      setAnswerLanguage(savedView.answer_preferences.language);
+      setAnswerVerbosity(savedView.answer_preferences.verbosity);
+      setAnswerTone(savedView.answer_preferences.tone);
+      setAnswerFormat(savedView.answer_preferences.response_format);
+      setKnowledgeOnly(savedView.answer_preferences.knowledge_only);
+      setCustomInstructions(savedView.answer_preferences.custom_instructions ?? "");
       setAvatarUserFile(null);
       setAvatarUserPreview(null);
       setAvatarUserRemove(false);
@@ -362,10 +446,24 @@ export default function SettingsModal({
   };
 
   return (
-    <div className="settings-overlay" role="dialog" aria-modal="true" aria-label="设置">
-      <div className="settings-modal">
+    <div className="settings-overlay" hidden={!open} role="dialog" aria-modal="true" aria-label="设置">
+      <div className="settings-modal" ref={modalRef} onKeyDown={(event) => {
+        if (event.key === "Escape") { event.stopPropagation(); onClose(); }
+        if (event.key !== "Tab") return;
+        const elements = Array.from(modalRef.current?.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex="0"]') ?? []).filter((element) => element.getClientRects().length > 0);
+        const first = elements[0];
+        const last = elements[elements.length - 1];
+        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+        if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+      }}>
+        <dialog ref={connectionDialog} className="knowledge-confirm connection-result" aria-labelledby="connection-result-title" onKeyDown={(event) => event.stopPropagation()}>
+          <h3 id="connection-result-title">{testingModel ? "正在测试连接…" : connectionResult?.success ? "连接成功" : "连接失败"}</h3>
+          {(testingModel || !connectionResult?.success) && <p role="status">{testingModel ? "正在请求模型服务" : connectionResult?.message}</p>}
+          {!testingModel && connectionResult?.success && <p>响应耗时 {connectionResult.latency_ms} 毫秒</p>}
+          <div className="knowledge-confirm-actions"><button type="button" className="model-test-button" onClick={() => connectionDialog.current?.close()}>关闭</button></div>
+        </dialog>
         <div className="settings-header">
-          <h2>设置</h2>
+          <div className="settings-heading"><h2>设置</h2></div>
           <button type="button" className="settings-close" onClick={onClose} aria-label="关闭设置">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
               <path d="M3 3l10 10M13 3L3 13" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
@@ -373,21 +471,31 @@ export default function SettingsModal({
           </button>
         </div>
 
-        <div className="settings-body">
+        <div className="settings-layout">
+          <nav className="settings-nav" aria-label="设置分类">
+            {SETTINGS_PAGES.map((page) => <button key={page.id} type="button" className={`settings-nav-item${activePage === page.id ? " active" : ""}`} aria-current={activePage === page.id ? "page" : undefined} onClick={() => setActivePage(page.id)}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={page.icon} /></svg>
+              <span>{page.label}</span>
+            </button>)}
+          </nav>
+        <div className="settings-body" ref={bodyRef}>
+          <section className="settings-section settings-knowledge" hidden={activePage !== "knowledge"}>
+            <KnowledgeSettings status={status} onChanged={onKnowledgeChanged} onNotify={onNotify} />
+          </section>
           {loading && <p className="settings-loading">加载中…</p>}
 
           {!loading && (
             <>
-              <section className="settings-section">
+              <section className="settings-section settings-appearance" hidden={activePage !== "appearance"}>
                 <h3>外观</h3>
-                <div className="settings-segmented" role="radiogroup" aria-label="主题">
+                <div className="settings-segmented theme-options" role="group" aria-label="主题">
                   <button
                     type="button"
                     className={`settings-seg${theme === "light" ? " active" : ""}`}
                     onClick={() => onThemeChange("light")}
                     aria-pressed={theme === "light"}
                   >
-                    浅色
+                    <ThemePreview mode="light" /><span className="theme-option-label">浅色<span className="theme-selected" aria-hidden="true">{theme === "light" ? "✓" : ""}</span></span>
                   </button>
                   <button
                     type="button"
@@ -395,14 +503,13 @@ export default function SettingsModal({
                     onClick={() => onThemeChange("dark")}
                     aria-pressed={theme === "dark"}
                   >
-                    深色
+                    <ThemePreview mode="dark" /><span className="theme-option-label">深色<span className="theme-selected" aria-hidden="true">{theme === "dark" ? "✓" : ""}</span></span>
                   </button>
                 </div>
-                <p className="settings-hint">切换主题时带约 1.5 秒的平滑过渡，默认浅色。</p>
               </section>
 
-              <section className="settings-section">
-                <h3>对话模型</h3>
+              <section className="settings-section settings-model" hidden={activePage !== "models"}>
+                <div className="settings-section-heading"><h3>对话模型</h3><button type="button" className="model-test-button" disabled={testingModel !== null} onClick={() => void testConnection("chat")} aria-label="测试对话模型连接">测试连接</button></div>
                 <label className="settings-field">
                   <span>Base URL</span>
                   <input
@@ -431,14 +538,13 @@ export default function SettingsModal({
                         setChatKey(e.target.value);
                         setChatKeyCleared(false);
                       }}
-                      placeholder={chatKeySet && !chatKeyCleared ? "已设置，留空保持不变" : "API Key（可选）"}
+                      placeholder={chatKeySet && !chatKeyCleared ? "已设置" : "API Key（可选）"}
                       aria-label="对话模型 API Key"
                     />
-                    {chatKeySet && !chatKeyCleared && chatKeyHint !== null && (
-                      <span className="settings-key-hint">…{chatKeyHint.slice(1)}</span>
+                    {chatKeySet && !chatKeyCleared && !chatKey && chatKeyHint !== null && (
+                      <span className="settings-key-hint">{chatKeyHint}</span>
                     )}
-                  </div>
-                  {chatKeySet && (
+                    {chatKeySet && !chatKeyCleared && (
                     <button
                       type="button"
                       className="settings-clear-key"
@@ -450,9 +556,10 @@ export default function SettingsModal({
                       清除 Key
                     </button>
                   )}
+                  </div>
                 </div>
                 <label className="settings-field settings-toggle">
-                  <span>多模态模型（支持图片输入）</span>
+                  <span>图片输入</span>
                   <input
                     type="checkbox"
                     checked={chatSupportsImage}
@@ -460,13 +567,10 @@ export default function SettingsModal({
                     aria-label="多模态模型"
                   />
                 </label>
-                <p className="settings-hint">
-                  关闭（默认）时若贴图，会先用识图模型把图片转成文字再交给本模型（实验性「识图代理」）；开启则本模型直接接收图片。
-                </p>
               </section>
 
-              <section className="settings-section">
-                <h3>嵌入模型</h3>
+              <section className="settings-section settings-model" hidden={activePage !== "models"}>
+                <div className="settings-section-heading"><h3>嵌入模型</h3><button type="button" className="model-test-button" disabled={testingModel !== null} onClick={() => void testConnection("embed")} aria-label="测试嵌入模型连接">测试连接</button></div>
                 <label className="settings-field">
                       <span>Base URL</span>
                       <input
@@ -495,14 +599,13 @@ export default function SettingsModal({
                             setEmbedKey(e.target.value);
                             setEmbedKeyCleared(false);
                           }}
-                          placeholder={embedKeySet && !embedKeyCleared ? "已设置，留空保持不变" : "API Key（可选）"}
+                          placeholder={embedKeySet && !embedKeyCleared ? "已设置" : "API Key（可选）"}
                           aria-label="嵌入模型 API Key"
                         />
-                        {embedKeySet && !embedKeyCleared && embedKeyHint !== null && (
-                          <span className="settings-key-hint">…{embedKeyHint.slice(1)}</span>
+                        {embedKeySet && !embedKeyCleared && !embedKey && embedKeyHint !== null && (
+                          <span className="settings-key-hint">{embedKeyHint}</span>
                         )}
-                      </div>
-                      {embedKeySet && (
+                    {embedKeySet && !embedKeyCleared && (
                         <button
                           type="button"
                           className="settings-clear-key"
@@ -514,6 +617,7 @@ export default function SettingsModal({
                           清除 Key
                         </button>
                       )}
+                      </div>
                     </div>
                 {embedDirty && (
                   <p className="settings-warning" role="alert">
@@ -522,11 +626,8 @@ export default function SettingsModal({
                 )}
               </section>
 
-              <section className="settings-section">
-                <h3>识图模型（图片转文字，可选）</h3>
-                <p className="settings-hint">
-                  用于识别文档中的图床图片并转成文字描述入库。不配置则图片仅存链接、不参与检索。
-                </p>
+              <section className="settings-section settings-model" hidden={activePage !== "models"}>
+                <div className="settings-section-heading"><h3>识图模型</h3><button type="button" className="model-test-button" disabled={testingModel !== null} onClick={() => void testConnection("vision")} aria-label="测试识图模型连接">测试连接</button></div>
                 <label className="settings-field">
                   <span>Base URL</span>
                   <input
@@ -557,16 +658,15 @@ export default function SettingsModal({
                       }}
                       placeholder={
                         visionKeySet && !visionKeyCleared
-                          ? "已设置，留空保持不变"
-                          : "API Key（云端必填，本地 Ollama 留空）"
+                          ? "已设置"
+                          : "API Key（可选）"
                       }
                       aria-label="识图模型 API Key"
                     />
-                    {visionKeySet && !visionKeyCleared && visionKeyHint !== null && (
-                      <span className="settings-key-hint">…{visionKeyHint.slice(1)}</span>
+                    {visionKeySet && !visionKeyCleared && !visionKey && visionKeyHint !== null && (
+                      <span className="settings-key-hint">{visionKeyHint}</span>
                     )}
-                  </div>
-                  {visionKeySet && (
+                    {visionKeySet && !visionKeyCleared && (
                     <button
                       type="button"
                       className="settings-clear-key"
@@ -578,13 +678,11 @@ export default function SettingsModal({
                       清除 Key
                     </button>
                   )}
+                  </div>
                 </div>
-                <p className="settings-hint">
-                  ⚠️ 云端识图会把图床图片发送给服务商；本地 Ollama 端点则图片不出机。配置后需重新导入文档才会生成图片描述。
-                </p>
               </section>
 
-              <section className="settings-section">
+              <section className="settings-section settings-search" hidden={activePage !== "search"}>
                 <h3>联网搜索</h3>
                 <label className="settings-field settings-toggle">
                   <span>启用联网搜索</span>
@@ -597,7 +695,7 @@ export default function SettingsModal({
                 </label>
                 <label className="settings-field">
                   <span>搜索服务</span>
-                  <select
+                  <SettingsSelect
                     value={searchProvider}
                     onChange={(e) => setSearchProvider(e.target.value as "tavily" | "searxng")}
                     aria-label="搜索服务"
@@ -606,7 +704,7 @@ export default function SettingsModal({
                     <option value="searxng" disabled>
                       SearXNG（即将支持）
                     </option>
-                  </select>
+                  </SettingsSelect>
                 </label>
                 <div className="settings-field">
                   <span>API Key</span>
@@ -619,15 +717,14 @@ export default function SettingsModal({
                         setSearchKeyCleared(false);
                       }}
                       placeholder={
-                        searchKeySet && !searchKeyCleared ? "已设置，留空保持不变" : "Tavily API Key"
+                        searchKeySet && !searchKeyCleared ? "已设置" : "Tavily API Key"
                       }
                       aria-label="联网搜索 API Key"
                     />
-                    {searchKeySet && !searchKeyCleared && searchKeyHint !== null && (
-                      <span className="settings-key-hint">…{searchKeyHint.slice(1)}</span>
+                    {searchKeySet && !searchKeyCleared && !searchKey && searchKeyHint !== null && (
+                      <span className="settings-key-hint">{searchKeyHint}</span>
                     )}
-                  </div>
-                  {searchKeySet && (
+                    {searchKeySet && !searchKeyCleared && (
                     <button
                       type="button"
                       className="settings-clear-key"
@@ -639,6 +736,7 @@ export default function SettingsModal({
                       清除 Key
                     </button>
                   )}
+                  </div>
                 </div>
                 <label className="settings-field">
                   <span>结果数（1–10）</span>
@@ -656,26 +754,89 @@ export default function SettingsModal({
                     aria-label="联网搜索结果数"
                   />
                 </label>
-                <p className="settings-hint">
-                  ⚠️ 开启后，你的问题原文会发送给搜索服务商（Tavily）。本功能默认关闭，发送时需在输入框手动点亮「联网搜索」按钮。
-                </p>
               </section>
 
-              <section className="settings-section">
-                <h3>系统提示词</h3>
-                <p className="settings-hint">问答时随消息发送给对话模型，约束回答行为。</p>
-                <textarea
-                  className="settings-prompt"
-                  value={systemPrompt}
-                  onChange={(e) => setSystemPrompt(e.target.value)}
-                  rows={5}
-                  aria-label="系统提示词"
-                />
+              <section className="settings-section settings-preferences" hidden={activePage !== "answers"}>
+                <h3>回答偏好</h3>
+                <label className="settings-field">
+                  <span>回答语言</span>
+                  <SettingsSelect
+                    value={answerLanguage}
+                    onChange={(e) =>
+                      setAnswerLanguage(e.target.value as "auto" | "zh-CN" | "en")
+                    }
+                    aria-label="回答语言"
+                  >
+                    <option value="auto">跟随问题</option>
+                    <option value="zh-CN">简体中文</option>
+                    <option value="en">英文</option>
+                  </SettingsSelect>
+                </label>
+                <label className="settings-field">
+                  <span>回答篇幅</span>
+                  <SettingsSelect
+                    value={answerVerbosity}
+                    onChange={(e) =>
+                      setAnswerVerbosity(
+                        e.target.value as "concise" | "balanced" | "detailed",
+                      )
+                    }
+                    aria-label="回答篇幅"
+                  >
+                    <option value="concise">简洁</option>
+                    <option value="balanced">适中</option>
+                    <option value="detailed">详细</option>
+                  </SettingsSelect>
+                </label>
+                <label className="settings-field">
+                  <span>回答语气</span>
+                  <SettingsSelect
+                    value={answerTone}
+                    onChange={(e) =>
+                      setAnswerTone(e.target.value as "natural" | "professional")
+                    }
+                    aria-label="回答语气"
+                  >
+                    <option value="natural">自然</option>
+                    <option value="professional">专业</option>
+                  </SettingsSelect>
+                </label>
+                <label className="settings-field">
+                  <span>输出格式</span>
+                  <SettingsSelect
+                    value={answerFormat}
+                    onChange={(e) =>
+                      setAnswerFormat(e.target.value as "auto" | "prose" | "bullets")
+                    }
+                    aria-label="输出格式"
+                  >
+                    <option value="auto">自动</option>
+                    <option value="prose">段落</option>
+                    <option value="bullets">要点列表</option>
+                  </SettingsSelect>
+                </label>
+                <label className="settings-field settings-toggle">
+                  <span>仅使用本地知识</span>
+                  <input
+                    type="checkbox"
+                    checked={knowledgeOnly}
+                    onChange={(e) => setKnowledgeOnly(e.target.checked)}
+                    aria-label="仅使用本地知识"
+                  />
+                </label>
               </section>
 
-              <section className="settings-section">
+              <section className="settings-section settings-custom" hidden={activePage !== "answers"}>
+                <h3>自定义提示词</h3>
+                <textarea className="settings-prompt" aria-label="自定义提示词" rows={6} maxLength={4000}
+                  value={customInstructions} onChange={(event) => setCustomInstructions(event.target.value)}
+                  placeholder="你希望助手如何回答？" />
+                <div className="custom-instructions-meta"><span>{customInstructions.length} / 4000</span></div>
+                <button type="button" className="custom-instructions-clear" disabled={!customInstructions} onClick={() => setCustomInstructions("")}>清空提示词</button>
+              </section>
+
+              <section className="settings-section settings-avatars" hidden={activePage !== "appearance"}>
                 <h3>头像</h3>
-                <p className="settings-hint">自定义聊天区中「你」与 Agent 的头像，图片仅保存在本地。</p>
                 <AvatarField
                   kind="user"
                   label="用户头像"
@@ -716,6 +877,9 @@ export default function SettingsModal({
             </>
           )}
 
+        </div>
+        </div>
+        <div className="settings-feedback" aria-live="polite">
           {error !== null && (
             <p className="settings-error" role="alert">
               {error}
@@ -731,6 +895,7 @@ export default function SettingsModal({
           <button
             type="button"
             className="settings-save"
+            hidden={activePage === "knowledge"}
             onClick={() => void handleSave()}
             disabled={loading || saving}
           >

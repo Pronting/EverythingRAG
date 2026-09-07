@@ -135,12 +135,13 @@ def test_image_described_and_indexed(tmp_path: Path) -> None:
 
 
 def test_same_image_across_files_deduped(tmp_path: Path) -> None:
-    """两文件引用同一图床图（同字节）-> 识图只算一次，各文件独立块。"""
+    """两个完全相同文件引用同一图：识图只算一次，来源感知 ID 让两块均保留。"""
     root = tmp_path / "docs"
     root.mkdir()
     url = "https://cdn.example.com/shared.png"
-    _write(root, "a.md", f"# A\n\n![]({url})")
-    _write(root, "b.md", f"# B\n\n![]({url})")
+    content = f"# 相同标题\n\n![]({url})"
+    first = _write(root, "a.md", content)
+    second = _write(root, "b.md", content)
 
     vision = FakeVision()
     pipeline, store = _pipeline(vision=vision, fetcher=FakeFetcher(_png_bytes()))
@@ -149,6 +150,11 @@ def test_same_image_across_files_deduped(tmp_path: Path) -> None:
     assert vision.calls == 1  # 内容哈希去重：同图只识一次
     images = _image_blocks(store)
     assert len(images) == 2  # 两个引用位置各一个块
+    assert len({meta.block_id for meta in images}) == 2
+    assert {meta.source_file for meta in images} == {
+        str(first.resolve()),
+        str(second.resolve()),
+    }
     hashes = {meta.image_content_hash for meta in images}
     assert len(hashes) == 1  # 共享同一内容哈希
 
@@ -213,7 +219,9 @@ def test_image_block_injects_heading_context(tmp_path: Path) -> None:
 
     texts = _image_texts(store)
     assert len(texts) == 1
-    assert "【所属主题】AB测试" in texts[0]  # 主题上下文已注入
+    metadata = next(meta for _, _, meta in store.blocks.values() if meta.source_type == SourceType.IMAGE_DESCRIPTION)
+    assert "AB测试" in metadata.image_index_text
+    assert "【所属主题】" not in texts[0]  # 主题属于索引，不能伪装成图中证据
     assert "架构图" in texts[0]  # 识图描述仍在
 
 
@@ -271,3 +279,42 @@ def test_persistent_dedup_across_imports(tmp_path: Path) -> None:
 
     make_pipeline().ingest(root)  # 第二次：复用持久化描述，不再识图
     assert vision.calls == 1
+
+
+def test_expired_image_url_recovers_description_from_retained_index(tmp_path: Path) -> None:
+    """旧索引已有识图结果时，即使图床失效也能按 URL 恢复并写入当前索引。"""
+
+    class RecoveringVectorStore(FakeVectorStore):
+        def __init__(self) -> None:
+            super().__init__()
+            self.recovery_calls: list[str] = []
+
+        def find_cached_image_description_by_source(self, src: str) -> tuple[str, str] | None:
+            self.recovery_calls.append(src)
+            return ("legacy-content-hash", "截图显示 20 万次 503 请求及其时间范围。")
+
+    root = tmp_path / "docs"
+    root.mkdir()
+    url = "https://cdn.example.com/expired.png"
+    _write(root, "事故.md", f"# 事故影响\n\n15:30 至 18:00。\n\n![]({url})")
+    state_store = ImageStateStore(tmp_path / "img_state.db")
+    store = RecoveringVectorStore()
+    vision = FakeVision()
+    pipeline = IngestionPipeline(
+        embedder=FakeEmbedder(),
+        vectorstore=store,
+        vision=vision,
+        fetcher=BoomFetcher(),
+        state_store=state_store,
+    )
+
+    pipeline.ingest(root)
+
+    assert store.recovery_calls == [url]
+    assert vision.calls == 0
+    assert len(_image_blocks(store)) == 1
+    assert "20 万次 503" in _image_texts(store)[0]
+    assert state_store.get_source_description(url) == (
+        "legacy-content-hash",
+        "截图显示 20 万次 503 请求及其时间范围。",
+    )

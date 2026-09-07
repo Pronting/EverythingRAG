@@ -21,6 +21,8 @@ import type {
   ToastType,
 } from "./types";
 import "./App.css";
+import "./design.css";
+import "./settings.css";
 
 /** 应用外壳（ChatGPT 风格）：左侧边栏（会话历史/知识库/设置）+ 主聊天区。 */
 export default function App() {
@@ -31,6 +33,7 @@ export default function App() {
     user: null,
     agent: null,
   });
+  const [knowledgeOnly, setKnowledgeOnly] = useState(false);
   const [theme, setTheme] = useState<ThemeValue>(() => readStoredTheme());
   const persistedThemeRef = useRef<ThemeValue>(readStoredTheme());
   const transitionTimeoutRef = useRef<number | null>(null);
@@ -63,7 +66,7 @@ export default function App() {
       .catch((error: unknown) => setStatusError(error instanceof Error ? error.message : String(error)));
   }, []);
 
-  // 应用主题到 <html>：animate=true 时带约 1.5s 全局过渡，否则即时（用于初始加载）。
+  // 应用主题到 <html>：animate=true 时带短促全局过渡，否则即时（用于初始加载）。
   const applyTheme = useCallback((next: ThemeValue, animate: boolean): void => {
     const root = document.documentElement;
     // 清理上一次尚未结束的过渡定时器，避免快速连续切换时过渡被提前打断
@@ -78,7 +81,7 @@ export default function App() {
       transitionTimeoutRef.current = window.setTimeout(() => {
         root.classList.remove("theme-transition");
         transitionTimeoutRef.current = null;
-      }, 1600);
+      }, 260);
     } else if (root.dataset.theme !== next) {
       root.dataset.theme = next;
       root.classList.remove("theme-transition");
@@ -91,6 +94,7 @@ export default function App() {
     getSettings()
       .then((view) => {
         setAvatars(view.avatars ?? { user: null, agent: null });
+        setKnowledgeOnly(view.answer_preferences?.knowledge_only ?? false);
         const next = view.theme ?? "light";
         persistedThemeRef.current = next;
         persistTheme(next);
@@ -108,7 +112,7 @@ export default function App() {
   }, [loadStatus, loadConversations, loadSettings]);
 
   // 图片后台生成中时，周期轮询 /api/status 刷新图片识别进度（每 3s）
-  const imagePending = status?.knowledge.image_tasks.pending ?? 0;
+  const imagePending = status?.knowledge.image_tasks?.pending ?? 0;
   useEffect(() => {
     if (imagePending <= 0) return;
     const timer = window.setInterval(loadStatus, 3000);
@@ -161,22 +165,25 @@ export default function App() {
     async (
       userContent: string,
       assistantContent: string,
-      thinking: string,
       sources: Source[] | null,
+      answerBasis: ConversationMessage["answer_basis"],
+      policyVersion: string | null,
     ) => {
       const newMessages: ConversationMessage[] = [
         {
           role: "user",
           content: userContent,
-          thinking: null,
           sources: null,
+          answer_basis: null,
+          policy_version: null,
           created_at: new Date().toISOString(),
         },
         {
           role: "assistant",
           content: assistantContent,
-          thinking,
           sources,
+          answer_basis: answerBasis,
+          policy_version: policyVersion,
           created_at: new Date().toISOString(),
         },
       ];
@@ -219,16 +226,18 @@ export default function App() {
   return (
     <div className="app">
       <Sidebar
-        status={status}
         statusError={statusError}
         conversations={conversations}
         activeConversationId={activeConversationId}
         onNewChat={() => void handleNewChat()}
         onSelectConversation={(id) => void handleSelectConversation(id)}
-        onImported={loadStatus}
         onOpenSettings={() => setSettingsOpen(true)}
       />
       <main className="app-main">
+        <header className="workspace-header">
+          <div className="workspace-breadcrumb"><span>个人空间</span><span aria-hidden="true">/</span><strong>知识对话</strong></div>
+          <span className="workspace-label">EVERYTHING, CONNECTED.</span>
+        </header>
         <Chat
           conversationId={activeConversationId}
           initialMessages={chatMessages}
@@ -237,6 +246,7 @@ export default function App() {
           avatars={avatars}
           onCitationSelect={handleCitationSelect}
           searchConfigured={status?.config.search_configured ?? false}
+          knowledgeOnly={knowledgeOnly}
         />
       </main>
       {citationPanel !== null && (
@@ -250,6 +260,8 @@ export default function App() {
         />
       )}
       <SettingsModal
+        status={status}
+        onKnowledgeChanged={loadStatus}
         open={settingsOpen}
         onClose={() => {
           setSettingsOpen(false);

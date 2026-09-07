@@ -1,17 +1,19 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { streamChat } from "../api/sse";
-import type { ConversationMessage, Source } from "../types";
+import type { AnswerBasis, ConversationMessage, Source } from "../types";
 import { MarkdownContent } from "./MarkdownContent";
 import { CitationTooltip } from "./CitationTooltip";
 import { SourceFooter } from "./SourceFooter";
+import BrandMark from "./BrandMark";
 
-/** 单条消息：user / assistant；assistant 携带思维链、来源块、流式状态与错误。 */
+/** 单条消息：assistant 携带可审计的答案依据、策略版本、来源与流式状态。 */
 interface ChatMessage {
   id: number;
   role: "user" | "assistant";
   content: string;
-  thinking: string;
   sources: Source[] | null;
+  answerBasis: AnswerBasis | null;
+  policyVersion: string | null;
   done: boolean;
   error: string | null;
 }
@@ -25,8 +27,9 @@ interface ChatProps {
   onExchangeComplete: (
     userContent: string,
     assistantContent: string,
-    thinking: string,
     sources: Source[] | null,
+    answerBasis: AnswerBasis | null,
+    policyVersion: string | null,
   ) => void;
   /** 问答结束（含错误/中断）后回调：父级刷新 /api/status（隐私审计状态）。 */
   onChatComplete?: () => void;
@@ -36,6 +39,8 @@ interface ChatProps {
   onCitationSelect?: (sources: Source[], index: number) => void;
   /** 联网搜索是否已配置（启用 + provider 凭证齐备）；false 时按钮置灰。 */
   searchConfigured?: boolean;
+  /** 仅本地知识模式：后端不会联网，前端同步禁用联网按钮。 */
+  knowledgeOnly?: boolean;
 }
 
 const THINKING_TEXT = "思考中…";
@@ -57,12 +62,7 @@ function AssistantAvatar({ src }: { src: string | null }) {
   if (src !== null) {
     return <img src={src} alt="" className="avatar-img" />;
   }
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-      <path d="M12 2l1.9 5.6L19.5 9.5l-5.6 1.9L12 17l-1.9-5.6L4.5 9.5l5.6-1.9L12 2Z" />
-      <path d="M19 14l.9 2.6 2.6.9-2.6.9L19 21l-.9-2.6-2.6-.9 2.6-.9L19 14Z" opacity=".7" />
-    </svg>
-  );
+  return <BrandMark />;
 }
 
 function toChatMessages(messages: ConversationMessage[]): ChatMessage[] {
@@ -70,46 +70,22 @@ function toChatMessages(messages: ConversationMessage[]): ChatMessage[] {
     id: index + 1,
     role: message.role,
     content: message.content,
-    thinking: message.thinking ?? "",
     sources: message.sources,
+    answerBasis: message.answer_basis ?? null,
+    policyVersion: message.policy_version ?? null,
     done: true,
     error: null,
   }));
 }
 
-/** 思维链是否有实际内容：排除纯空白/纯标点（如模型偶发的「，。」），避免渲染空「思考过程」块。 */
-function isMeaningfulThinking(text: string): boolean {
-  return /[^\s\p{P}]/u.test(text);
-}
-
-/** 思维链块：DeepSeek 风格，默认折叠，点击展开查看推理过程；active 时灯泡呼吸闪烁。 */
-function ThinkingBlock({ text, active = false }: { text: string; active?: boolean }) {
-  const [open, setOpen] = useState(false);
-  return (
-    <div className={`thinking-block${open ? " open" : ""}${active ? " active" : ""}`}>
-      <button
-        type="button"
-        className="thinking-toggle"
-        onClick={() => setOpen((value) => !value)}
-        aria-expanded={open}
-      >
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-          <path
-            d="M12 3c-2 0-3.5 1.2-4 2.6C7 6 7.2 7 8 7.4 6.5 8 5.5 9.3 5.5 11c0 1.4.7 2.6 1.8 3.4-.9.8-1.5 2-1.5 3.3 0 2.4 1.9 4.3 6.2 4.3s6.2-1.9 6.2-4.3c0-1.3-.6-2.5-1.5-3.3 1.1-.8 1.8-2 1.8-3.4 0-1.7-1-3-2.5-3.6.8-.4 1-1.4.5-2.4C15.5 4.2 14 3 12 3Zm0 2c1 0 1.6.5 1.8 1.1.2.6-.1 1.1-.7 1.2l-.5.1v2.6c.4.4.8 1 .8 1.8 0 .9-.7 1.6-1.4 1.9-.7-.3-1.4-1-1.4-1.9 0-.8.4-1.4.8-1.8V7.4l-.5-.1c-.6-.1-.9-.6-.7-1.2C10.4 5.5 11 5 12 5Z"
-            fill="currentColor"
-          />
-        </svg>
-        思考过程
-        <span className="thinking-chevron" aria-hidden="true">
-          <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-            <path d="M2.5 4.5 6 8l3.5-3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-        </span>
-      </button>
-      {open && <div className="thinking-content">{text}</div>}
-    </div>
-  );
-}
+const BASIS_LABELS: Record<AnswerBasis, string> = {
+  knowledge: "基于本地知识",
+  web: "包含联网信息",
+  general: "一般回答",
+  product: "产品说明",
+  catalog: "知识概览",
+  insufficient: "现有内容不足",
+};
 
 /** 问答界面（ChatGPT 风格）：空态建议 → 消息流（头像+内容）→ 底部圆角输入条。 */
 export default function Chat({
@@ -120,12 +96,14 @@ export default function Chat({
   avatars,
   onCitationSelect,
   searchConfigured = false,
+  knowledgeOnly = false,
 }: ChatProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [isSending, setIsSending] = useState(false);
   const [webSearch, setWebSearch] = useState(false);
   const [searching, setSearching] = useState(false);
+  const [toolLabel, setToolLabel] = useState("正在联网搜索…");
   // 贴图：data URI（src）+ 文件名，纯文本模型由后端识图代理转文字
   const [images, setImages] = useState<{ src: string; name: string }[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -141,8 +119,9 @@ export default function Chat({
   const exchangeRef = useRef<{
     user: string;
     assistant: string;
-    thinking: string;
     sources: Source[] | null;
+    answerBasis: AnswerBasis | null;
+    policyVersion: string | null;
     error: boolean;
   } | null>(null);
 
@@ -181,6 +160,10 @@ export default function Chat({
       abortRef.current?.abort();
     };
   }, []);
+
+  useEffect(() => {
+    if (knowledgeOnly) setWebSearch(false);
+  }, [knowledgeOnly]);
 
   const updateMessage = (id: number, update: (m: ChatMessage) => ChatMessage): void => {
     setMessages((prev) => prev.map((m) => (m.id === id ? update(m) : m)));
@@ -226,8 +209,9 @@ export default function Chat({
       id: userId,
       role: "user",
       content: message,
-      thinking: "",
       sources: null,
+      answerBasis: null,
+      policyVersion: null,
       done: true,
       error: null,
     };
@@ -235,8 +219,9 @@ export default function Chat({
       id: assistantId,
       role: "assistant",
       content: "",
-      thinking: "",
       sources: null,
+      answerBasis: null,
+      policyVersion: null,
       done: false,
       error: null,
     };
@@ -247,7 +232,14 @@ export default function Chat({
     setImages([]);
     setIsSending(true);
     streamMessageIdRef.current = assistantId;
-    exchangeRef.current = { user: message, assistant: "", thinking: "", sources: null, error: false };
+    exchangeRef.current = {
+      user: message,
+      assistant: "",
+      sources: null,
+      answerBasis: null,
+      policyVersion: null,
+      error: false,
+    };
 
     const controller = new AbortController();
     abortRef.current = controller;
@@ -257,24 +249,29 @@ export default function Chat({
         message,
         history,
         {
-          onMeta: (sources) => {
+          onMeta: (sources, answerBasis, policyVersion) => {
             if (streamMessageIdRef.current !== assistantId) return;
-            if (exchangeRef.current) exchangeRef.current.sources = sources;
-            updateMessage(assistantId, (m) => ({ ...m, sources }));
+            if (exchangeRef.current) {
+              exchangeRef.current.sources = sources;
+              exchangeRef.current.answerBasis = answerBasis;
+              exchangeRef.current.policyVersion = policyVersion;
+            }
+            updateMessage(assistantId, (m) => ({
+              ...m,
+              sources,
+              answerBasis,
+              policyVersion,
+            }));
           },
           onToken: (text) => {
             if (streamMessageIdRef.current !== assistantId) return;
             if (exchangeRef.current) exchangeRef.current.assistant += text;
             updateMessage(assistantId, (m) => ({ ...m, content: m.content + text }));
           },
-          onReasoning: (text) => {
-            if (streamMessageIdRef.current !== assistantId) return;
-            if (exchangeRef.current) exchangeRef.current.thinking += text;
-            updateMessage(assistantId, (m) => ({ ...m, thinking: m.thinking + text }));
-          },
-          onTool: (_tool, status) => {
+          onTool: (tool, status) => {
             if (streamMessageIdRef.current !== assistantId) return;
             setSearching(status === "running");
+            setToolLabel(tool === "image_verify" ? "正在核对图片…" : "正在联网搜索…");
           },
           onDone: () => {
             if (streamMessageIdRef.current !== assistantId) return;
@@ -310,7 +307,13 @@ export default function Chat({
       setIsSending(false);
       if (exchangeRef.current && !exchangeRef.current.error) {
         const exchange = exchangeRef.current;
-        onExchangeComplete(exchange.user, exchange.assistant, exchange.thinking, exchange.sources);
+        onExchangeComplete(
+          exchange.user,
+          exchange.assistant,
+          exchange.sources,
+          exchange.answerBasis,
+          exchange.policyVersion,
+        );
       }
       onChatComplete?.(); // 问答结束刷新 status（隐私审计状态跟随）
     }
@@ -375,12 +378,14 @@ export default function Chat({
       <button
         type="button"
         className={`chat-websearch${webSearch ? " active" : ""}`}
-        disabled={!searchConfigured || isSending}
+        disabled={!searchConfigured || knowledgeOnly || isSending}
         onClick={() => setWebSearch((value) => !value)}
         aria-pressed={webSearch}
         aria-label="联网搜索"
         title={
-          searchConfigured
+          knowledgeOnly
+            ? "已开启仅使用本地知识"
+            : searchConfigured
             ? "联网搜索（开启后本问题会检索网络）"
             : "联网搜索未配置，请在设置中启用并配置"
         }
@@ -400,17 +405,17 @@ export default function Chat({
         value={input}
         onChange={(e) => setInput(e.target.value)}
         placeholder="问点什么，比如：这份文档讲了什么？"
-        disabled={isSending}
         aria-label="消息输入框"
       />
+      <span className="composer-label">{webSearch ? "联网搜索已开启" : "从一个好问题开始"}</span>
       <button
         className="chat-send"
         type="submit"
         disabled={isSending || input.trim() === ""}
         aria-label="发送"
       >
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-          <path d="M4 11.5 20 4l-7.5 16-2-6.5L4 11.5Z" />
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M12 19V5m-6 6 6-6 6 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
       </button>
     </form>
@@ -420,20 +425,27 @@ export default function Chat({
     <div className="chat" ref={chatRootRef}>
       {messages.length === 0 ? (
         <div className="chat-empty">
-          <h2 className="chat-empty-title">随时准备好，知无不言</h2>
+          <div className="hero-emblem"><BrandMark /><span className="emblem-node" /></div>
+          <p className="hero-eyebrow">连接知识 · 发现新知</p>
+          <h2 className="chat-empty-title">让知识，<span>彼此连接。</span></h2>
+          <p className="chat-empty-description">从散落的笔记到清晰的答案，和你的知识库聊聊。</p>
           <div className="chat-empty-input">{inputBar}</div>
           <div className="suggestion-chips">
-            {SUGGESTIONS.map((suggestion) => (
+            {SUGGESTIONS.map((suggestion, index) => (
               <button
                 key={suggestion}
                 type="button"
                 className="suggestion-chip"
                 onClick={() => void handleSend(suggestion)}
               >
-                {suggestion}
+                <span className="suggestion-number" aria-hidden="true">0{index + 1}</span>
+                <span className="suggestion-title">{["探索知识库", "提炼文档重点", "认识 Everything RAG"][index]}</span>
+                <span className="suggestion-description">{suggestion}</span>
+                <span className="suggestion-arrow" aria-hidden="true">↗</span>
               </button>
             ))}
           </div>
+          <p className="chat-empty-note">随时准备好，知无不言</p>
         </div>
       ) : (
         <div className="chat-messages" role="log" aria-live="polite">
@@ -447,8 +459,10 @@ export default function Chat({
                 )}
               </div>
               <div className="message-body">
-                {msg.role === "assistant" && isMeaningfulThinking(msg.thinking) && (
-                  <ThinkingBlock text={msg.thinking} active={!msg.done} />
+                {msg.role === "assistant" && msg.answerBasis !== null && (
+                  <span className={`answer-basis answer-basis-${msg.answerBasis}`}>
+                    {BASIS_LABELS[msg.answerBasis]}
+                  </span>
                 )}
                 {msg.role === "user" ? (
                   <div className="message-content user">{msg.content}</div>
@@ -490,7 +504,7 @@ export default function Chat({
           {searching && (
             <div className="chat-searching" role="status" aria-live="polite">
               <span className="chat-searching-dot" aria-hidden="true" />
-              正在联网搜索…
+              {toolLabel}
             </div>
           )}
           {inputBar}

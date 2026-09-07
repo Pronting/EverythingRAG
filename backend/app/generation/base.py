@@ -14,7 +14,7 @@ class ChatChunk(NamedTuple):
     """流式产出单元：kind 区分正文与思维链，text 为增量文本。
 
     对齐 DeepSeek 推理模型：思维链在 delta.reasoning_content，正文在
-    delta.content；前端对二者分别渲染（思维链可折叠、样式独立）。
+    delta.content；企业默认由 ChatService 丢弃 reasoning，只让正文进入 SSE。
     """
 
     kind: str  # "content" | "reasoning"
@@ -29,8 +29,8 @@ class ChatModel(Protocol):
         messages: list[dict[str, Any]],
         **kwargs: Any,
     ) -> AsyncIterator[ChatChunk]:
-        """流式生成：逐 chunk 产出正文（content）与思维链（reasoning）增量。
-        若上游为 OpenAI 兼容 chat/completions stream，在此层透传为 ChatChunk。
+        """provider 可产出正文与 reasoning；是否外发由上层安全策略决定。
+        若上游为 OpenAI 兼容 chat/completions stream，在此层映射为 ChatChunk。
         """
         ...
 

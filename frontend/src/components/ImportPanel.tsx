@@ -13,6 +13,8 @@ const POLL_INTERVAL_MS = 1000;
 interface ImportPanelProps {
   /** 导入/同步成功后回调（父级刷新 /api/status 知识计数）。 */
   onImported: () => void;
+  onBusyChange?: (busy: boolean) => void;
+  disabled?: boolean;
 }
 
 /** 文件相对路径（webkitRelativePath 优先，普通文件用 basename）。 */
@@ -38,14 +40,14 @@ function SyncProgressView({ progress }: { progress: SyncProgress }) {
       : 0;
   return (
     <div className="import-progress" role="status">
-      <div className="import-progress-track">
-        <div className="import-progress-fill" style={{ width: `${pct}%` }} />
+      <div className="import-progress-track" role="progressbar" aria-label="入库进度" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress.files_scanned > 0 ? pct : undefined}>
+        <div className={`import-progress-fill${progress.files_scanned === 0 ? " indeterminate" : ""}`} style={{ width: `${pct}%` }} />
       </div>
       <div className="import-progress-meta">
         <span>
           处理 {progress.files_processed} / {progress.files_scanned}
         </span>
-        <span>{pct}%</span>
+        <span>{progress.files_scanned === 0 ? "正在扫描…" : pct === 100 ? "正在完成索引…" : `${pct}%`}</span>
       </div>
       <p className="import-progress-line">
         扫描 {progress.files_scanned} · 已处理 {progress.files_processed} · 失败{" "}
@@ -79,9 +81,10 @@ function SyncReportView({ report, title }: { report: SyncReport; title: string }
  * 选择式导入面板：可多选多个子文件夹 / 单个文件，先积累「待导入清单」，
  * 确认后再统一上传导入（敏感目录/文件不选即可排除）。
  */
-export default function ImportPanel({ onImported }: ImportPanelProps) {
+export default function ImportPanel({ onImported, onBusyChange, disabled = false }: ImportPanelProps) {
   const [pending, setPending] = useState<File[]>([]);
   const [busy, setBusy] = useState(false);
+  const [uploadPercent, setUploadPercent] = useState<number | null>(0);
   const [task, setTask] = useState<ImportStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
@@ -157,8 +160,9 @@ export default function ImportPanel({ onImported }: ImportPanelProps) {
     setBusy(true);
     setError(null);
     setTask(null);
+    setUploadPercent(0);
     try {
-      const { task_id } = await uploadFolder(pending);
+      const { task_id } = await uploadFolder(pending, "incremental", setUploadPercent);
       poll(task_id);
     } catch (importError) {
       setBusy(false);
@@ -178,6 +182,8 @@ export default function ImportPanel({ onImported }: ImportPanelProps) {
   const [syncTask, setSyncTask] = useState<ImportStatus | null>(null);
   const [syncBusy, setSyncBusy] = useState(false);
   const [syncError, setSyncError] = useState<string | null>(null);
+
+  useEffect(() => { onBusyChange?.(busy || syncBusy); }, [busy, syncBusy, onBusyChange]);
 
   const stopSyncPolling = (): void => {
     if (syncTimerRef.current !== null) {
@@ -241,7 +247,7 @@ export default function ImportPanel({ onImported }: ImportPanelProps) {
         <button
           type="button"
           className="import-source-btn"
-          disabled={busy}
+          disabled={busy || syncBusy || disabled}
           onClick={() => folderInputRef.current?.click()}
           title="可按住 Ctrl/Shift 多选多个子文件夹"
         >
@@ -250,7 +256,7 @@ export default function ImportPanel({ onImported }: ImportPanelProps) {
         <button
           type="button"
           className="import-source-btn"
-          disabled={busy}
+          disabled={busy || syncBusy || disabled}
           onClick={() => fileInputRef.current?.click()}
           title="选择单个或多个 Markdown 文件"
         >
@@ -276,17 +282,11 @@ export default function ImportPanel({ onImported }: ImportPanelProps) {
         />
       </div>
 
-      <p className="import-hint">
-        可多选重点子文件夹 / 单个文件；敏感目录不选即可排除。
-        <br />
-        重新选择同一批文件夹导入 = 增量更新（只处理新增/修改/删除）。
-      </p>
-
       {pending.length > 0 && (
         <div className="import-pending">
           <div className="import-pending-head">
             <span className="import-pending-count">待导入 {pending.length} 个文件</span>
-            <button type="button" className="import-pending-clear" onClick={clearPending}>
+            <button type="button" className="import-pending-clear" disabled={busy || disabled} onClick={clearPending}>
               清空
             </button>
           </div>
@@ -305,10 +305,21 @@ export default function ImportPanel({ onImported }: ImportPanelProps) {
         type="button"
         className="import-btn"
         onClick={() => void handleImport()}
-        disabled={busy || pending.length === 0}
+        disabled={busy || syncBusy || disabled || pending.length === 0}
       >
         {busy ? "导入中…" : pending.length > 0 ? `开始导入（${pending.length}）` : "开始导入"}
       </button>
+
+      {busy && task === null && (
+        <div className="import-progress" role="status">
+          <div className="import-progress-track" role="progressbar" aria-label="文件上传进度" aria-valuemin={0} aria-valuemax={100} aria-valuenow={uploadPercent ?? undefined}>
+            <div className={`import-progress-fill${uploadPercent === null || uploadPercent === 0 ? " indeterminate" : ""}`} style={{ width: `${uploadPercent ?? 30}%` }} />
+          </div>
+          <div className="import-progress-meta"><span>{uploadPercent === 100 ? "上传完成，正在准备入库…" : "正在上传文件…"}</span><span>{uploadPercent === null ? "" : `${uploadPercent}%`}</span></div>
+        </div>
+      )}
+      {syncBusy && syncTask === null && <p role="status">正在准备同步…</p>}
+      {task?.status === "done" && <div className="import-progress-track" role="progressbar" aria-label="导入完成" aria-valuenow={100} aria-valuemin={0} aria-valuemax={100}><div className="import-progress-fill" style={{ width: "100%" }} /></div>}
 
       {error !== null && (
         <p className="import-error" role="alert">
@@ -323,7 +334,7 @@ export default function ImportPanel({ onImported }: ImportPanelProps) {
           <div className="import-progress" role="status">
             <div className="import-progress-track">
               <div
-                className="import-progress-fill"
+                className={`import-progress-fill${progress.files_scanned === 0 ? " indeterminate" : ""}`}
                 style={{
                   width: `${
                     progress.files_scanned > 0
@@ -382,7 +393,7 @@ export default function ImportPanel({ onImported }: ImportPanelProps) {
           type="button"
           className="import-sync-btn"
           onClick={() => void handleSync()}
-          disabled={syncBusy}
+          disabled={busy || syncBusy || disabled}
           title="对已导入/同步过的知识库目录做增量同步：只处理新增/更新/删除，未变文件毫秒级跳过"
         >
           {syncBusy ? "同步中…" : "同步知识库"}

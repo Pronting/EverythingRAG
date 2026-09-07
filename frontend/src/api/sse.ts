@@ -1,10 +1,14 @@
-import type { Source, SSEFrame } from "../types";
+import type { AnswerBasis, QueryMode, Source, SSEFrame } from "../types";
 
 /** streamChat 回调集：SSE 帧到达时按型分发。 */
 export interface StreamChatHandlers {
-  onMeta: (sources: Source[]) => void;
+  onMeta: (
+    sources: Source[],
+    answerBasis: AnswerBasis,
+    policyVersion: string,
+    queryMode: QueryMode,
+  ) => void;
   onToken: (text: string) => void;
-  onReasoning: (text: string) => void;
   onTool: (tool: string, status: string) => void;
   onDone: () => void;
   onError: (message: string) => void;
@@ -111,13 +115,17 @@ function dispatchFrame(frameText: string, handlers: StreamChatHandlers): void {
 
   switch (frame.type) {
     case "meta":
-      if (Array.isArray(frame.sources)) handlers.onMeta(frame.sources);
+      if (Array.isArray(frame.sources)) {
+        handlers.onMeta(
+          frame.sources,
+          isAnswerBasis(frame.answer_basis) ? frame.answer_basis : "general",
+          typeof frame.policy_version === "string" ? frame.policy_version : "unknown",
+          isQueryMode(frame.query_mode) ? frame.query_mode : "CONTENT_QA",
+        );
+      }
       break;
     case "token":
       if (typeof frame.text === "string") handlers.onToken(frame.text);
-      break;
-    case "reasoning":
-      if (typeof frame.text === "string") handlers.onReasoning(frame.text);
       break;
     case "tool":
       if (typeof frame.tool === "string" && typeof frame.status === "string") {
@@ -133,6 +141,16 @@ function dispatchFrame(frameText: string, handlers: StreamChatHandlers): void {
     default:
       break; // 未知帧型，忽略
   }
+}
+
+function isAnswerBasis(value: unknown): value is AnswerBasis {
+  return ["knowledge", "web", "general", "product", "catalog", "insufficient"].includes(
+    String(value),
+  );
+}
+
+function isQueryMode(value: unknown): value is QueryMode {
+  return ["PRODUCT_HELP", "KNOWLEDGE_OVERVIEW", "CONTENT_QA"].includes(String(value));
 }
 
 function isAbortError(error: unknown): boolean {

@@ -3,6 +3,7 @@
 所有外部能力走薄接口 + 工厂注册；MVP 实现为 ChromaVectorStore。
 更换后端（LanceDB/Qdrant）只改工厂实现，不碰业务层。
 """
+
 from __future__ import annotations
 
 from typing import Any, Protocol
@@ -71,12 +72,17 @@ class VectorStore(Protocol):
         """返回库中图片描述块数（source_type=image_description；/api/status 展示用）。"""
         ...
 
+    def repair_ann_index(self) -> int:
+        """全库核验并补写 ANN 不可达记录；返回本次修复的去重记录数。"""
+        ...
+
 
 def create_vector_store(**kwargs: Any) -> VectorStore:
     """工厂：MVP 返回 ChromaVectorStore；后续可替换为 LanceDB/Qdrant。
 
     参数透传给 chroma 工厂（persist_dir / collection_name / embedder）：
-    collection_name 缺省 = chunks__{embedder.fingerprint}__v1；embedder 必填（云端嵌入）。
+    collection_name 缺省 = chunks__{embedder.fingerprint}__v{ingestion_schema}；
+    embedder 必填（云端嵌入）。
     """
     from app.vectorstore.chroma_store import create_vector_store as _chroma_factory
 

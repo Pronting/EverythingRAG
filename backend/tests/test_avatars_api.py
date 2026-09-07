@@ -89,7 +89,7 @@ def test_put_settings_preserves_avatar() -> None:
     """PUT 其它设置（覆盖式更新）不得清空已上传头像。"""
     client = _client()
     up = client.post("/api/avatars/user", files={"file": ("me.png", _PNG, "image/png")}).json()
-    resp = client.put("/api/settings", json={"system_prompt": "hello"})
+    resp = client.put("/api/settings", json={"answer_preferences": {"verbosity": "concise"}})
     assert resp.status_code == 200
     settings = client.get("/api/settings").json()
     assert settings["avatars"]["user"] == up["url"]

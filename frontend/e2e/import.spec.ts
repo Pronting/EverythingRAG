@@ -5,9 +5,10 @@ import { join } from "node:path";
 
 const TASK_ID = "task-123";
 
-/** 展开侧边栏「知识库」卡片（默认折叠，导入前需先展开）。 */
+/** 打开设置中的知识库管理。 */
 async function expandKnowledgeBase(page: Page): Promise<void> {
-  await page.locator(".kb-card-header").click();
+  await page.getByRole("button", { name: "设置", exact: true }).click();
+  await page.getByRole("button", { name: "知识库", exact: true }).click();
 }
 
 /** 状态桩：导入前 knowledge 为 0；imported=true 后返回真实计数（验证导入后刷新）。 */
@@ -97,7 +98,7 @@ test("多选文件夹/文件积累待导入清单，开始导入后显示进度�
     await expandKnowledgeBase(page);
 
     // 初始状态：知识库为空
-    await expect(page.getByText("共 0 个语义块 · 尚未导入")).toBeVisible();
+    await expect(page.locator(".knowledge-summary").getByText("个语义块")).toBeVisible();
 
     // 选一个文件夹（含子目录 2 个 .md）-> 进入待导入清单
     await page.locator('input[webkitdirectory]').setInputFiles(corpus);
@@ -119,9 +120,9 @@ test("多选文件夹/文件积累待导入清单，开始导入后显示进度�
     await expect(page.getByText(/块 3 · 写入 3/)).toBeVisible();
     await expect(page.getByText(/待导入/)).not.toBeVisible();
 
-    // 导入后 /api/status 刷新：侧边栏知识库计数更新
-    await expect(page.getByText("共 3 个语义块 · 已导入")).toBeVisible();
-    await expect(page.getByText("2 文档")).toBeVisible();
+    // 导入后 /api/status 刷新：设置页知识库计数更新
+    await expect(page.locator(".knowledge-summary strong").nth(1)).toHaveText("3");
+    await expect(page.locator(".knowledge-summary strong").first()).toHaveText("2");
   } finally {
     rmSync(corpus, { recursive: true, force: true });
   }
@@ -169,4 +170,72 @@ test("上传失败：后端 400 展示可读错误", async ({ page }) => {
   } finally {
     rmSync(corpus, { recursive: true, force: true });
   }
+});
+
+
+test("上传阶段立即显示进度，关闭设置后仍持续轮询", async ({ page }) => {
+  await stubBackend(page);
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  await page.route("**/api/import/upload", async (route) => {
+    await gate;
+    await route.fulfill({ status: 202, json: { task_id: TASK_ID } });
+  });
+  await page.goto("/");
+  await expandKnowledgeBase(page);
+  await page.getByLabel("选择知识库文件（可多选）").setInputFiles({ name: "a.md", mimeType: "text/markdown", buffer: Buffer.from("# A") });
+  await page.getByRole("button", { name: "开始导入" }).click();
+  await expect(page.getByRole("progressbar", { name: "文件上传进度" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "删除知识库", exact: true })).toBeDisabled();
+  await page.getByRole("button", { name: "关闭设置" }).click();
+  release();
+  await expect.poll(async () => page.locator('.knowledge-summary strong').first().textContent()).toBe("2");
+  await expandKnowledgeBase(page);
+  await expect(page.getByRole("progressbar", { name: "导入完成" })).toHaveAttribute("aria-valuenow", "100");
+});
+
+test("删除需二次确认，取消不发请求，失败可重试；适配手机和深色", async ({ page }) => {
+  await stubBackend(page);
+  let calls = 0;
+  await page.route("**/api/knowledge", (route) => {
+    calls += 1;
+    return route.fulfill(calls === 1 ? { status: 409, json: { detail: "导入仍在进行，请稍后重试" } } : { json: { deleted_chunks: 3 } });
+  });
+  await page.goto("/");
+  await expandKnowledgeBase(page);
+  for (const width of [1280, 390]) {
+    await page.setViewportSize({ width, height: 844 });
+    await page.evaluate((theme) => { document.documentElement.dataset.theme = theme; }, width === 390 ? "dark" : "light");
+    await page.getByRole("button", { name: "删除知识库", exact: true }).click();
+    const dialog = page.getByRole("dialog", { name: "确认删除知识库？" });
+    await expect(dialog).toBeVisible();
+    const box = await dialog.boundingBox();
+    expect(box!.x).toBeGreaterThanOrEqual(0);
+    expect(box!.x + box!.width).toBeLessThanOrEqual(width);
+    await page.screenshot({ path: `test-results/knowledge-confirm-${width}.png` });
+    await dialog.getByRole("button", { name: "取消" }).click();
+    await page.screenshot({ path: `test-results/knowledge-settings-${width}.png` });
+    expect(calls).toBe(0);
+  }
+  await page.getByRole("button", { name: "删除知识库", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "确认删除知识库？" });
+  await dialog.getByRole("button", { name: "确认删除", exact: true }).click();
+  await expect(dialog.getByRole("alert")).toHaveText("导入仍在进行，请稍后重试");
+  await dialog.getByRole("button", { name: "确认删除", exact: true }).click();
+  await expect(dialog).not.toBeVisible();
+  await expect(page.getByText("知识库已删除，可重新导入文档")).toBeVisible();
+  expect(calls).toBe(2);
+});
+
+
+test("旧后端缺少删除接口时显示明确的更新提示", async ({ page }) => {
+  await stubBackend(page);
+  await page.route("**/api/knowledge", route => route.fulfill({ status: 405, json: { detail: "Method Not Allowed" } }));
+  await page.goto("/");
+  await expandKnowledgeBase(page);
+  await page.getByRole("button", { name: "删除知识库", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "确认删除知识库？" });
+  await dialog.getByRole("button", { name: "确认删除", exact: true }).click();
+  await expect(dialog.getByRole("alert")).toContainText("当前后端版本不支持删除知识库");
+  await expect(dialog.getByRole("button", { name: "确认删除", exact: true })).toBeEnabled();
 });

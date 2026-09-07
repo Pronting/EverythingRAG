@@ -3,6 +3,7 @@
 - 读取返回脱敏视图：API key 只回显 api_key_set + 尾4位 hint，绝不回显明文。
 - 保存为局部更新：请求中省略/为 null 的字段保持原值；api_key 传空串表示清除。
 - 校验：chat base_url 需 http(s)；embed mode=cloud 时 base_url/model 必填。
+- Agent 核心策略由后端管理；用户可保存表达偏好及附加自定义要求，不能替换核心 system prompt。
 - 落盘：data_dir/config.json（gitignored，明文仅存本地）。
 """
 
@@ -12,7 +13,7 @@ import re
 from typing import Literal
 
 from fastapi import APIRouter, Depends
-from pydantic import BaseModel, Field, SecretStr, model_validator
+from pydantic import BaseModel, ConfigDict, Field, SecretStr, model_validator
 
 from app.core.settings_store import (
     AppSettings,
@@ -23,6 +24,7 @@ from app.core.settings_store import (
     VisionModelConfig,
     get_settings_store,
 )
+from app.generation.prompt_policy import POLICY_VERSION, AnswerPreferences
 
 router = APIRouter()
 
@@ -59,12 +61,27 @@ class VisionSettingsUpdate(BaseModel):
     api_key: SecretStr | None = None  # None=不改；""=清除；值=设置
 
 
+class AnswerPreferencesUpdate(BaseModel):
+    """回答偏好及附加自定义要求；省略保留，空字符串清除自定义要求。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    language: Literal["auto", "zh-CN", "en"] | None = None
+    verbosity: Literal["concise", "balanced", "detailed"] | None = None
+    tone: Literal["natural", "professional"] | None = None
+    response_format: Literal["auto", "prose", "bullets"] | None = None
+    knowledge_only: bool | None = None
+    custom_instructions: str | None = Field(default=None, max_length=4000)
+
+
 class SettingsUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     chat: ChatSettingsUpdate | None = None
     embed: EmbedSettingsUpdate | None = None
     vision: VisionSettingsUpdate | None = None
     search: SearchSettingsUpdate | None = None
-    system_prompt: str | None = Field(default=None, max_length=8000)
+    answer_preferences: AnswerPreferencesUpdate | None = None
     theme: Literal["light", "dark"] | None = None
 
     @model_validator(mode="after")
@@ -128,12 +145,16 @@ def _apply(current: AppSettings, update: SettingsUpdate) -> AppSettings:
     search = current.search
     if update.search is not None:
         search = _overlay_search(search, update.search)
+    preferences = current.answer_preferences
+    if update.answer_preferences is not None:
+        preferences = _overlay_preferences(preferences, update.answer_preferences)
     return AppSettings(
         chat=chat,
         embed=embed,
         vision=vision,
         search=search,
-        system_prompt=update.system_prompt if update.system_prompt is not None else current.system_prompt,
+        answer_preferences=preferences,
+        legacy_system_prompt_backup=current.legacy_system_prompt_backup,
         avatars=current.avatars,  # 保留头像（覆盖式更新不得重置）
         theme=update.theme if update.theme is not None else current.theme,
     )
@@ -194,6 +215,32 @@ def _overlay_search(current: SearchConfig, update: SearchSettingsUpdate) -> Sear
     return SearchConfig(**data)
 
 
+def _overlay_preferences(
+    current: AnswerPreferences,
+    update: AnswerPreferencesUpdate,
+) -> AnswerPreferences:
+    return AnswerPreferences(
+        language=update.language if update.language is not None else current.language,
+        verbosity=update.verbosity if update.verbosity is not None else current.verbosity,
+        tone=update.tone if update.tone is not None else current.tone,
+        response_format=(
+            update.response_format
+            if update.response_format is not None
+            else current.response_format
+        ),
+        knowledge_only=(
+            update.knowledge_only
+            if update.knowledge_only is not None
+            else current.knowledge_only
+        ),
+        custom_instructions=(
+            update.custom_instructions
+            if update.custom_instructions is not None
+            else current.custom_instructions
+        ),
+    )
+
+
 def _settings_view(settings: AppSettings) -> dict:
     """脱敏视图：key 只回显是否已设置 + 尾4位；头像给可访问 URL 或 null。"""
     return {
@@ -201,7 +248,8 @@ def _settings_view(settings: AppSettings) -> dict:
         "embed": _embed_view(settings.embed),
         "vision": _vision_view(settings.vision),
         "search": _search_view(settings.search),
-        "system_prompt": settings.system_prompt,
+        "answer_preferences": settings.answer_preferences.model_dump(),
+        "policy": {"version": POLICY_VERSION, "managed": True},
         "avatars": {
             "user": _avatar_url(settings.avatars.user),
             "agent": _avatar_url(settings.avatars.agent),
@@ -259,3 +307,37 @@ def _search_view(search: SearchConfig) -> dict:
         "api_key_set": key is not None,
         "api_key_hint": f"...{key[-4:]}" if key else None,
     }
+
+
+class ConnectionTestRequest(BaseModel):
+    kind: Literal["chat", "embed", "vision"]
+    base_url: str = Field(max_length=2048)
+    model: str = Field(max_length=256)
+    api_key: SecretStr | None = None
+
+
+@router.post("/api/settings/test-connection")
+async def test_connection(
+    request: ConnectionTestRequest,
+    store: SettingsStore = Depends(get_settings_store),  # noqa: B008
+) -> dict:
+    from urllib.parse import urlsplit
+
+    from app.generation.connection_test import probe_model
+
+    url = request.base_url.strip().rstrip("/")
+    model = request.model.strip()
+    try:
+        parsed = urlsplit(url)
+    except ValueError:
+        return {"success": False, "message": "服务地址格式不正确", "latency_ms": 0}
+    if parsed.scheme not in ("http", "https") or not parsed.hostname or not model:
+        return {"success": False, "message": "请填写有效的服务地址和模型名称", "latency_ms": 0}
+    if parsed.username or parsed.password or parsed.query or parsed.fragment:
+        return {"success": False, "message": "服务地址不能包含凭据或查询参数", "latency_ms": 0}
+    config = getattr(store.load(), request.kind)
+    # Omitted key means reuse the saved key, but never send it to a changed endpoint.
+    key = request.api_key
+    if key is None and url == (config.base_url or "").strip().rstrip("/"):
+        key = config.api_key
+    return await probe_model(request.kind, url, model, key.get_secret_value() if key is not None else None)

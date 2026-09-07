@@ -18,11 +18,13 @@ from pydantic import BaseModel, Field
 
 
 class ConversationMessage(BaseModel):
-    """单条对话消息（持久化用；sources 为检索来源快照）。"""
+    """单条对话消息；只持久化正文、依据标签与来源，不保存原始思维链。"""
 
     role: str  # "user" | "assistant"
     content: str
     sources: list[dict[str, Any]] | None = None
+    answer_basis: str | None = None
+    policy_version: str | None = None
     created_at: str = ""
 
 
@@ -89,6 +91,35 @@ class ConversationStore:
                 }
                 for conv in ordered
             ]
+
+    def search(self, query: str) -> list[dict[str, Any]]:
+        """Search titles and user/assistant text locally, returning compact match excerpts."""
+        terms = query.casefold().split()
+        if not terms:
+            return self.list_summaries()
+        with self._lock:
+            results = []
+            for conv in sorted(self._conversations.values(), key=lambda c: c.updated_at, reverse=True):
+                messages = [m.content for m in conv.messages if m.role in ("user", "assistant")]
+                haystack = "\n".join([conv.title, *messages]).casefold()
+                if not all(term in haystack for term in terms):
+                    continue
+                snippet = next((text for text in messages if any(
+                    term in text.casefold() for term in terms
+                )), "")
+                offset = min((snippet.casefold().find(term) for term in terms
+                              if term in snippet.casefold()), default=0)
+                start = max(0, offset - 35)
+                excerpt = snippet[start:start + 140].replace("\n", " ")
+                results.append({
+                    "id": conv.id, "title": conv.title,
+                    "created_at": conv.created_at, "updated_at": conv.updated_at,
+                    "message_count": len(conv.messages),
+                    "match_excerpt": ("…" if start else "") + excerpt + (
+                        "…" if start + 140 < len(snippet) else ""
+                    ),
+                })
+            return results
 
     def create(self) -> Conversation:
         """创建空会话并落盘。"""

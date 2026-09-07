@@ -15,7 +15,7 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
-from app.api.deps import get_embedder, get_vector_store
+from app.api.deps import get_embedder, get_image_state_store, get_vector_store
 from app.core.outbound import outbound_client
 from app.core.settings_store import (
     SettingsStore,
@@ -24,6 +24,8 @@ from app.core.settings_store import (
     is_vision_configured,
 )
 from app.generation.chat_service import ChatService
+from app.generation.image_reader import KnowledgeImageReader
+from app.generation.knowledge_catalog import build_knowledge_overview
 from app.generation.providers import (
     ChatProviderError,
     UnconfiguredChatModel,
@@ -58,7 +60,7 @@ def get_chat_service(
     store: SettingsStore = Depends(get_settings_store),  # noqa: B008
     vectorstore: VectorStore = Depends(get_vector_store),  # noqa: B008
 ) -> ChatService:
-    """构建真实问答链路（嵌入 + Chroma 检索 + 对话模型 + 设置页系统提示词）。
+    """构建真实问答链路（嵌入 + 混合召回 + 不可变 Agent 策略 + 对话模型）。
 
     chat 配置来自设置（config.json 优先，env 兜底）；provider 未配置时返回占位模型，
     ChatProviderError 延迟到请求的 stream 阶段以 error 帧上报，不崩不 500。
@@ -91,10 +93,13 @@ def get_chat_service(
         embedder=embedder,
         retriever=retriever,
         chat_model=chat_model,
-        system_prompt=app_settings.system_prompt,
         search_provider=search_provider,
         search_max_results=app_settings.search.max_results,
         vision=vision,
+        image_reader=KnowledgeImageReader(vision, get_image_state_store()) if vision else None,
+        preferences=app_settings.answer_preferences,
+        # 仅知识概览问题才枚举全库元数据，普通问答不额外扫描 collection。
+        knowledge_overview=lambda: build_knowledge_overview(vectorstore),
     )
 
 

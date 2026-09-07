@@ -31,17 +31,17 @@ def test_short_text_merges_across_images() -> None:
 
 
 def test_heading_level_chunking() -> None:
-    """每个标题区间产块；过短区间前向合并，合并块保留首个标题锚点身份。"""
+    """短兄弟小节可聚合，但标题标签必须保留，不能丢失事实归属。"""
     md = "# H1\n\ntext-a\n\n## H2\n\ntext-b\n\n## H2b\n\ntext-c"
     chunks = chunk_document(parse_markdown(md), source_file="notes.md")
-    assert len(chunks) == 1  # 三个 6 字符短区间合并为一块
+    assert len(chunks) == 2
     ids = [c.block_id for c in chunks]
     assert len(ids) == len(set(ids))
-    assert ids == ["/H1/h1#1"]
-    assert chunks[0].text == "text-a\n\ntext-b\n\ntext-c"
-    assert chunks[0].heading_path == "H1"
-    assert chunks[0].anchor == "h1"
-    assert chunks[0].seq == 1
+    assert ids == ["/H1/h1#1", "/H1/h1/H2/h2#1"]
+    assert chunks[0].text == "text-a"
+    assert chunks[1].text == "【H2】\ntext-b\n\n【H2b】\ntext-c"
+    assert [c.heading_path for c in chunks] == ["H1", "H1 > H2 / H2b"]
+    assert chunks[1].heading_aliases == ("H1 > H2", "H1 > H2b")
 
 
 def test_heading_regions_stay_separate_when_substantial() -> None:
@@ -53,12 +53,13 @@ def test_heading_regions_stay_separate_when_substantial() -> None:
 
 
 def test_parent_without_direct_content_produces_no_chunk() -> None:
-    """父标题无直属内容时不产块；短子标题内容前向合并。"""
+    """父标题无直属内容时不产块；短子标题聚合后仍保留各自标题标签。"""
     md = "# A\n\n## B\n\ntext-b\n\n## C\n\ntext-c"
     chunks = chunk_document(parse_markdown(md), "f.md")
-    assert len(chunks) == 1  # 两个短子区间合并
-    assert chunks[0].heading_path == "A > B"
+    assert len(chunks) == 1
+    assert chunks[0].heading_path == "A > B / C"
     assert chunks[0].anchor == "b"
+    assert chunks[0].text == "【B】\ntext-b\n\n【C】\ntext-c"
 
 
 # ---------------------------------------------------------------- 2. 块长 ≤ 上限
@@ -74,6 +75,21 @@ def test_oversize_content_splits_into_subchunks() -> None:
         assert c.heading_path == "H"
         assert c.anchor == "h"
     assert [c.seq for c in chunks] == list(range(1, len(chunks) + 1))
+
+
+def test_long_prose_prefers_clause_boundary_over_fixed_character_cut() -> None:
+    """无句号长段优先在逗号/分号后切分，且拼接后正文逐字不丢。"""
+    text = "，".join(["这是一个需要保持语义完整的较长分句"] * 8)
+    chunks = chunk_document(
+        parse_markdown(f"# H\n\n{text}"),
+        "f.md",
+        max_chunk_chars=55,
+        min_chunk_chars=0,
+    )
+    assert len(chunks) > 1
+    assert all(len(chunk.text) <= 55 for chunk in chunks)
+    assert all(chunk.text.endswith("，") for chunk in chunks[:-1])
+    assert "".join(chunk.text for chunk in chunks) == text
 
 
 # ---------------------------------------------------------------- 3. 代码块整体成块
@@ -103,6 +119,16 @@ def test_oversized_code_block_splits_into_pieces() -> None:
     assert all(len(p) <= 100 for p in pieces)
     assert "".join(pieces) == code  # 拆分不丢内容
     assert all(c.block_id.startswith("#") for c in chunks)  # 无标题文档逐块编号
+
+
+def test_oversized_code_prefers_complete_lines() -> None:
+    """代码超限时优先在换行符切，避免把标识符从中间截断。"""
+    code = "\n".join(f"result_{i} = calculate_value_{i}()" for i in range(8))
+    chunks = chunk_document(parse_markdown(f"```python\n{code}\n```"), "f.md", max_chunk_chars=55)
+    assert len(chunks) > 1
+    assert all(len(chunk.text) <= 55 for chunk in chunks)
+    assert all(chunk.text.endswith("\n") for chunk in chunks[:-1])
+    assert "".join(chunk.text for chunk in chunks) == code
 
 
 # ---------------------------------------------------------------- 4. 无标题文档
@@ -257,3 +283,26 @@ def test_html_tags_stripped_from_content_but_not_code() -> None:
     assert "<font" not in content_chunk.text
     code_chunk = next(c for c in chunks if "keep me" in c.text)
     assert code_chunk.text == "<div>keep me</div>"
+
+
+def test_leaf_heading_with_inline_url_or_value_becomes_searchable_text() -> None:
+    """富文本导出把事实全写在叶子标题时，URL/冒号值不能因正文为空而丢失。"""
+
+    md = (
+        "## 下载 JMeter\n"
+        "### 链接：https://jmeter.apache.org/download_jmeter.cgi\n"
+        "![](shot.png)\n"
+        "### 环境: 必须安装 Java8\n"
+        "### 只是结构标题\n"
+        "## 后续\n正文"
+    )
+
+    chunks = chunk_document(parse_markdown(md), "压测.md")
+    text_by_heading = {
+        chunk.heading_path: chunk.text for chunk in chunks if chunk.kind == "text"
+    }
+
+    link_heading = "下载 JMeter > 链接：https://jmeter.apache.org/download_jmeter.cgi"
+    assert text_by_heading[link_heading] == "链接：https://jmeter.apache.org/download_jmeter.cgi"
+    assert text_by_heading["下载 JMeter > 环境: 必须安装 Java8"] == "环境: 必须安装 Java8"
+    assert "下载 JMeter > 只是结构标题" not in text_by_heading

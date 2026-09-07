@@ -18,8 +18,8 @@ async function readErrorDetail(response: Response): Promise<string> {
 }
 
 /** 会话摘要列表（按最近更新倒序）。 */
-export async function listConversations(): Promise<ConversationSummary[]> {
-  const response = await fetch(CONVERSATIONS_ENDPOINT);
+export async function listConversations(query = "", signal?: AbortSignal): Promise<ConversationSummary[]> {
+  const response = await fetch(query ? `${CONVERSATIONS_ENDPOINT}?q=${encodeURIComponent(query)}` : CONVERSATIONS_ENDPOINT, { signal });
   if (!response.ok) throw new Error(await readErrorDetail(response));
   return (await response.json()) as ConversationSummary[];
 }
@@ -41,7 +41,10 @@ export async function getConversation(id: string): Promise<Conversation> {
 /** 追加一轮消息（user + assistant），返回摘要。 */
 export async function appendConversationMessages(
   id: string,
-  messages: Pick<ConversationMessage, "role" | "content" | "thinking" | "sources">[],
+  messages: Pick<
+    ConversationMessage,
+    "role" | "content" | "sources" | "answer_basis" | "policy_version"
+  >[],
 ): Promise<ConversationSummary> {
   const response = await fetch(`${CONVERSATIONS_ENDPOINT}/${encodeURIComponent(id)}/messages`, {
     method: "POST",

@@ -48,6 +48,7 @@ mode=full：仅入库/更新，不删除。
 export async function uploadFolder(
   files: File[],
   mode: "full" | "incremental" = "incremental",
+  onProgress?: (percent: number | null) => void,
 ): Promise<StartImportResult> {
   const formData = new FormData();
   for (const file of files) {
@@ -56,16 +57,26 @@ export async function uploadFolder(
     formData.append("files", file, relativePath);
   }
   formData.append("mode", mode);
-  let response: Response;
-  try {
-    response = await fetch(`${IMPORT_ENDPOINT}/upload`, { method: "POST", body: formData });
-  } catch {
-    throw new Error("无法连接本地服务，请确认后端已启动");
-  }
-  if (!response.ok) {
-    throw new Error(await readErrorDetail(response));
-  }
-  return (await response.json()) as StartImportResult;
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", `${IMPORT_ENDPOINT}/upload`);
+    xhr.upload.onprogress = (event) => onProgress?.(
+      event.lengthComputable ? Math.min(100, Math.round(event.loaded / event.total * 100)) : null,
+    );
+    xhr.onerror = () => reject(new Error("无法连接本地服务，请确认后端已启动"));
+    xhr.onabort = () => reject(new Error("上传已取消"));
+    xhr.onload = () => {
+      try {
+        const body = JSON.parse(xhr.responseText);
+        if (xhr.status < 200 || xhr.status >= 300) {
+          reject(new Error(typeof body.detail === "string" ? body.detail : `上传失败（HTTP ${xhr.status}）`));
+        } else if (typeof body.task_id !== "string") {
+          reject(new Error("上传响应异常，请重试"));
+        } else resolve(body as StartImportResult);
+      } catch { reject(new Error(`上传响应异常（HTTP ${xhr.status}）`)); }
+    };
+    xhr.send(formData);
+  });
 }
 
 /** 一键增量同步：对全部已登记的知识库目录做增量同步，返回 task_id（走同一轮询）。 */

@@ -1,78 +1,43 @@
-import { useState } from "react";
-import type { ConversationSummary, StatusResponse } from "../types";
-import BlockBrowser from "./BlockBrowser";
-import ImportPanel from "./ImportPanel";
+import { useEffect, useState } from "react";
+import type { ConversationSummary } from "../types";
+import { listConversations } from "../api/conversationApi";
+import BrandMark from "./BrandMark";
 
-const KB_COLLAPSED_KEY = "everything-rag-kb-collapsed";
 const SIDEBAR_COLLAPSED_KEY = "everything-rag-sidebar-collapsed";
-
-/** 读取知识库卡片是否收起（未设置时默认收起，避免长期占用侧边栏视野）。 */
-function readCollapsed(): boolean {
-  try {
-    const value = localStorage.getItem(KB_COLLAPSED_KEY);
-    return value === null ? true : value === "1";
-  } catch {
-    return true;
-  }
-}
 
 /** 读取侧边栏是否折叠（未设置时默认展开）。 */
 function readSidebarCollapsed(): boolean {
   try {
-    return localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "1";
+    const stored = localStorage.getItem(SIDEBAR_COLLAPSED_KEY);
+    return stored === null ? window.matchMedia("(max-width: 700px)").matches : stored === "1";
   } catch {
     return false;
   }
 }
 
 interface SidebarProps {
-  status: StatusResponse | null;
   statusError: string | null;
   conversations: ConversationSummary[];
   activeConversationId: string | null;
   onNewChat: () => void;
   onSelectConversation: (id: string) => void;
-  onImported: () => void;
   onOpenSettings: () => void;
 }
 
 /** ChatGPT 风格左侧边栏：品牌 + 新对话 + 会话搜索/历史 + 知识库管理 + 设置入口 + 隐私状态；
  *  支持折叠为图标栏。 */
 export default function Sidebar({
-  status,
   statusError,
   conversations,
   activeConversationId,
   onNewChat,
   onSelectConversation,
-  onImported,
   onOpenSettings,
 }: SidebarProps) {
-  const knowledge = status?.knowledge;
-  const outboundState = status?.privacy.outbound_state ?? "local-only";
-  const hasOutbound = outboundState !== "local-only";
-
-  // 知识库卡片可折叠：收起后只留「知识库 + 文档数」一行，展开才显示导入面板
-  const [collapsed, setCollapsed] = useState<boolean>(readCollapsed);
   // 整个侧边栏可折叠为图标栏
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(readSidebarCollapsed);
   // 会话搜索关键字
   const [query, setQuery] = useState("");
-  // 语义块浏览弹窗
-  const [blocksOpen, setBlocksOpen] = useState(false);
-
-  const toggleCollapsed = (): void => {
-    setCollapsed((prev) => {
-      const next = !prev;
-      try {
-        localStorage.setItem(KB_COLLAPSED_KEY, next ? "1" : "0");
-      } catch {
-        /* 忽略：存储不可用时仅失去记忆 */
-      }
-      return next;
-    });
-  };
-
   const toggleSidebar = (): void => {
     setSidebarCollapsed((prev) => {
       const next = !prev;
@@ -85,19 +50,36 @@ export default function Sidebar({
     });
   };
 
-  const normalizedQuery = query.trim().toLowerCase();
-  const filteredConversations =
-    normalizedQuery === ""
-      ? conversations
-      : conversations.filter((c) => c.title.toLowerCase().includes(normalizedQuery));
+  const normalizedQuery = query.trim();
+  const [results, setResults] = useState<ConversationSummary[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [searchError, setSearchError] = useState(false);
+  useEffect(() => {
+    const controller = new AbortController();
+    if (!normalizedQuery) { setSearching(false); setSearchError(false); return; }
+    setSearching(true);
+    setResults([]);
+    setSearchError(false);
+    const timer = window.setTimeout(() => {
+      listConversations(normalizedQuery, controller.signal).then((items) => {
+        if (!controller.signal.aborted) setResults(items);
+      }).catch(() => {
+        if (!controller.signal.aborted) setSearchError(true);
+      }).finally(() => {
+        if (!controller.signal.aborted) setSearching(false);
+      });
+    }, 250);
+    return () => { controller.abort(); window.clearTimeout(timer); };
+  }, [normalizedQuery, conversations]);
+  const filteredConversations = normalizedQuery ? results : conversations;
 
   return (
     <aside className={`sidebar${sidebarCollapsed ? " collapsed" : ""}`}>
       <div className="sidebar-brand">
         <div className="sidebar-logo" aria-hidden="true">
-          E
+          <BrandMark />
         </div>
-        {!sidebarCollapsed && <h1 className="sidebar-title">Everything RAG</h1>}
+        {!sidebarCollapsed && <div><h1 className="sidebar-title">Everything RAG</h1><span className="brand-caption">你的个人知识空间</span></div>}
       </div>
 
       <button type="button" className="new-chat-btn" onClick={onNewChat} aria-label="新对话" title="新对话">
@@ -118,7 +100,8 @@ export default function Sidebar({
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="搜索对话"
+            placeholder="搜索标题和内容"
+            maxLength={200}
             aria-label="搜索对话"
           />
         </div>
@@ -126,6 +109,7 @@ export default function Sidebar({
 
       {!sidebarCollapsed && (
         <nav className="conversation-list" aria-label="会话历史">
+          <div className="section-eyebrow">{normalizedQuery ? "搜索结果" : "最近对话"} <span>{filteredConversations.length.toString().padStart(2, "0")}</span></div>
           {filteredConversations.map((conversation) => (
             <button
               key={conversation.id}
@@ -135,82 +119,19 @@ export default function Sidebar({
               title={conversation.title}
             >
               <span className="conversation-item-title">{conversation.title}</span>
+              {normalizedQuery && conversation.match_excerpt && <span className="conversation-match">{conversation.match_excerpt}</span>}
             </button>
           ))}
           {filteredConversations.length === 0 && (
             <p className="conversation-empty">
-              {conversations.length === 0 ? "暂无会话，点击「新对话」开始" : "未找到匹配的会话"}
+              {searching ? "搜索中…" : searchError ? "搜索失败，请稍后重试" : normalizedQuery ? "未找到匹配的对话" : "暂无会话，点击「新对话」开始"}
             </p>
           )}
         </nav>
       )}
 
-      {!sidebarCollapsed && (
-        <div className={`kb-card${collapsed ? " collapsed" : ""}`}>
-          <button
-            type="button"
-            className="kb-card-header"
-            onClick={toggleCollapsed}
-            aria-expanded={!collapsed}
-            aria-label={collapsed ? "展开知识库" : "收起知识库"}
-            title={collapsed ? "展开知识库管理" : "收起知识库管理"}
-          >
-            <span className="kb-card-title">知识库</span>
-            <span className="kb-count-badge">
-              {knowledge !== undefined ? `${knowledge.file_count} 文档` : "—"}
-            </span>
-            <span className="kb-card-chevron" aria-hidden="true">
-              <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-                <path
-                  d="M3 4.5 6 7.5l3-3"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-            </span>
-          </button>
-          <div className="kb-card-body">
-            <button
-              type="button"
-              className="kb-stats kb-stats-btn"
-              onClick={() => setBlocksOpen(true)}
-              disabled={(knowledge?.chunk_count ?? 0) === 0}
-              title="点击浏览语义块（按文本/图片分类，支持搜索）"
-            >
-              共 <strong>{knowledge?.chunk_count ?? 0}</strong> 个语义块
-              {(knowledge?.chunk_count ?? 0) > 0 ? " · 已导入" : " · 尚未导入"}
-            </button>
-            {knowledge?.image_tasks !== undefined && knowledge.image_tasks.total > 0 && (
-              <p className="kb-stats kb-image-progress">
-                图片识别 <strong>{knowledge.image_tasks.done}</strong>/{knowledge.image_tasks.total}
-                {knowledge.image_tasks.pending > 0 && (
-                  <span className="kb-image-pending"> · 生成中 {knowledge.image_tasks.pending}</span>
-                )}
-                {knowledge.image_tasks.failed > 0 && (
-                  <span className="kb-image-failed"> · 失败 {knowledge.image_tasks.failed}</span>
-                )}
-              </p>
-            )}
-            <ImportPanel onImported={onImported} />
-          </div>
-        </div>
-      )}
-
       <div className="sidebar-footer">
-        {!sidebarCollapsed &&
-          (statusError !== null ? (
-            <span className="status-error">后端未连接</span>
-          ) : (
-            <>
-              <span
-                className={`privacy-dot${hasOutbound ? " has-outbound" : ""}`}
-                aria-hidden="true"
-              />
-              <span className="sidebar-privacy">隐私基线：{outboundState}</span>
-            </>
-          ))}
+        {!sidebarCollapsed && statusError !== null && <span className="status-error">后端未连接</span>}
         <button
           type="button"
           className="sidebar-collapse-btn"
@@ -243,7 +164,6 @@ export default function Sidebar({
         </button>
       </div>
 
-      <BlockBrowser open={blocksOpen} onClose={() => setBlocksOpen(false)} />
     </aside>
   );
 }

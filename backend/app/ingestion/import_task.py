@@ -108,6 +108,11 @@ class ImportTaskStore:
             task.error = error
             task.updated_at = datetime.now(UTC)
 
+    def has_running(self) -> bool:
+        """Whether any import or sync is still writing knowledge."""
+        with self._lock:
+            return any(task.status == STATUS_RUNNING for task in self._tasks.values())
+
     def clear(self) -> None:
         """清空所有任务与 last_success_at（测试用）。"""
         with self._lock:

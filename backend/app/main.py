@@ -14,8 +14,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from app.api.deps import (
+    get_embedder,
     get_image_state_store,
     get_import_task_store,
+    get_state_store,
     get_vector_store,
     resume_pending_image_tasks,
 )
@@ -25,12 +27,16 @@ from app.api.routes.blocks import router as blocks_router
 from app.api.routes.chat import router as chat_router
 from app.api.routes.conversations import router as conversations_router
 from app.api.routes.imports import router as import_router
+from app.api.routes.knowledge import router as knowledge_router
 from app.api.routes.settings import router as settings_router
 from app.core.config import settings
 from app.core.outbound import outbound_client
 from app.core.settings_store import get_settings_store, is_search_configured, is_vision_configured
 from app.ingestion.import_task import ImportTaskStore
+from app.ingestion.index_schema import make_index_fingerprint
+from app.ingestion.state_store import DocumentStateStore
 from app.vectorstore.base import VectorStore
+from app.vectorstore.embedder import Embedder
 
 
 @asynccontextmanager
@@ -53,6 +59,7 @@ app.include_router(audit_router)
 app.include_router(avatars_router)
 app.include_router(blocks_router)
 app.include_router(import_router)
+app.include_router(knowledge_router)
 app.include_router(settings_router)
 app.include_router(conversations_router)
 
@@ -71,6 +78,8 @@ if settings.enable_cors:
 async def status(
     vectorstore: VectorStore = Depends(get_vector_store),  # noqa: B008
     task_store: ImportTaskStore = Depends(get_import_task_store),  # noqa: B008
+    state_store: DocumentStateStore = Depends(get_state_store),  # noqa: B008
+    embedder: Embedder = Depends(get_embedder),  # noqa: B008
 ) -> dict:
     """健康检查 + 基础状态：供前端判断启动完成 / 向导入口 / 空库判断。
 
@@ -80,6 +89,11 @@ async def status(
     _app_settings = get_settings_store().load()
     _search_config = _app_settings.search
     _vision = _app_settings.vision
+    chunk_count = vectorstore.count()
+    needs_rebuild = state_store.needs_rebuild(
+        index_fingerprint=make_index_fingerprint(embedder.fingerprint),
+        current_chunk_count=chunk_count,
+    )
     return {
         "app": {
             "name": "everything-rag",
@@ -99,11 +113,11 @@ async def status(
         },
         "knowledge": {
             "file_count": vectorstore.count_files(),
-            "chunk_count": vectorstore.count(),
+            "chunk_count": chunk_count,
             "image_count": vectorstore.count_images(),
             "image_tasks": get_image_state_store().count_status(),
             "last_sync_at": last_sync.isoformat() if last_sync is not None else None,
-            "needs_rebuild": False,
+            "needs_rebuild": needs_rebuild,
         },
         "privacy": {
             "outbound_state": outbound_client.outbound_state,

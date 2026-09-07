@@ -9,18 +9,30 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from app.ingestion.pipeline import IngestionPipeline, IngestReport
+from app.ingestion.chunker import Chunk
+from app.ingestion.index_schema import make_index_fingerprint
+from app.ingestion.pipeline import (
+    IngestionPipeline,
+    IngestReport,
+    chunk_embedding_text,
+    make_block_id,
+)
+from app.ingestion.state_store import DocumentStateStore
 from app.models.schemas import BlockMetadata, SourceType
 
-#: block_id = content_hash(16 位 hex) + "::" + chunk.block_id
-_BLOCK_ID_RE = re.compile(r"^[0-9a-f]{16}::.+$")
+#: block_id = source_file 摘要(32 位 hex) + content_hash(16 位 hex) + chunk.block_id
+_BLOCK_ID_RE = re.compile(r"^[0-9a-f]{32}::[0-9a-f]{16}::.+$")
 
 
 class FakeEmbedder:
     fingerprint = "fake"
     dim = 4
 
+    def __init__(self) -> None:
+        self.calls: list[list[str]] = []
+
     def embed_texts(self, texts: list[str]) -> list[list[float]]:
+        self.calls.append(list(texts))
         return [[float(len(text)) % 7.0, 0.0, 0.0, 0.0] for text in texts]
 
 
@@ -29,6 +41,7 @@ class FakeVectorStore:
 
     def __init__(self) -> None:
         self.blocks: dict[str, tuple[str, list[float], BlockMetadata]] = {}
+        self.repair_calls = 0
 
     def upsert(self, blocks: list[tuple[str, str, list[float], BlockMetadata]]) -> None:
         for block_id, text, vector, meta in blocks:
@@ -50,11 +63,17 @@ class FakeVectorStore:
             if meta.source_file == source_file
         }
 
-    def query(self, vector: list[float], top_k: int, where: dict[str, str] | None = None) -> list[dict]:
+    def query(
+        self, vector: list[float], top_k: int, where: dict[str, str] | None = None
+    ) -> list[dict]:
         return []
 
     def count(self) -> int:
         return len(self.blocks)
+
+    def repair_ann_index(self) -> int:
+        self.repair_calls += 1
+        return 0
 
 
 class FailOnSentinelEmbedder:
@@ -84,6 +103,25 @@ def _pipeline() -> tuple[IngestionPipeline, FakeEmbedder, FakeVectorStore]:
     return IngestionPipeline(embedder=embedder, vectorstore=store), embedder, store
 
 
+def test_chunk_embedding_text_adds_retrieval_context_without_changing_chunk() -> None:
+    """向量输入携带文档/标题语义，展示正文对象保持原样。"""
+
+    chunk = Chunk(
+        block_id="/H2/基础指标#1",
+        text="UV；转化率；GMV",
+        source_file=r"C:\notes\AB实验.md",
+        heading_path="指标 > 基础指标",
+        anchor="基础指标",
+        seq=1,
+        kind="table",
+    )
+
+    assert chunk_embedding_text(chunk) == (
+        "文档：AB实验\n标题：指标 > 基础指标\n内容：UV；转化率；GMV"
+    )
+    assert chunk.text == "UV；转化率；GMV"
+
+
 # ---------------------------------------------------------------- 1. 空目录 / 无 MD
 
 
@@ -111,10 +149,12 @@ def test_dir_without_md_returns_zero_report(tmp_path: Path) -> None:
 
 
 def test_ingest_counts_and_block_ids(tmp_path: Path) -> None:
-    """单文件导入：计数正确，block_id 全局唯一（content_hash::锚点路径链）。"""
+    """单文件导入：计数正确，block_id 全局唯一（source::content::锚点路径链）。"""
     root = tmp_path / "docs"
     root.mkdir()
-    file = _write(root, "a.md", "# 标题一\n\n" + "正文内容" * 40 + "\n\n## 子标题\n\n" + "子内容" * 40 + "\n")
+    file = _write(
+        root, "a.md", "# 标题一\n\n" + "正文内容" * 40 + "\n\n## 子标题\n\n" + "子内容" * 40 + "\n"
+    )
 
     pipeline, _, store = _pipeline()
     report = pipeline.ingest(root)
@@ -126,8 +166,9 @@ def test_ingest_counts_and_block_ids(tmp_path: Path) -> None:
     assert report.blocks_upserted == 2
     assert report.errors == ()
     assert store.count() == 2
+    assert store.repair_calls == 1
 
-    # block_id 全局唯一：content_hash 前缀 + chunk.block_id
+    # block_id 全局唯一：source_file 摘要 + content_hash + chunk.block_id
     assert len(store.blocks) == 2
     assert all(_BLOCK_ID_RE.fullmatch(block_id) for block_id in store.blocks)
     # 元数据组装正确（两块的 doc_id/source_file 相同，取任一块即可）
@@ -137,6 +178,67 @@ def test_ingest_counts_and_block_ids(tmp_path: Path) -> None:
     assert first_meta.source_file == str(file.resolve())
     assert first_meta.platform == "local"
     assert first_meta.chunk_type == "text"
+
+
+def test_full_ingest_batches_embeddings_across_files(tmp_path: Path) -> None:
+    root = tmp_path / "docs"
+    root.mkdir()
+    _write(root, "a.md", "# A\n\n内容 A\n")
+    _write(root, "b.md", "# B\n\n内容 B\n")
+    pipeline, embedder, store = _pipeline()
+
+    report = pipeline.ingest(root)
+
+    assert report.files_parsed == 2
+    assert store.count() == 2
+    assert len(embedder.calls) == 1
+    assert len(embedder.calls[0]) == 2
+
+
+def test_block_id_is_source_aware_stable_and_path_private(tmp_path: Path) -> None:
+    """相同内容/锚点的不同来源不碰撞；同一规范化来源重复计算稳定且不泄露路径。"""
+
+    first_source = tmp_path / "team-a" / "same.md"
+    second_source = tmp_path / "team-b" / "same.md"
+    content_hash = "0123456789abcdef"
+    anchor = "/H1/same#1"
+
+    first = make_block_id(content_hash, anchor, source_file=first_source)
+    first_again = make_block_id(
+        content_hash,
+        anchor,
+        source_file=first_source.parent / "." / first_source.name,
+    )
+    second = make_block_id(content_hash, anchor, source_file=second_source)
+
+    assert first == first_again
+    assert first != second
+    assert _BLOCK_ID_RE.fullmatch(first)
+    assert str(first_source.resolve()) not in first
+    assert first_source.name not in first
+
+
+def test_identical_markdown_files_are_both_retained(tmp_path: Path) -> None:
+    """两个路径下完全相同的 Markdown 均保留，不能因 content_hash/锚点相同而覆盖。"""
+
+    root = tmp_path / "docs"
+    (root / "team-a").mkdir(parents=True)
+    (root / "team-b").mkdir(parents=True)
+    content = "# 同一标题\n\n完全相同的正文内容。\n"
+    first_path = _write(root / "team-a", "same.md", content)
+    second_path = _write(root / "team-b", "same.md", content)
+
+    pipeline, _, store = _pipeline()
+    report = pipeline.ingest(root)
+
+    assert report.files_parsed == 2
+    assert report.blocks_upserted == 2
+    assert store.count() == 2
+    assert {meta.source_file for _, _, meta in store.blocks.values()} == {
+        str(first_path.resolve()),
+        str(second_path.resolve()),
+    }
+    assert len(set(store.blocks)) == 2
 
 
 def _file_hash(path: Path) -> str:
@@ -161,6 +263,31 @@ def test_reingest_idempotent(tmp_path: Path) -> None:
     assert first.blocks_upserted == second.blocks_upserted == 1
     assert store.count() == 1  # 不重复
     assert second.files_skipped == 0
+
+
+def test_full_import_persists_document_state_for_future_migrations(tmp_path: Path) -> None:
+    """路径式 full 导入也双写 state，后续模型/切片升级才能可靠判断重建。"""
+
+    root = tmp_path / "docs"
+    root.mkdir()
+    path = _write(root, "a.md", "# 标题\n\n正文内容\n")
+    embedder = FakeEmbedder()
+    vectorstore = FakeVectorStore()
+    state = DocumentStateStore(tmp_path / "state.db")
+    pipeline = IngestionPipeline(
+        embedder=embedder,
+        vectorstore=vectorstore,
+        document_state_store=state,
+    )
+
+    report = pipeline.ingest(root)
+
+    assert report.files_parsed == 1
+    record = state.load_all()[str(path.resolve())]
+    assert record.content_hash == _file_hash(path)
+    assert record.index_fingerprint == make_index_fingerprint(embedder.fingerprint)
+    assert state.list_sources() == [root.resolve()]
+    state.close()
 
 
 # ---------------------------------------------------------------- 5. 编码容错
@@ -282,8 +409,8 @@ def test_semantic_split_splits_at_topic_boundary() -> None:
         block_id="#1",
         text=f"{apple}\n\n{apple}\n\n{car}",
         source_file="f.md",
-        heading_path="A",
-        anchor="a",
+        heading_path="",
+        anchor="",
         seq=1,
     )
     result = pipeline.semantic_split([chunk])
@@ -294,5 +421,69 @@ def test_semantic_split_splits_at_topic_boundary() -> None:
     assert result[1].block_id == "#1-s1"
 
     # 单段/短块不切
-    short = Chunk(block_id="#2", text="短内容", source_file="f.md", heading_path="B", anchor="b", seq=2)
+    short = Chunk(
+        block_id="#2", text="短内容", source_file="f.md", heading_path="B", anchor="b", seq=2
+    )
     assert pipeline.semantic_split([short]) == [short]
+
+
+def test_semantic_split_batches_paragraphs_from_multiple_long_chunks() -> None:
+    """同一文档的多个长块应合并请求，避免按块产生大量网络往返。"""
+
+    class BatchTopicEmbedder:
+        fingerprint = "fake"
+        dim = 2
+
+        def __init__(self) -> None:
+            self.calls: list[list[str]] = []
+
+        def embed_texts(self, texts: list[str]) -> list[list[float]]:
+            self.calls.append(list(texts))
+            return [
+                [1.0, 0.0] if "主题甲" in text else [0.0, 1.0]
+                for text in texts
+            ]
+
+    embedder = BatchTopicEmbedder()
+    pipeline = IngestionPipeline(embedder, FakeVectorStore())
+    chunks = [
+        Chunk(
+            block_id=f"#{index}",
+            text=("主题甲内容。" * 70) + "\n\n" + ("主题乙内容。" * 70),
+            source_file="f.md",
+            heading_path="",
+            anchor="",
+            seq=index,
+        )
+        for index in (1, 2)
+    ]
+
+    result = pipeline.semantic_split(chunks)
+
+    assert len(result) == 4
+    assert len(embedder.calls) == 1
+    assert len(embedder.calls[0]) == 4
+
+
+def test_semantic_split_does_not_reembed_titled_sections() -> None:
+    """标题已提供稳定语义边界时不做二次云端段落比较。"""
+
+    class NoCallEmbedder:
+        fingerprint = "fake"
+        dim = 2
+
+        def embed_texts(self, texts: list[str]) -> list[list[float]]:
+            raise AssertionError(f"titled chunk unexpectedly embedded: {len(texts)}")
+
+    chunk = Chunk(
+        block_id="#1",
+        text=("主题甲内容。" * 70) + "\n\n" + ("主题乙内容。" * 70),
+        source_file="f.md",
+        heading_path="已有标题",
+        anchor="已有标题",
+        seq=1,
+    )
+
+    assert IngestionPipeline(NoCallEmbedder(), FakeVectorStore()).semantic_split([chunk]) == [
+        chunk
+    ]

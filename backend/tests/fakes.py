@@ -9,6 +9,27 @@ from __future__ import annotations
 from typing import Any
 
 
+class FakeEmbedder:
+    """Status-safe embedder identity; no network and deterministic vectors when needed."""
+
+    dim = 4
+
+    def __init__(self, fingerprint: str = "fake") -> None:
+        self.fingerprint = fingerprint
+
+    def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        return [[float(len(text)), 0.0, 0.0, 0.0] for text in texts]
+
+    def embed_query(self, text: str) -> list[float]:
+        return self.embed_queries([text])[0]
+
+    def embed_queries(self, texts: list[str]) -> list[list[float]]:
+        return self.embed_documents(texts)
+
+    def embed_texts(self, texts: list[str]) -> list[list[float]]:
+        return self.embed_documents(texts)
+
+
 class FakeVectorStore:
     """可控计数的向量库替身：count / count_files / count_images 可配置，其余为安全 no-op。"""
 
@@ -48,3 +69,6 @@ class FakeVectorStore:
 
     def count_images(self) -> int:
         return self._images
+
+    def repair_ann_index(self) -> int:
+        return 0

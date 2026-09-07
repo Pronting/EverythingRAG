@@ -18,7 +18,7 @@ import threading
 from pathlib import Path
 from typing import Literal
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel, Field
 
 from app.api.deps import (
@@ -68,6 +68,7 @@ def _build_vision_pair() -> tuple[VisionModel | None, ImageFetcher | None]:
 
 def get_import_pipeline(
     vectorstore: VectorStore = Depends(get_vector_store),  # noqa: B008
+    document_state_store: DocumentStateStore = Depends(get_state_store),  # noqa: B008
 ) -> IngestionPipeline:
     """构造导入管线（共享云端嵌入器 + 共享向量库；构造零出网）。
 
@@ -81,6 +82,7 @@ def get_import_pipeline(
         vision=vision,
         fetcher=fetcher,
         state_store=image_store,
+        document_state_store=document_state_store,
     )
     if vision is not None:
         # 识图已配置：挂后台工作线程池，文本先入库、图片后台并发补全（持久化 + 重启续跑）。
@@ -139,7 +141,7 @@ async def start_import(
 @router.post("/api/import/upload", status_code=202)
 async def upload_import(
     files: list[UploadFile] = File(...),  # noqa: B008
-    mode: Literal["full", "incremental"] = "incremental",
+    mode: Literal["full", "incremental"] = Form("incremental"),
     store: ImportTaskStore = Depends(get_import_task_store),  # noqa: B008
     sync: SyncService = Depends(get_sync_service),  # noqa: B008
     state_store: DocumentStateStore = Depends(get_state_store),  # noqa: B008

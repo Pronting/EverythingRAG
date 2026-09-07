@@ -11,6 +11,7 @@ from pathlib import Path
 
 import pytest
 
+from app.ingestion.index_schema import INGESTION_SCHEMA_VERSION, make_index_fingerprint
 from app.ingestion.scanner import DiscoveredFile, discover_file
 from app.ingestion.state_store import DocumentStateStore
 from app.ingestion.sync import SyncService
@@ -22,7 +23,8 @@ class FakeEmbedder:
     fingerprint = "fake"
     dim = 4
 
-    def __init__(self) -> None:
+    def __init__(self, fingerprint: str = "fake") -> None:
+        self.fingerprint = fingerprint
         self.calls: list[list[str]] = []
 
     def embed_texts(self, texts: list[str]) -> list[list[float]]:
@@ -39,6 +41,7 @@ class FakeVectorStore:
 
     def __init__(self) -> None:
         self.blocks: dict[str, tuple[str, list[float], object]] = {}
+        self.repair_calls = 0
 
     def upsert(self, blocks: list[tuple[str, str, list[float], object]]) -> None:
         for block_id, text, vector, meta in blocks:
@@ -63,6 +66,10 @@ class FakeVectorStore:
     def count(self) -> int:
         return len(self.blocks)
 
+    def repair_ann_index(self) -> int:
+        self.repair_calls += 1
+        return 0
+
 
 def _write(root: Path, name: str, content: str) -> Path:
     path = root / name
@@ -71,7 +78,9 @@ def _write(root: Path, name: str, content: str) -> Path:
 
 
 @pytest.fixture
-def harness(tmp_path: Path) -> tuple[SyncService, FakeEmbedder, FakeVectorStore, DocumentStateStore]:
+def harness(
+    tmp_path: Path,
+) -> tuple[SyncService, FakeEmbedder, FakeVectorStore, DocumentStateStore]:
     """装配 SyncService + fake，state 落在 tmp_path（测试后自动清理）。"""
     root = tmp_path / "docs"
     root.mkdir()
@@ -116,8 +125,12 @@ def test_first_sync_adds_all_files(
     assert report.files_skipped == 0
     assert report.blocks_upserted == store.count() == 3  # a=2 块、b=1 块
     assert report.errors == ()
+    assert store.repair_calls == 1
     # 指纹已持久化，来源根已登记
     assert len(state.load_all()) == 2
+    assert {record.index_fingerprint for record in state.load_all().values()} == {
+        make_index_fingerprint("fake")
+    }
     assert state.list_sources() == [harness_root(harness)]
 
 
@@ -152,6 +165,133 @@ def test_second_sync_unchanged_skips_everything(
     assert store.count() == first.blocks_upserted  # 库不变
 
 
+def test_exact_duplicate_files_only_create_one_active_document(
+    harness: tuple[SyncService, FakeEmbedder, FakeVectorStore, DocumentStateStore],
+) -> None:
+    """相同内容位于稳定路径和历史任务路径时，只索引稳定路径一次。"""
+
+    service, _embedder, store, state = harness
+    root = harness_root(harness)
+    content = "# 分表对比\n\n京东与淘宝的购物车分表方案。\n"
+    _upload(
+        root,
+        {
+            "doc/购物车分表.md": content,
+            "208c0ca74fd44a12af218fb34b57e91f/doc/购物车分表.md": content,
+        },
+    )
+
+    report = service.ingest(root)
+
+    assert report.files_scanned == 2
+    assert report.files_added == 1
+    assert report.files_unchanged == 1
+    assert len(state.load_all()) == 1
+    (active_path,) = state.load_all()
+    assert active_path.endswith("doc\\购物车分表.md")
+    assert "208c0ca74fd44a12af218fb34b57e91f" not in active_path
+    assert store.count() == 1
+
+
+def test_stable_path_replaces_existing_legacy_alias_without_count_growth(
+    harness: tuple[SyncService, FakeEmbedder, FakeVectorStore, DocumentStateStore],
+) -> None:
+    """历史 UUID 来源已入库后出现稳定副本：删旧块、建新块，净计数不增长。"""
+
+    service, _embedder, store, state = harness
+    root = harness_root(harness)
+    content = "# 公司介绍\n\n这是同一份公司介绍。\n"
+    legacy_rel = "64264793bc744da48c72fc5730ac575f/doc/公司介绍.md"
+    _upload(root, {legacy_rel: content})
+    first = service.ingest(root)
+    assert first.files_added == 1
+    assert store.count() == 1
+
+    _upload(root, {"doc/公司介绍.md": content})
+    migrated = service.ingest(root)
+
+    assert migrated.files_added == 1
+    assert migrated.files_deleted == 1
+    assert store.count() == 1
+    assert len(state.load_all()) == 1
+    (active_path,) = state.load_all()
+    assert active_path.endswith("doc\\公司介绍.md")
+
+    steady = service.ingest(root)
+    assert steady.files_added == steady.files_updated == steady.files_deleted == 0
+    assert steady.files_unchanged == 2
+    assert store.count() == 1
+
+
+def test_schema_upgrade_forces_one_complete_reindex_then_returns_to_fast_path(
+    harness: tuple[SyncService, FakeEmbedder, FakeVectorStore, DocumentStateStore],
+) -> None:
+    """切片结构升级时内容未变也重处理一次，且同 ID upsert 后不会被误删。"""
+
+    service, embedder, store, state = harness
+    root = harness_root(harness)
+    _seed_docs(root)
+    service.ingest(root)
+    record = state.load_all()[str(root / "a.md")]
+    state.upsert_fingerprint(
+        record.path,
+        record.content_hash,
+        record.mtime,
+        record.size,
+        record.chunk_count,
+        schema_version=INGESTION_SCHEMA_VERSION - 1,
+        index_fingerprint=make_index_fingerprint(embedder.fingerprint),
+    )
+    embedder.calls.clear()
+
+    upgraded = service.ingest(root)
+
+    assert upgraded.files_updated == 1
+    assert upgraded.files_unchanged == 1
+    assert upgraded.blocks_upserted == 2
+    assert store.count() == 3
+    assert embedder.total_embedded == 2
+    assert state.load_all()[str(root / "a.md")].schema_version == INGESTION_SCHEMA_VERSION
+
+    embedder.calls.clear()
+    steady = service.ingest(root)
+    assert steady.files_unchanged == 2
+    assert steady.files_updated == 0
+    assert embedder.total_embedded == 0
+
+
+def test_embedding_fingerprint_change_rebuilds_once_without_deleting_old_collection(
+    harness: tuple[SyncService, FakeEmbedder, FakeVectorStore, DocumentStateStore],
+) -> None:
+    """切换 embedding 后未变文件进入新 collection；旧 collection 原样保留。"""
+
+    service, _old_embedder, old_store, state = harness
+    root = harness_root(harness)
+    _seed_docs(root)
+    service.ingest(root)
+    old_ids = set(old_store.blocks)
+
+    new_embedder = FakeEmbedder("fake-v2")
+    new_store = FakeVectorStore()
+    migrated = SyncService(new_embedder, new_store, state)
+    report = migrated.ingest(root)
+
+    assert report.files_updated == 2
+    assert report.files_unchanged == 0
+    assert report.blocks_upserted == 3
+    assert new_store.count() == 3
+    assert set(old_store.blocks) == old_ids  # 旧 collection 没有删除或改写
+    assert {record.index_fingerprint for record in state.load_all().values()} == {
+        make_index_fingerprint("fake-v2")
+    }
+
+    new_embedder.calls.clear()
+    steady = migrated.ingest(root)
+    assert steady.files_unchanged == 2
+    assert steady.files_updated == 0
+    assert new_embedder.total_embedded == 0
+
+
 # ---------------------------------------------------------------- 3. 新增文件
 
 
@@ -172,6 +312,22 @@ def test_sync_detects_new_file(
     assert report.files_unchanged == 2
     assert report.blocks_upserted == 1
     assert store.count() == 4  # 3 + 1
+
+
+def test_initial_sync_batches_embeddings_across_new_files(
+    harness: tuple[SyncService, FakeEmbedder, FakeVectorStore, DocumentStateStore],
+) -> None:
+    """首次同步的多个新文件共享嵌入批次，避免每文件一次网络往返。"""
+    service, embedder, store, _state = harness
+    root = harness_root(harness)
+    _seed_docs(root)
+
+    report = service.ingest(root)
+
+    assert report.files_added == 2
+    assert store.count() == 3
+    assert len(embedder.calls) == 1
+    assert embedder.total_embedded == 3
 
 
 # ---------------------------------------------------------------- 4. 删除文件级联清块
@@ -214,7 +370,11 @@ def test_modified_file_reuses_unchanged_blocks(
 
     before_ids = set(store.blocks)
     # 修改第一段内容（不动子标题）；段落保持实质长度以维持独立块
-    _write(root, "a.md", "# 标题一\n\n" + "第一段已修改。" * 60 + "\n\n## 子标题\n\n" + "子内容。" * 60 + "\n")
+    _write(
+        root,
+        "a.md",
+        "# 标题一\n\n" + "第一段已修改。" * 60 + "\n\n## 子标题\n\n" + "子内容。" * 60 + "\n",
+    )
     embedder.calls.clear()
 
     report = service.ingest(root)
@@ -226,7 +386,7 @@ def test_modified_file_reuses_unchanged_blocks(
 
     # 关键：只调用了一次 embed，且只含变化块文本（未变块未重嵌入）
     assert embedder.total_embedded == 1
-    assert embedder.calls == [["第一段已修改。" * 60]]
+    assert embedder.calls == [[f"文档：a\n标题：标题一\n内容：{'第一段已修改。' * 60}"]]
 
     # 库仍 3 块；a.md 未变的子标题块 block_id 复用（在 before_ids 中），文本未变
     assert store.count() == 3
@@ -309,7 +469,7 @@ def test_ingest_many_aggregates(
     tmp_path: Path,
 ) -> None:
     """多根同步：报告聚合（计数求和），来源根逐一登记。"""
-    service, _embedder, _store, state = harness
+    service, embedder, store, state = harness
     root_a = harness_root(harness)
     root_b = tmp_path / "other"
     root_b.mkdir()
@@ -322,6 +482,17 @@ def test_ingest_many_aggregates(
     assert report.files_scanned == 3
     assert report.blocks_upserted == 4  # a=2 + b=1 + d=1
     assert len(state.list_sources()) == 2
+    assert len(state.load_all()) == 3
+    assert store.count() == 4
+
+    # 第二轮应把三个文件全部判为未变；同步 root_a 时不能删除 root_b，反之亦然。
+    embedder.calls.clear()
+    steady = service.ingest_many([root_a, root_b])
+    assert steady.files_unchanged == 3
+    assert steady.files_added == steady.files_updated == steady.files_deleted == 0
+    assert embedder.total_embedded == 0
+    assert len(state.load_all()) == 3
+    assert store.count() == 4
 
 
 def test_ingest_many_skips_missing_root_and_cleans_registration(
@@ -449,11 +620,17 @@ def test_upload_reupload_modified_reuses_block(
     root = harness_root(harness)
     path = root / "folder1" / "a.md"
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text("# 标题一\n\n" + "第一段内容。" * 60 + "\n\n## 子标题\n\n" + "子内容。" * 60 + "\n", encoding="utf-8")
+    path.write_text(
+        "# 标题一\n\n" + "第一段内容。" * 60 + "\n\n## 子标题\n\n" + "子内容。" * 60 + "\n",
+        encoding="utf-8",
+    )
     service.sync_upload([_disc(path)], deletion_scopes=[root / "folder1"])
     before_ids = set(store.blocks)
 
-    path.write_text("# 标题一\n\n" + "第一段已修改。" * 60 + "\n\n## 子标题\n\n" + "子内容。" * 60 + "\n", encoding="utf-8")
+    path.write_text(
+        "# 标题一\n\n" + "第一段已修改。" * 60 + "\n\n## 子标题\n\n" + "子内容。" * 60 + "\n",
+        encoding="utf-8",
+    )
     embedder.calls.clear()
     report = service.sync_upload([_disc(path)], deletion_scopes=[root / "folder1"])
 
@@ -521,7 +698,9 @@ def test_upload_new_folder_touches_only_it(
 
     q = root / "folder2" / "b.md"
     _upload(root, {"folder2/b.md": "# B\n\n内容\n"})
-    report = service.sync_upload([_disc(p), _disc(q)], deletion_scopes=[root / "folder1", root / "folder2"])
+    report = service.sync_upload(
+        [_disc(p), _disc(q)], deletion_scopes=[root / "folder1", root / "folder2"]
+    )
 
     assert report.files_added == 1  # folder2/b.md
     assert report.files_unchanged == 1  # folder1/a.md

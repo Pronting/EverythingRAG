@@ -80,13 +80,37 @@ def test_describe_builds_image_url_message(monkeypatch: pytest.MonkeyPatch) -> N
     call = completions.calls[0]
     assert call["model"] == "qwen2-vl:7b"
     assert call["temperature"] == 0.2
-    assert call["max_tokens"] == 800
+    assert call["max_tokens"] == 1400
     messages = call["messages"]
     assert messages[0]["role"] == "user"
     parts = messages[0]["content"]
     assert parts[0] == {"type": "text", "text": DESCRIBE_PROMPT}
     expected_uri = f"data:image/jpeg;base64,{base64.b64encode(image).decode('ascii')}"
     assert parts[1] == {"type": "image_url", "image_url": {"url": expected_uri}}
+
+
+def test_document_keeps_long_evidence_and_interactive_verification_is_bounded(monkeypatch):
+    completions = _FakeCompletions("表格完整证据\n" * 600)
+    model = _model(monkeypatch, completions)
+    assert len(model.describe_document(b"image")) > 1000
+    assert completions.calls[-1]["timeout"] == 180
+    assert "裁切" in completions.calls[-1]["messages"][0]["content"][0]["text"]
+    model.verify_document(b"image", "核对某行")
+    assert completions.calls[-1]["timeout"] == 60
+
+
+def test_interactive_verification_does_not_retry(monkeypatch):
+    calls = []
+    class APITimeoutError(Exception):
+        pass
+    class Timeout:
+        def create(self, **kwargs):
+            calls.append(kwargs)
+            raise APITimeoutError()
+    model = _model(monkeypatch, Timeout())
+    with pytest.raises(VisionProviderError):
+        model.verify_document(b"image", "核对某行")
+    assert len(calls) == 1
 
 
 def test_describe_records_audit(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -216,3 +240,13 @@ def test_describe_truncates_to_max_chars(monkeypatch: pytest.MonkeyPatch) -> Non
     result = model.describe(b"img")
     assert len(result) == vision_mod.MAX_DESCRIBE_CHARS
     assert len(result) <= 1000
+
+
+def test_truncation_keeps_whole_rows_and_reports_missing_evidence():
+    content = "【证据】\n" + "20240406 | 2.48K | 33.33%\n" * 50
+    result = vision_mod._bounded_description(content)
+    assert len(result) <= vision_mod.MAX_DESCRIBE_CHARS
+    assert result.endswith("【局限】识图输出未完整保留，请核对原图。")
+    assert result.splitlines()[-2] == "20240406 | 2.48K | 33.33%"
+    result = vision_mod._bounded_description("完整行\n20240406 | 2.", truncated=True)
+    assert "20240406" not in result

@@ -5,10 +5,12 @@
 
 from __future__ import annotations
 
+import sqlite3
 from pathlib import Path
 
 import pytest
 
+from app.ingestion.index_schema import INGESTION_SCHEMA_VERSION, make_index_fingerprint
 from app.ingestion.state_store import DocumentStateStore
 
 
@@ -22,7 +24,10 @@ def _store(tmp_path: Path) -> DocumentStateStore:
 def test_upsert_and_load_roundtrip(tmp_path: Path) -> None:
     """写入指纹 -> load_all 读回，字段完整一致。"""
     store = _store(tmp_path)
-    store.upsert_fingerprint("/abs/a.md", "hash1", 100.0, 42, 3)
+    index_fingerprint = make_index_fingerprint("fake")
+    store.upsert_fingerprint(
+        "/abs/a.md", "hash1", 100.0, 42, 3, index_fingerprint=index_fingerprint
+    )
 
     all_docs = store.load_all()
     assert list(all_docs) == ["/abs/a.md"]
@@ -31,7 +36,61 @@ def test_upsert_and_load_roundtrip(tmp_path: Path) -> None:
     assert record.mtime == 100.0
     assert record.size == 42
     assert record.chunk_count == 3
+    assert record.schema_version == INGESTION_SCHEMA_VERSION
+    assert record.index_fingerprint == index_fingerprint
     assert record.imported_at  # 非空
+
+
+def test_legacy_database_marks_existing_rows_for_reindex(tmp_path: Path) -> None:
+    """旧 state.db 自动补 schema_version=1/空索引指纹，触发一次重建。"""
+
+    db_path = tmp_path / "legacy-state.db"
+    connection = sqlite3.connect(db_path)
+    connection.executescript(
+        """
+        CREATE TABLE documents (
+            path TEXT PRIMARY KEY,
+            content_hash TEXT NOT NULL,
+            mtime REAL NOT NULL,
+            size INTEGER NOT NULL,
+            chunk_count INTEGER NOT NULL DEFAULT 0,
+            imported_at TEXT NOT NULL
+        );
+        CREATE TABLE sources (root_path TEXT PRIMARY KEY, last_sync_at TEXT NOT NULL);
+        INSERT INTO documents VALUES ('/abs/a.md', 'old', 1.0, 10, 1, '2026-01-01');
+        """
+    )
+    connection.commit()
+    connection.close()
+
+    store = DocumentStateStore(db_path)
+    legacy = store.load_all()["/abs/a.md"]
+    assert legacy.schema_version == 1
+    assert legacy.index_fingerprint == ""
+    assert store.needs_rebuild(
+        index_fingerprint=make_index_fingerprint("fake"), current_chunk_count=1
+    )
+
+    current = make_index_fingerprint("fake")
+    store.upsert_fingerprint(
+        "/abs/a.md", "old", 1.0, 10, 1, index_fingerprint=current
+    )
+    migrated = store.load_all()["/abs/a.md"]
+    assert migrated.schema_version == INGESTION_SCHEMA_VERSION
+    assert migrated.index_fingerprint == current
+    assert not store.needs_rebuild(index_fingerprint=current, current_chunk_count=1)
+    store.close()
+
+
+def test_needs_rebuild_when_current_collection_is_empty(tmp_path: Path) -> None:
+    """状态已有当前文档但当前 collection 为空时，必须提示重建。"""
+
+    store = _store(tmp_path)
+    current = make_index_fingerprint("fake")
+    store.upsert_fingerprint("/abs/a.md", "h", 1.0, 1, 1, index_fingerprint=current)
+
+    assert store.needs_rebuild(index_fingerprint=current, current_chunk_count=0)
+    assert not store.needs_rebuild(index_fingerprint=current, current_chunk_count=1)
 
 
 def test_upsert_same_path_is_replace(tmp_path: Path) -> None:

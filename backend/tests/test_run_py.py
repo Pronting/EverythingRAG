@@ -1,6 +1,6 @@
 """scripts/run.py 一键拉起验证 + 静态托管（任务 9 交付 C）。
 
-- 单元：--no-browser / 环境变量跳过开浏览器、动态端口。
+- 单元：--no-browser、健康检查后开浏览器、端口预占和源码 stamp。
 - 集成：subprocess 拉起 ``run.py --no-browser`` → 解析 stdout 端口 → GET /api/status 200
   → 终止进程（Windows 下连带清理 uvicorn 子进程，taskkill 进程树）。
 - 静态托管：frontend/dist 存在时 GET / 返回 200 HTML，且 /api/status 200。
@@ -72,12 +72,66 @@ def test_parse_args_accepts_no_browser() -> None:
     assert run_mod.parse_args([]).no_browser is False
 
 
-def test_pick_free_port_returns_open_port() -> None:
-    """动态端口可用且落在有效范围。"""
-    port = run_mod.pick_free_port()
-    assert isinstance(port, int) and 0 < port < 65536
-    with socket.socket() as s:
-        s.bind(("127.0.0.1", port))  # 空闲（刚释放）
+def test_bound_server_socket_reserves_fixed_port() -> None:
+    """固定端口在交给 uvicorn 前持续被占用，不自动换端口。"""
+    listener = run_mod.bind_server_socket()
+    port = listener.getsockname()[1]
+    assert port == 9999
+    contender = socket.socket()
+    try:
+        with pytest.raises(OSError):
+            contender.bind(("127.0.0.1", port))
+    finally:
+        contender.close()
+        listener.close()
+
+
+def test_browser_opens_only_after_status_is_ready(monkeypatch: pytest.MonkeyPatch) -> None:
+    events: list[str] = []
+
+    def ready(_url: str, timeout: float) -> bool:
+        events.append(f"ready:{timeout}")
+        return True
+
+    monkeypatch.setattr(run_mod, "wait_for_status", ready)
+    monkeypatch.setattr(run_mod.webbrowser, "open", lambda _url: events.append("browser"))
+    run_mod.open_browser_when_ready("http://127.0.0.1:1234", timeout=1.5)
+    assert events == ["ready:1.5", "browser"]
+
+
+def test_browser_is_not_opened_when_status_times_out(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    opened: list[str] = []
+    monkeypatch.setattr(run_mod, "wait_for_status", lambda _url, timeout: False)
+    monkeypatch.setattr(run_mod.webbrowser, "open", opened.append)
+    run_mod.open_browser_when_ready("http://127.0.0.1:1234", timeout=0.0)
+    assert opened == []
+
+
+def test_stamp_detects_file_and_directory_changes(tmp_path: Path) -> None:
+    source = tmp_path / "src"
+    source.mkdir()
+    file = source / "app.ts"
+    file.write_text("v1", encoding="utf-8")
+    config = tmp_path / "package.json"
+    config.write_text("{}", encoding="utf-8")
+    stamp_file = tmp_path / "dist" / ".build.stamp"
+    inputs = [source, config]
+
+    run_mod.write_stamp(stamp_file, inputs)
+    assert run_mod.stamp_matches(stamp_file, inputs) is True
+    file.write_text("v2", encoding="utf-8")
+    assert run_mod.stamp_matches(stamp_file, inputs) is False
+
+
+def test_stamp_tracks_missing_path_becoming_present(tmp_path: Path) -> None:
+    optional = tmp_path / ".env.production"
+    stamp_file = tmp_path / ".stamp"
+    run_mod.write_stamp(stamp_file, [optional])
+    assert run_mod.stamp_matches(stamp_file, [optional]) is True
+    optional.write_text("VITE_FLAG=1", encoding="utf-8")
+    assert run_mod.stamp_matches(stamp_file, [optional]) is False
 
 
 # ---------------------------------------------------------------- 2. 静态托管
@@ -117,6 +171,7 @@ def test_run_py_no_browser_starts_and_serves_status(tmp_path: Path) -> None:
     try:
         port = _wait_for_startup_line(proc, timeout=30.0)
         assert port is not None, "未读到 run.py 启动行（见下输出）：\n" + _drain_stdout(proc)
+        assert port == 9999
         url = f"http://127.0.0.1:{port}/api/status"
         body, status = _wait_for_status_200(url, timeout=30.0)
         assert status == 200
@@ -162,7 +217,7 @@ def _wait_for_status_200(url: str, timeout: float) -> tuple[str, int]:
 
 
 def _terminate_tree(proc: subprocess.Popen) -> None:
-    """终止进程树：run.py 会再拉起 uvicorn 子进程，Windows 下须连带清理。"""
+    """终止启动进程；Windows 用进程树清理兜底，避免测试失败遗留服务。"""
     if os.name == "nt":
         try:
             subprocess.run(

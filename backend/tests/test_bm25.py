@@ -68,6 +68,37 @@ def test_bm25_top_k_bounds() -> None:
     assert top[0][1] >= top[1][1]  # 分数非增
 
 
+def test_repeated_term_does_not_corrupt_document_frequency() -> None:
+    """同词在标题/正文重复不能令 df>文档数、IDF 变负并吞掉真实命中。"""
+
+    index = BM25Index(["实时风控方案 实时风控方案 限流", "缓存设计 普通说明"])
+    hits = index.search("实时风控方案 限流", top_k=2)
+    assert hits
+    assert hits[0][0] == 0
+    assert hits[0][1] > 0
+
+
+def test_detailed_hit_exposes_coverage_and_rarity_for_safe_rescue() -> None:
+    """详细词法证据可区分完整稀有命中和只撞上常见词的弱命中。"""
+
+    index = BM25Index(
+        [
+            "common common SPR-2024-0001 shopping cart",
+            "common unrelated document",
+            "common another document",
+        ]
+    )
+    hits = index.search_detailed("common SPR-2024-0001", top_k=3)
+    by_index = {hit.index: hit for hit in hits}
+    assert by_index[0].coverage == pytest.approx(1.0)
+    assert by_index[0].matched_terms == 2
+    assert by_index[0].rarity > by_index[1].rarity
+    assert by_index[0].identifier_query_terms == 2
+    assert by_index[0].identifier_matched_terms == 2
+    assert by_index[1].identifier_query_terms == 2
+    assert by_index[1].identifier_matched_terms == 1
+
+
 def test_bm25_no_overlap_scores_zero() -> None:
     """查询与语料无重叠词 -> 分数 0，排序稳定。"""
     index = BM25Index(["中文 语料 内容", "another english doc"])

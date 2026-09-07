@@ -12,9 +12,11 @@
 对齐 PRD 决策 6 / §4.5：指纹判断变更（文件级），去重键/块身份判断同源（块级）。
 零出网：全部本地文件系统 + 进程内向量库 + SQLite。
 """
+
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -25,10 +27,18 @@ from app.ingestion.chunker import Chunk, chunk_document
 from app.ingestion.image_fetch import ImageFetcher
 from app.ingestion.image_state_store import ImageStateStore
 from app.ingestion.image_worker import ImageWorker
+from app.ingestion.index_schema import INGESTION_SCHEMA_VERSION, make_index_fingerprint
 from app.ingestion.markdown_parser import parse_markdown
-from app.ingestion.pipeline import IngestionPipeline, make_block_id, make_chunk_metadata, read_text
+from app.ingestion.pipeline import (
+    IngestionPipeline,
+    chunk_embedding_text,
+    embed_document_texts,
+    make_block_id,
+    make_chunk_metadata,
+    read_text,
+)
 from app.ingestion.scanner import DiscoveredFile, discover_file, scan_files
-from app.ingestion.state_store import DocumentStateStore
+from app.ingestion.state_store import DocFingerprint, DocumentStateStore
 from app.models.schemas import BlockMetadata
 from app.vectorstore.base import VectorStore
 from app.vectorstore.embedder import Embedder
@@ -37,6 +47,7 @@ logger = logging.getLogger(__name__)
 
 #: 单文件失败原因的聚合上限（与全量导入一致，避免海量失败时错误列表无界增长）。
 _MAX_ERRORS = 50
+_ADDED_FILE_BATCH_SIZE = 32
 
 
 @dataclass(frozen=True)
@@ -82,6 +93,7 @@ class SyncService:
         self._embedder = embedder
         self._vectorstore = vectorstore
         self._state_store = state_store
+        self._index_fingerprint = make_index_fingerprint(embedder.fingerprint)
         if image_state_store is None:
             image_state_store = ImageStateStore(Path(":memory:"))
         self._image_state_store = image_state_store
@@ -125,8 +137,9 @@ class SyncService:
 
         # ---- 分类（快路径 mtime+size -> 需确认再读内容哈希）----
         added: list[DiscoveredFile] = []
-        updated: list[DiscoveredFile] = []
-        unchanged = 0
+        updated: list[tuple[DiscoveredFile, bool]] = []
+        unchanged_keys: set[str] = set()
+        content_hashes: dict[str, str] = {}
         unreadable = 0
         for stat in files:
             key = str(stat.path)
@@ -137,8 +150,17 @@ class SyncService:
                     unreadable += 1
                     continue
                 added.append(disc)
+                content_hashes[key] = disc.content_hash
+            elif self._requires_reindex(old):
+                disc = discover_file(stat.path)
+                if disc is None:
+                    unreadable += 1
+                    continue
+                updated.append((disc, True))
+                content_hashes[key] = disc.content_hash
             elif old.mtime == stat.mtime and old.size == stat.size:
-                unchanged += 1
+                unchanged_keys.add(key)
+                content_hashes[key] = old.content_hash
             else:
                 disc = discover_file(stat.path)
                 if disc is None:
@@ -146,18 +168,37 @@ class SyncService:
                     continue
                 if disc.content_hash == old.content_hash:
                     # 内容未变仅 mtime 被碰 -> 视为未变，只刷新时间戳
-                    unchanged += 1
+                    unchanged_keys.add(key)
+                    content_hashes[key] = old.content_hash
                     self._state_store.touch_mtime(key, disc.mtime)
                 else:
-                    updated.append(disc)
-        deleted = [key for key in manifest if key not in files_by_key]
+                    updated.append((disc, False))
+                    content_hashes[key] = disc.content_hash
+
+        canonical_by_hash = _canonical_paths_by_hash(content_hashes)
+        duplicate_keys = {
+            key for key, content_hash in content_hashes.items()
+            if key != canonical_by_hash[content_hash]
+        }
+        added = [disc for disc in added if str(disc.path) not in duplicate_keys]
+        updated = [item for item in updated if str(item[0].path) not in duplicate_keys]
+        unchanged_keys.difference_update(duplicate_keys)
+        # A state database can contain multiple registered roots.  Absence from this
+        # root's snapshot only means deletion for documents that actually belong to
+        # this root; documents under sibling roots must remain untouched.
+        deleted = {
+            key for key in manifest if Path(key).is_relative_to(root) and key not in files_by_key
+        }
+        # Exact-content aliases remain on disk for recovery, but only the best stable path owns
+        # vector blocks/state. Existing aliases are therefore removed from the active index.
+        deleted.update(key for key in duplicate_keys if key in manifest)
 
         report = self._process(
             added,
             updated,
-            deleted,
+            sorted(deleted),
             scanned=len(files),
-            unchanged=unchanged,
+            unchanged=len(unchanged_keys) + len(duplicate_keys - set(manifest)),
             skipped=unreadable,
             on_progress=on_progress,
         )
@@ -184,28 +225,48 @@ class SyncService:
         manifest = self._state_store.load_all()
         current_keys = {str(file.path) for file in files}
 
+        # Compare this upload with already indexed content. A stable canonical upload may replace
+        # an old task-directory alias; a lower-priority alias is kept on disk but not indexed.
+        candidate_hashes = {
+            key: record.content_hash for key, record in manifest.items() if key not in current_keys
+        }
+        candidate_hashes.update({str(file.path): file.content_hash for file in files})
+        canonical_by_hash = _canonical_paths_by_hash(candidate_hashes)
+        upload_hashes = {file.content_hash for file in files}
+        duplicate_keys = {
+            key for key, content_hash in candidate_hashes.items()
+            if content_hash in upload_hashes and key != canonical_by_hash[content_hash]
+        }
+
         added: list[DiscoveredFile] = []
-        updated: list[DiscoveredFile] = []
+        updated: list[tuple[DiscoveredFile, bool]] = []
         unchanged = 0
         for file in files:
-            old = manifest.get(str(file.path))
+            key = str(file.path)
+            if key in duplicate_keys:
+                unchanged += 1
+                continue
+            old = manifest.get(key)
             if old is None:
                 added.append(file)
+            elif self._requires_reindex(old):
+                updated.append((file, True))
             elif old.content_hash == file.content_hash:
                 unchanged += 1
             else:
-                updated.append(file)
+                updated.append((file, False))
 
-        deleted = [
+        deleted = {
             key
             for key in manifest
             if key not in current_keys and any(Path(key).is_relative_to(scope) for scope in scopes)
-        ]
+        }
+        deleted.update(key for key in duplicate_keys if key in manifest)
 
         return self._process(
             added,
             updated,
-            deleted,
+            sorted(deleted),
             scanned=len(files),
             unchanged=unchanged,
             skipped=0,
@@ -215,7 +276,7 @@ class SyncService:
     def _process(
         self,
         added: list[DiscoveredFile],
-        updated: list[DiscoveredFile],
+        updated: list[tuple[DiscoveredFile, bool]],
         deleted: list[str],
         scanned: int,
         unchanged: int,
@@ -242,11 +303,16 @@ class SyncService:
                     )
                 )
 
-        for disc in added:
+        def complete_added(disc: DiscoveredFile, chunks: list[Chunk], upserted: int) -> None:
+            nonlocal added_ok, blocks_upserted, processed
             try:
-                chunks, upserted = self._pipeline.ingest_file(disc)
                 self._state_store.upsert_fingerprint(
-                    str(disc.path), disc.content_hash, disc.mtime, disc.size, len(chunks)
+                    str(disc.path),
+                    disc.content_hash,
+                    disc.mtime,
+                    disc.size,
+                    len(chunks),
+                    index_fingerprint=self._index_fingerprint,
                 )
                 added_ok += 1
                 blocks_upserted += upserted
@@ -255,9 +321,45 @@ class SyncService:
             processed += 1
             emit()
 
-        for disc in updated:
+        emit()
+        for start in range(0, len(added), _ADDED_FILE_BATCH_SIZE):
+            prepared: list[tuple[DiscoveredFile, list[Chunk]]] = []
+            for disc, chunks, error in self._pipeline.prepare_files(
+                added[start : start + _ADDED_FILE_BATCH_SIZE]
+            ):
+                try:
+                    if error is not None:
+                        raise error
+                    prepared.append((disc, chunks))
+                except Exception as exc:  # noqa: BLE001 -- 单文件解析失败不拖累批次
+                    self._record_error(exc, errors)
+                    processed += 1
+                    emit()
+            if not prepared:
+                continue
             try:
-                upserted, deleted_blocks = self._reprocess_modified(disc)
+                upserted_counts = self._pipeline.upsert_prepared_files(prepared)
+            except Exception:  # noqa: BLE001 -- 批次失败降级为逐文件以隔离坏文档
+                for disc, chunks in prepared:
+                    try:
+                        (upserted,) = self._pipeline.upsert_prepared_files([(disc, chunks)])
+                    except Exception as exc:  # noqa: BLE001 -- 单文件失败继续其余文档
+                        self._record_error(exc, errors)
+                        processed += 1
+                        emit()
+                    else:
+                        complete_added(disc, chunks, upserted)
+            else:
+                for (disc, chunks), upserted in zip(
+                    prepared, upserted_counts, strict=True
+                ):
+                    complete_added(disc, chunks, upserted)
+
+        for disc, force_reindex in updated:
+            try:
+                upserted, deleted_blocks = self._reprocess_modified(
+                    disc, force_reindex=force_reindex
+                )
                 updated_ok += 1
                 blocks_upserted += upserted
                 blocks_deleted += deleted_blocks
@@ -266,18 +368,46 @@ class SyncService:
             processed += 1
             emit()
 
-        for key in deleted:
+        # Large historical migrations used to acquire the Chroma write lock once per source,
+        # turning a 500-file cleanup into minutes. Enumerate once and delete all matching block
+        # IDs in a single write transaction, then batch the two SQLite stores as well.
+        if len(deleted) >= 10 and callable(getattr(self._vectorstore, "list_blocks", None)):
             try:
-                old_blocks = self._vectorstore.get_blocks_by_source(key)
-                if old_blocks:
-                    self._vectorstore.delete_by_ids(list(old_blocks))
-                    blocks_deleted += len(old_blocks)
-                self._state_store.delete(key)
-                deleted_ok += 1
+                deleted_sources = set(deleted)
+                stale_ids = [
+                    block_id
+                    for block_id, _text, metadata in self._vectorstore.list_blocks()
+                    if str(metadata.get("source_file", "")) in deleted_sources
+                ]
+                if stale_ids:
+                    self._vectorstore.delete_by_ids(stale_ids)
+                blocks_deleted += len(stale_ids)
+                self._state_store.delete_many(deleted)
+                self._image_state_store.delete_by_sources(deleted)
+                deleted_ok += len(deleted)
             except Exception as exc:  # noqa: BLE001
                 self._record_error(exc, errors)
-            processed += 1
+            processed += len(deleted)
             emit()
+        else:
+            for key in deleted:
+                try:
+                    old_blocks = self._vectorstore.get_blocks_by_source(key)
+                    if old_blocks:
+                        self._vectorstore.delete_by_ids(list(old_blocks))
+                        blocks_deleted += len(old_blocks)
+                    self._state_store.delete(key)
+                    self._image_state_store.delete_by_source(key)
+                    deleted_ok += 1
+                except Exception as exc:  # noqa: BLE001
+                    self._record_error(exc, errors)
+                processed += 1
+                emit()
+
+        repair_ann = getattr(self._vectorstore, "repair_ann_index", None)
+        if blocks_upserted and callable(repair_ann):
+            # 多文件增量写入结束后再做全库校验；后续批次可能影响早期 HNSW 节点。
+            repair_ann()
 
         return SyncReport(
             files_scanned=scanned,
@@ -339,7 +469,12 @@ class SyncService:
                 )
         return cumulative
 
-    def _reprocess_modified(self, disc: DiscoveredFile) -> tuple[int, int]:
+    def _reprocess_modified(
+        self,
+        disc: DiscoveredFile,
+        *,
+        force_reindex: bool = False,
+    ) -> tuple[int, int]:
         """块级复用：对已变更文件只嵌入变化块，复用未变块旧向量。
 
         返回 (blocks_upserted, blocks_deleted)。
@@ -347,8 +482,10 @@ class SyncService:
         text = read_text(disc.path)
         parsed = parse_markdown(text)
         chunks = chunk_document(parsed, source_file=str(disc.path))
+        chunks = self._pipeline.semantic_split(chunks)
         text_chunks = [chunk for chunk in chunks if chunk.kind != "image"]
         image_chunks = [chunk for chunk in chunks if chunk.kind == "image"]
+        self._pipeline.invalidate_image_context(str(disc.path))
 
         # 旧块文本哈希 -> block_id（读取便宜，只取 documents）
         old_blocks = self._vectorstore.get_blocks_by_source(str(disc.path))
@@ -358,20 +495,33 @@ class SyncService:
 
         matched: set[str] = set()
         to_embed: list[Chunk] = []
-        for chunk in text_chunks:
-            old_id = old_by_hash.get(_text_hash(chunk.text))
-            if old_id is not None and old_id not in matched:
-                matched.add(old_id)  # 文本未变 -> 复用旧向量，不重嵌入
-            else:
-                to_embed.append(chunk)
+        if force_reindex:
+            # 清洗/切片/元数据版本变化时，即使正文相同也要刷新 heading/chunk_type。
+            to_embed.extend(text_chunks)
+        else:
+            for chunk in text_chunks:
+                old_id = old_by_hash.get(_text_hash(chunk.text))
+                if old_id is not None and old_id not in matched:
+                    matched.add(old_id)  # 文本未变 -> 复用旧向量，不重嵌入
+                else:
+                    to_embed.append(chunk)
 
         # 文本块先入库（快路径）；图片块后补——图片失败不拖累文本（T5 §5.3 文本先行）。
         upserted = 0
+        new_text_ids: set[str] = set()
         if to_embed:
-            vectors = self._embedder.embed_texts([chunk.text for chunk in to_embed])
+            vectors = embed_document_texts(
+                self._embedder,
+                [chunk_embedding_text(chunk) for chunk in to_embed],
+            )
             text_blocks: list[tuple[str, str, list[float], BlockMetadata]] = []
             for chunk, vector in zip(to_embed, vectors, strict=True):
-                block_id = make_block_id(disc.content_hash, chunk.block_id)
+                block_id = make_block_id(
+                    disc.content_hash,
+                    chunk.block_id,
+                    source_file=disc.path,
+                )
+                new_text_ids.add(block_id)
                 text_blocks.append(
                     (block_id, chunk.text, vector, make_chunk_metadata(block_id, disc, chunk))
                 )
@@ -389,14 +539,33 @@ class SyncService:
                 self._vectorstore.upsert(blocks)
                 upserted += len(blocks)
 
-        stale = [block_id for block_id in old_blocks if block_id not in matched]
+        # schema 升级且内容哈希相同时，新旧 block_id 可能重合；这些 ID 已被 upsert，
+        # 不能再当陈旧块删除。被移除的旧块和旧图片描述仍会清掉。
+        stale = [
+            block_id
+            for block_id in old_blocks
+            if block_id not in matched and block_id not in new_text_ids
+        ]
         if stale:
             self._vectorstore.delete_by_ids(stale)
 
         self._state_store.upsert_fingerprint(
-            str(disc.path), disc.content_hash, disc.mtime, disc.size, len(chunks)
+            str(disc.path),
+            disc.content_hash,
+            disc.mtime,
+            disc.size,
+            len(chunks),
+            index_fingerprint=self._index_fingerprint,
         )
         return upserted, len(stale)
+
+    def _requires_reindex(self, old: DocFingerprint) -> bool:
+        """Return whether a state row belongs to another index representation."""
+
+        return (
+            old.schema_version != INGESTION_SCHEMA_VERSION
+            or old.index_fingerprint != self._index_fingerprint
+        )
 
     @staticmethod
     def _record_error(exc: Exception, errors: list[str]) -> None:
@@ -410,6 +579,29 @@ class SyncService:
 def _text_hash(text: str) -> str:
     """块级去重键：块文本的 xxh64（跨版本稳定，识别「内容未变的块」）。"""
     return xxhash.xxh64(text.encode("utf-8")).hexdigest()
+
+
+_LEGACY_TASK_SEGMENT_RE = re.compile(r"^[0-9a-fA-F]{32}$")
+
+
+def _source_path_priority(path: str) -> tuple[int, int, int, str]:
+    """Prefer stable human paths over legacy per-import UUID paths."""
+
+    parts = tuple(part for part in re.split(r"[\\/]", path) if part)
+    legacy_segments = sum(1 for part in parts if _LEGACY_TASK_SEGMENT_RE.fullmatch(part))
+    return (legacy_segments, len(parts), len(path), path.casefold())
+
+
+def _canonical_paths_by_hash(content_hashes: dict[str, str]) -> dict[str, str]:
+    """Return one deterministic source owner for every exact document content hash."""
+
+    grouped: dict[str, list[str]] = {}
+    for path, content_hash in content_hashes.items():
+        grouped.setdefault(content_hash, []).append(path)
+    return {
+        content_hash: min(paths, key=_source_path_priority)
+        for content_hash, paths in grouped.items()
+    }
 
 
 def _add_reports(a: SyncReport, b: SyncReport) -> SyncReport:

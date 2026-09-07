@@ -1,9 +1,14 @@
 /** SSE 来源块：对齐后端 chat_service._meta_frame 的来源投影（见 BlockMetadata）。 */
 export interface Source {
+  image_url?: string | null;
+  /** 本轮稳定引用编号：本地来源 S1...，联网来源 W1...。 */
+  source_id: string;
   block_id: string;
   text: string;
   source_file: string;
-  similarity: number;
+  /** 仅向量/混合命中有余弦相关度；纯词法与章节补充为 null。 */
+  similarity: number | null;
+  match_type?: "dense" | "hybrid" | "lexical" | "expanded" | "web";
   heading_path: string | null;
   anchor: string | null;
   chunk_type: string;
@@ -14,11 +19,26 @@ export interface Source {
   url?: string | null;
 }
 
-/** SSE 帧联合类型：对齐后端帧契约 meta / token / reasoning / tool / done / error。 */
+export type AnswerBasis =
+  | "knowledge"
+  | "web"
+  | "general"
+  | "product"
+  | "catalog"
+  | "insufficient";
+
+export type QueryMode = "PRODUCT_HELP" | "KNOWLEDGE_OVERVIEW" | "CONTENT_QA";
+
+/** SSE 帧联合类型：原始 reasoning 不离开后端。 */
 export type SSEFrame =
-  | { type: "meta"; sources: Source[] }
+  | {
+      type: "meta";
+      sources: Source[];
+      answer_basis: AnswerBasis;
+      policy_version: string;
+      query_mode: QueryMode;
+    }
   | { type: "token"; text: string }
-  | { type: "reasoning"; text: string }
   | { type: "tool"; tool: string; status: string }
   | { type: "done" }
   | { type: "error"; message: string };
@@ -138,7 +158,18 @@ export interface SettingsView {
     api_key_set: boolean;
     api_key_hint: string | null;
   };
-  system_prompt: string;
+  answer_preferences: {
+    language: "auto" | "zh-CN" | "en";
+    verbosity: "concise" | "balanced" | "detailed";
+    tone: "natural" | "professional";
+    response_format: "auto" | "prose" | "bullets";
+    knowledge_only: boolean;
+    custom_instructions: string;
+  };
+  policy: {
+    version: string;
+    managed: boolean;
+  };
   avatars: {
     user: string | null;
     agent: string | null;
@@ -192,21 +223,30 @@ export interface SettingsUpdate {
     max_results?: number;
     api_key?: string | null;
   };
-  system_prompt?: string;
+  answer_preferences?: {
+    language?: "auto" | "zh-CN" | "en";
+    verbosity?: "concise" | "balanced" | "detailed";
+    tone?: "natural" | "professional";
+    response_format?: "auto" | "prose" | "bullets";
+    knowledge_only?: boolean;
+    custom_instructions?: string;
+  };
   theme?: ThemeValue;
 }
 
-/** 持久化的对话消息（含思维链快照与检索来源快照）。 */
+/** 持久化的对话消息（只含可展示正文、依据标签与来源快照）。 */
 export interface ConversationMessage {
   role: "user" | "assistant";
   content: string;
-  thinking: string | null;
   sources: Source[] | null;
+  answer_basis: AnswerBasis | null;
+  policy_version: string | null;
   created_at: string;
 }
 
 /** 会话摘要（侧边栏列表项）。 */
 export interface ConversationSummary {
+  match_excerpt?: string;
   id: string;
   title: string;
   created_at: string;

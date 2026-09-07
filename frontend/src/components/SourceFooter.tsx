@@ -1,5 +1,6 @@
 import type { Source } from "../types";
 import { basename } from "../util/path";
+import { sourceMatchLabel } from "../util/source";
 
 interface SourceFooterProps {
   sources: Source[];
@@ -32,7 +33,7 @@ export function SourceFooter({ sources, onSelect }: SourceFooterProps) {
       <span className="source-footer-label">来源</span>
       {sources.map((source, index) => (
         <button
-          key={source.block_id}
+          key={`${source.source_id ?? "legacy"}-${source.block_id}`}
           type="button"
           className={`source-chip${source.source_type === "web" ? " source-chip-web" : ""}`}
           title={source.source_type === "web" ? source.url ?? source.source_file : source.source_file}
@@ -42,8 +43,9 @@ export function SourceFooter({ sources, onSelect }: SourceFooterProps) {
             <WebChip source={source} />
           ) : (
             <>
+              <span className="source-chip-id">{source.source_id}</span>
               <span className="source-chip-file">{basename(source.source_file)}</span>
-              <span className="source-chip-sim">{Math.round(source.similarity * 100)}%</span>
+              <span className="source-chip-sim">{sourceMatchLabel(source)}</span>
             </>
           )}
         </button>

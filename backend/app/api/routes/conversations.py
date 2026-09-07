@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
 from app.core.conversation_store import ConversationMessage, ConversationStore
@@ -31,6 +31,8 @@ class MessageIn(BaseModel):
     role: str
     content: str
     sources: list[dict[str, Any]] | None = None
+    answer_basis: str | None = None
+    policy_version: str | None = None
 
 
 class AppendMessagesRequest(BaseModel):
@@ -43,10 +45,11 @@ class SetTitleRequest(BaseModel):
 
 @router.get("/api/conversations")
 async def list_conversations(
+    q: str = Query(default="", max_length=200),
     store: ConversationStore = Depends(get_conversation_store),  # noqa: B008
 ) -> list[dict[str, Any]]:
     """返回会话摘要列表（按最近更新倒序）。"""
-    return store.list_summaries()
+    return store.search(q) if q.strip() else store.list_summaries()
 
 
 @router.post("/api/conversations", status_code=201)
@@ -78,7 +81,13 @@ async def append_messages(
 ) -> dict[str, Any]:
     """追加一轮消息（user + assistant），返回更新后的会话摘要。"""
     messages = [
-        ConversationMessage(role=m.role, content=m.content, sources=m.sources)
+        ConversationMessage(
+            role=m.role,
+            content=m.content,
+            sources=m.sources,
+            answer_basis=m.answer_basis,
+            policy_version=m.policy_version,
+        )
         for m in request.messages
     ]
     conv = store.append_messages(conversation_id, messages)

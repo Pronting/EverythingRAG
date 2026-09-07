@@ -1,0 +1,1003 @@
+{
+  "schema_version": 3,
+  "positive_cases": [
+    {
+      "id": "cart-001",
+      "category": "shopping_cart",
+      "query": "京东、淘宝、拼多多、eBay、SHEIN 等公司的未登录购物车交互方案分别是什么？",
+      "expected_source": "购物车分表.md",
+      "expected_heading": "交互",
+      "required_evidence": [
+        "未登录可以加购，数据存在服务端（现状）：京东、cider",
+        "未登录不让加购：淘宝、拼多多、eBay",
+        "未登录可以加购，数据存在客户端：shein、zara、亚马逊"
+      ]
+    },
+    {
+      "id": "cart-002",
+      "category": "shopping_cart",
+      "query": "未登录购物车存在服务端、禁止加购和存在客户端三种方案各有什么优缺点？",
+      "expected_source": "购物车分表.md",
+      "expected_heading": "交互",
+      "required_evidence": [
+        "无论用户是否加购，数据都存在服务端，存储数据量大，垃圾数据多",
+        "需要分版本控制，存在两套逻辑"
+      ]
+    },
+    {
+      "id": "cart-003",
+      "category": "shopping_cart",
+      "query": "Mycat 和 ShardingSphere-JDBC 在购物车分库分表中的部署、改造和运维成本如何对比？",
+      "expected_source": "购物车分表.md",
+      "expected_heading": "分库分表中间件对比",
+      "required_evidence": [
+        "需要额外部署mycat服务",
+        "sharding-jdbc：引用jar包，不增加运维成本"
+      ]
+    },
+    {
+      "id": "cart-004",
+      "category": "shopping_cart",
+      "query": "购物车分表使用 virtual_uid 单表方案和 cart、device_cart 双表方案各有什么优缺点？",
+      "expected_source": "购物车分表.md",
+      "expected_heading": "方案对比",
+      "required_evidence": [
+        "分片键统一使用virtualUid",
+        "原有cart表分成2个表：cart(分表), device_cart(分表)"
+      ]
+    },
+    {
+      "id": "cart-005",
+      "category": "shopping_cart",
+      "query": "购物车分表开发设计最终讨论确定了哪套分表和同步方案？",
+      "expected_source": "购物车分表.md",
+      "expected_heading": "开发设计 >",
+      "required_evidence": [
+        "分表方案：4 同步方案：2"
+      ]
+    },
+    {
+      "id": "cart-006",
+      "category": "shopping_cart",
+      "query": "购物车为什么分成 32 张表，新表主键和 cartId 迁移有什么要求？",
+      "expected_source": "购物车分表方案落地.md",
+      "expected_heading": "三、方案 & 细节 > 3.1 方案",
+      "required_evidence": [
+        "将原先cart单表，分为新的32张表",
+        "新表主键生成采用分布式id",
+        "迁移时会连同cartId一起迁移"
+      ]
+    },
+    {
+      "id": "cart-007",
+      "category": "shopping_cart",
+      "query": "购物车已登录和未登录场景分别使用什么分片键及算法？",
+      "expected_source": "购物车分表方案落地.md",
+      "expected_heading": "三、方案 & 细节 > 3.1 方案",
+      "required_evidence": [
+        "已登录，采用uid % 32",
+        "未登录，采用did.hashCode() % 32"
+      ]
+    },
+    {
+      "id": "cart-008",
+      "category": "shopping_cart",
+      "query": "购物车数据迁移的 AB 实验和灰度表机制如何工作？",
+      "expected_source": "购物车分表方案落地.md",
+      "expected_heading": "三、方案 & 细节 > 3.2 灰度机制",
+      "required_evidence": [
+        "灰度机制: ab实验 + 灰度表(uid、did*表)",
+        "购物车列表和注册登录，会触发灰度入库"
+      ]
+    },
+    {
+      "id": "cart-009",
+      "category": "shopping_cart",
+      "query": "购物车存量迁移在登录、未登录和访问购物车列表时分别怎样触发？",
+      "expected_source": "购物车分表方案落地.md",
+      "expected_heading": "三、方案 & 细节 > 3.3 数据迁移 > 3.3.1 存量迁移",
+      "required_evidence": [
+        "未登录只在访问购物车列表时同步",
+        "登录同步要基于UID加锁",
+        "将数据从旧表同步到新表"
+      ]
+    },
+    {
+      "id": "cart-010",
+      "category": "shopping_cart",
+      "query": "为什么购物车达到 100% 灰度后，数据层面仍不算真正全量迁移？",
+      "expected_source": "购物车分表方案落地.md",
+      "expected_heading": "三、方案 & 细节 > 3.3 数据迁移 > 3.3.3 全量",
+      "required_evidence": [
+        "用户处于活跃状态（登录、注册、访问购物车列表）",
+        "非活跃用户，他们的数据可能是还只存在于老表中的"
+      ]
+    },
+    {
+      "id": "cart-011",
+      "category": "shopping_cart",
+      "query": "购物车分表上线后数据异常时，AB 实验、Apollo 开关和旧表如何完成回滚？",
+      "expected_source": "购物车分表方案落地.md",
+      "expected_heading": "三、方案 & 细节 > 3.4 回滚方案",
+      "required_evidence": [
+        "设置ab实验100%fail",
+        "关闭开关，则不会再命中灰度",
+        "旧表中仍存在全量数据"
+      ]
+    },
+    {
+      "id": "cart-012",
+      "category": "shopping_cart",
+      "query": "未登录加购后登录与购物车列表并发同步时，为什么要按 uid 加分布式锁？",
+      "expected_source": "购物车分表方案落地.md",
+      "expected_heading": "四、交互流程图 > 4.3 购物车列表、MQ（数据同步）",
+      "required_evidence": [
+        "未登录加购再进行登录后会涉及数据同步",
+        "需要以uid维度加分布式锁"
+      ]
+    },
+    {
+      "id": "cart-013",
+      "category": "shopping_cart",
+      "query": "购物车分表分享中最终采用了什么技术选型？",
+      "expected_source": "购物车分表分享V2.md",
+      "expected_heading": "技术选型",
+      "required_evidence": [
+        "利用Sharding-JDBC进行分表",
+        "最终决定用MurmurHash算法对did分片",
+        "将原先cart单表，分为新的32张表"
+      ]
+    },
+    {
+      "id": "cart-014",
+      "category": "shopping_cart",
+      "query": "购物车分表分享的背景是什么，为什么原有单表需要治理？",
+      "expected_source": "购物车分表分享V2.md",
+      "expected_heading": "背景介绍",
+      "required_evidence": [
+        "购物车数据数量已经达了一个亿多",
+        "为了提高查询性能、降低数据库单表压力"
+      ]
+    },
+    {
+      "id": "cart-015",
+      "category": "shopping_cart",
+      "query": "购物车存量数据同步的具体做法是什么？",
+      "expected_source": "购物车分表分享V2.md",
+      "expected_heading": "数据同步 > 存量同步",
+      "required_evidence": [
+        "任务调度 uid维度同步购物车数据 did维度同步购物车数据",
+        "uid,did都不在灰度，走老逻辑"
+      ]
+    },
+    {
+      "id": "cart-016",
+      "category": "shopping_cart",
+      "query": "购物车分表落地过程中遇到了哪些问题，分别如何处理？",
+      "expected_source": "购物车分表分享V2.md",
+      "expected_heading": "遇到的问题及处理",
+      "required_evidence": [
+        "先删除未登录时候的购物车数据再同步插入",
+        "数据同步，合并购物车的时候购物车ID保持不变",
+        "收到登录消息的时候在redis里给当前用户设置一个标识"
+      ]
+    },
+    {
+      "id": "cart-017",
+      "category": "shopping_cart",
+      "query": "购物车分表落地需要覆盖哪些常见购物车行为？",
+      "expected_source": "购物车分表方案落地.md",
+      "expected_heading": "二、购物车场景行为",
+      "required_evidence": [
+        "购物车的常见行为",
+        "未登录加购（登录、注册后将当前设备维度下的加购记录同步至uid维度）",
+        "下单后清空购物车"
+      ]
+    },
+    {
+      "id": "cart-018",
+      "category": "shopping_cart",
+      "query": "购物车分表后，SPU 加购数量等需要全表统计的功能如何兼容？",
+      "expected_source": "购物车分表方案落地.md",
+      "expected_heading": "五、改造影响",
+      "required_evidence": [
+        "购物车列表部分功能需要统计全表，如SPU加购数量",
+        "灰度阶段可以继续使用旧库"
+      ]
+    },
+    {
+      "id": "cart-019",
+      "category": "shopping_cart",
+      "query": "购物车全量切换后，历史非活跃数据和变化后的 cart ID 如何处理？",
+      "expected_source": "购物车分表方案落地.md",
+      "expected_heading": "六、全量计划",
+      "required_evidence": [
+        "历史非活跃数据不会迁移",
+        "cart迁移后id变化，通知数据那边重新同步数据"
+      ]
+    },
+    {
+      "id": "cart-020",
+      "category": "shopping_cart",
+      "query": "好像有用一些厂商的分表对比，比如说京东、淘宝等对比，和公司的对比，我想问一下这些对比的详情是什么样的",
+      "expected_source": "购物车分表.md",
+      "expected_heading": "交互",
+      "required_evidence": [
+        "未登录可以加购，数据存在服务端（现状）：京东、cider",
+        "未登录不让加购：淘宝、拼多多、eBay"
+      ]
+    },
+    {
+      "id": "ops-001",
+      "category": "operations",
+      "query": "Java 服务 OOM 后如何生成、下载并分析 heap dump？",
+      "expected_source": "CPU和内存溢出排查.md",
+      "expected_heading": "内存溢出排查",
+      "required_evidence": [
+        "jmap -dump:format=b,file=/data/heap.dump [pid]"
+      ]
+    },
+    {
+      "id": "ops-002",
+      "category": "operations",
+      "query": "发生 OOM 时自动记录堆快照需要配置哪些 JVM 参数？",
+      "expected_source": "CPU和内存溢出排查.md",
+      "expected_heading": "内存溢出排查",
+      "required_evidence": [
+        "XX:+HeapDumpOnOutOfMemoryError"
+      ]
+    },
+    {
+      "id": "ops-003",
+      "category": "operations",
+      "query": "CPU 过载时如何从 top 的进程和线程定位到 jstack 中的具体代码？",
+      "expected_source": "CPU和内存溢出排查.md",
+      "expected_heading": "CPU过载排查",
+      "required_evidence": [
+        "查看是哪个线程号占用最高：top -p 10 -H"
+      ]
+    },
+    {
+      "id": "ops-004",
+      "category": "operations",
+      "query": "不能使用 ping 时怎样用 hping3、nc、tcping 或 curl 检查网络和端口？",
+      "expected_source": "CPU和内存溢出排查.md",
+      "expected_heading": "网络查询",
+      "required_evidence": [
+        "hping3 -S [ip] -p 80 -c 100"
+      ]
+    },
+    {
+      "id": "ops-005",
+      "category": "operations",
+      "query": "jstat -gc 输出中的 S0、E、O、YGC、FGC 和 GCT 分别是什么意思？",
+      "expected_source": "CPU和内存溢出排查.md",
+      "expected_heading": "Jvm信息 > 参数说明 > jstat -gc",
+      "required_evidence": [
+        "S0: 新生代中Survivor space 0区已使用空间的百分比"
+      ]
+    },
+    {
+      "id": "ops-006",
+      "category": "operations",
+      "query": "Arthas 如何使用 watch 查看方法参数和返回值？",
+      "expected_source": "CPU和内存溢出排查.md",
+      "expected_heading": "通过arthas进行排查 > 查看返回值等",
+      "required_evidence": [
+        "watch demo.MathGame primeFactors \"{params,returnObj}\" -x 2 -b"
+      ]
+    },
+    {
+      "id": "ops-007",
+      "category": "operations",
+      "query": "Arthas 如何获取类加载器 hash 并动态修改 ROOT 日志级别？",
+      "expected_source": "CPU和内存溢出排查.md",
+      "expected_heading": "通过arthas进行排查 > 修改日志级别",
+      "required_evidence": [
+        "logger -c 3ac3fd8b --name ROOT --level debug"
+      ]
+    },
+    {
+      "id": "ops-008",
+      "category": "operations",
+      "query": "如何用 vmtool 获取 Spring ApplicationContext 并执行实例 Bean 方法？",
+      "expected_source": "CPU和内存溢出排查.md",
+      "expected_heading": "通过arthas进行排查 > 执行spring实例方法（动态方法）",
+      "required_evidence": [
+        "instances[0].getBean(\"replenishmentService\").mapErpProduct(\"123\")"
+      ]
+    },
+    {
+      "id": "incident-001",
+      "category": "incident",
+      "query": "内网 APISIX 发版后所有服务无法访问的最根本原因是什么？",
+      "expected_source": "2024年11月26日，内网apisix发版服务访问失败.md",
+      "expected_heading": "发生原因",
+      "required_evidence": [
+        "跟当时生产环境中pod使用configMap不一致"
+      ]
+    },
+    {
+      "id": "incident-002",
+      "category": "incident",
+      "query": "为什么 APISIX 使用的 ConfigMap 会不可信且无法追查历史？",
+      "expected_source": "2024年11月26日，内网apisix发版服务访问失败.md",
+      "expected_heading": "发生原因 > 为什么configMap不对了？",
+      "required_evidence": [
+        "没有版本管理以及修改记录"
+      ]
+    },
+    {
+      "id": "incident-003",
+      "category": "incident",
+      "query": "APISIX 灰度发布为什么没有提前验证出路由问题？",
+      "expected_source": "2024年11月26日，内网apisix发版服务访问失败.md",
+      "expected_heading": "发生原因 > 为何灰度发布没有验证出问题",
+      "required_evidence": [
+        "没有访问日志来支持验证"
+      ]
+    },
+    {
+      "id": "incident-004",
+      "category": "incident",
+      "query": "APISIX 发布平台回滚为什么失败，k8s-app 标签和 OpenKruise 带来了什么影响？",
+      "expected_source": "2024年11月26日，内网apisix发版服务访问失败.md",
+      "expected_heading": "发生原因 > 为何回滚失败",
+      "required_evidence": [
+        "容器标签中无k8s-app标签"
+      ]
+    },
+    {
+      "id": "incident-005",
+      "category": "incident",
+      "query": "APISIX 服务探活流程应该怎样增加路由验证？",
+      "expected_source": "2024年11月26日，内网apisix发版服务访问失败.md",
+      "expected_heading": "如何避免 > 1、服务探活逻辑增加路由验证",
+      "required_evidence": [
+        "当路由系统验证成功后，探活接口才可返回成功"
+      ]
+    },
+    {
+      "id": "incident-006",
+      "category": "incident",
+      "query": "APISIX 的 ConfigMap 应如何通过 GitLab 和发布平台进行版本化管理？",
+      "expected_source": "2024年11月26日，内网apisix发版服务访问失败.md",
+      "expected_heading": "如何避免 > 2、k8s中apisix configMap的管理规范化",
+      "required_evidence": [
+        "把config放到gitlab上管理"
+      ]
+    },
+    {
+      "id": "incident-007",
+      "category": "incident",
+      "query": "内网 APISIX 事故最终通过哪些步骤恢复服务？",
+      "expected_source": "2024年11月26日，内网apisix发版服务访问失败.md",
+      "expected_heading": "解决过程",
+      "required_evidence": [
+        "使用auth暂代内网网关"
+      ]
+    },
+    {
+      "id": "tracking-001",
+      "category": "tracking",
+      "query": "埋点 SPM 的站点、页面、区块和点位基础组成规则是什么？",
+      "acceptable_targets": [
+        {
+          "source": "埋点2.0设计文档V2.0.1.md",
+          "heading": "二、SPM及SCM设计 > 1、SPM > 1.1 规则",
+          "required_evidence": [
+            "{站点id}.{页面定义id}-{页面类型}-{页面id}.{区块id}.{点位id}"
+          ]
+        },
+        {
+          "source": "埋点2.0设计文档V2.0.2.md",
+          "heading": "二、SPM及SCM设计 > 1、SPM > 1.1 规则",
+          "required_evidence": [
+            "{站点id}.{页面定义id}-{页面类型}-{页面id}.{区块id}.{点位id}"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "tracking-002",
+      "category": "tracking",
+      "query": "埋点 SCM 的模块、AB 实验和内容 ID 如何组成？",
+      "acceptable_targets": [
+        {
+          "source": "埋点2.0设计文档V2.0.1.md",
+          "heading": "二、SPM及SCM设计 > 2、SCM > 2.1 规则",
+          "required_evidence": [
+            "{模块id}.{a/b 实验}.{内容id}"
+          ]
+        },
+        {
+          "source": "埋点2.0设计文档V2.0.2.md",
+          "heading": "二、SPM及SCM设计 > 2、SCM > 2.1 规则",
+          "required_evidence": [
+            "{模块id}.{a/b 实验}.{内容id}"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "tracking-003",
+      "category": "tracking",
+      "query": "首页运营位曝光和点击事件的 SPM 如何拼接？",
+      "acceptable_targets": [
+        {
+          "source": "埋点2.0设计文档V2.0.1.md",
+          "heading": "三、事件设计 > 1、首页运营位曝光&点击 > 1.1 spm",
+          "required_evidence": [
+            "{站点id}.{页面定义id}-H-{首页id}.{区块id}.{点位id}"
+          ]
+        },
+        {
+          "source": "埋点2.0设计文档V2.0.2.md",
+          "heading": "三、事件设计 > 1、首页运营位曝光&点击 > 1.1 spm",
+          "required_evidence": [
+            "{站点id}.{页面定义id}-H-{首页id}.{区块id}.{点位id}"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "tracking-004",
+      "category": "tracking",
+      "query": "首页运营位的 SCM 内容 ID 从哪里生成和查询？",
+      "acceptable_targets": [
+        {
+          "source": "埋点2.0设计文档V2.0.1.md",
+          "heading": "三、事件设计 > 1、首页运营位曝光&点击 > 1.2 scm",
+          "required_evidence": [
+            "由hermes创建首页后，向埋点管理后台同步"
+          ]
+        },
+        {
+          "source": "埋点2.0设计文档V2.0.2.md",
+          "heading": "三、事件设计 > 1、首页运营位曝光&点击 > 1.2 scm",
+          "required_evidence": [
+            "由hermes创建首页后，向埋点管理后台同步"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "tracking-005",
+      "category": "tracking",
+      "query": "首页运营位埋点的 spm_site、spm_page、spm_area 等字段如何映射？",
+      "acceptable_targets": [
+        {
+          "source": "埋点2.0设计文档V2.0.1.md",
+          "heading": "三、事件设计 > 1、首页运营位曝光&点击 > 1.3 字段映射",
+          "required_evidence": [
+            "站点id；清洗结果字段：spm_site"
+          ]
+        },
+        {
+          "source": "埋点2.0设计文档V2.0.2.md",
+          "heading": "三、事件设计 > 1、首页运营位曝光&点击 > 1.3 字段映射",
+          "required_evidence": [
+            "站点id；清洗结果字段：spm_site"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "tracking-006",
+      "category": "tracking",
+      "query": "商品曝光和点击事件的页面类型、页面 ID、区块 ID 如何上报？",
+      "acceptable_targets": [
+        {
+          "source": "埋点2.0设计文档V2.0.1.md",
+          "heading": "三、事件设计 > 2、商品曝光&点击 > 2.1 spm",
+          "required_evidence": [
+            "{站点id}.{页面定义id}-H-{页面id}.{区块id}.{点位id}"
+          ]
+        },
+        {
+          "source": "埋点2.0设计文档V2.0.2.md",
+          "heading": "三、事件设计 > 2、商品曝光&点击 > 2.1 spm",
+          "required_evidence": [
+            "{站点id}.{页面定义id}-H-{页面id}.{区块id}.{点位id}"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "tracking-007",
+      "category": "tracking",
+      "query": "商品曝光埋点如何把页面类型和页面 ID 清洗到 list_id、list_title？",
+      "acceptable_targets": [
+        {
+          "source": "埋点2.0设计文档V2.0.1.md",
+          "heading": "三、事件设计 > 2、商品曝光&点击 > 2.3 字段映射",
+          "required_evidence": [
+            "页面id；清洗结果字段：spm_page_id；数据对应字段：list_id"
+          ]
+        },
+        {
+          "source": "埋点2.0设计文档V2.0.2.md",
+          "heading": "三、事件设计 > 2、商品曝光&点击 > 2.3 字段映射",
+          "required_evidence": [
+            "页面id；清洗结果字段：spm_page_id；数据对应字段：list_id"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "tracking-008",
+      "category": "tracking",
+      "query": "添加心愿单和购物车事件的 SPM 规则是什么？",
+      "acceptable_targets": [
+        {
+          "source": "埋点2.0设计文档V2.0.1.md",
+          "heading": "三、事件设计 > 3、添加心愿单 & 添加购物车 > 3.1 spm",
+          "required_evidence": [
+            "{站点id}.{页面定义id}-H-{首页id}.{区块id}.{点位id}"
+          ]
+        },
+        {
+          "source": "埋点2.0设计文档V2.0.2.md",
+          "heading": "三、事件设计 > 3、添加心愿单 & 添加购物车 > 3.1 spm",
+          "required_evidence": [
+            "{站点id}.{页面定义id}-H-{首页id}.{区块id}.{点位id}"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "tracking-009",
+      "category": "tracking",
+      "query": "添加购物车埋点的 spm 和 SCM 字段怎样映射到清洗结果？",
+      "acceptable_targets": [
+        {
+          "source": "埋点2.0设计文档V2.0.1.md",
+          "heading": "三、事件设计 > 3、添加心愿单 & 添加购物车 > 3.3 字段映射",
+          "required_evidence": [
+            "内容id；清洗结果字段：scm_content_id；数据对应字段：spu_code"
+          ]
+        },
+        {
+          "source": "埋点2.0设计文档V2.0.2.md",
+          "heading": "三、事件设计 > 3、添加心愿单 & 添加购物车 > 3.3 字段映射",
+          "required_evidence": [
+            "内容id；清洗结果字段：scm_content_id；数据对应字段：spu_code"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "tracking-010",
+      "category": "tracking",
+      "query": "商品瀑布流和多 Tab 商品瀑布流的 blockId 拼接新规则是什么？",
+      "expected_source": "埋点2.0设计文档V2.0.2.md",
+      "expected_heading": "五、商品瀑布流及多tab商品瀑布流spm补充定义",
+      "required_evidence": [
+        "blockId-配置的资源类型-对应id"
+      ]
+    },
+    {
+      "id": "mq-001",
+      "category": "middleware",
+      "query": "自建 RocketMQ 的 NameServer 应部署几台、分布在哪些可用区？",
+      "expected_source": "阿里云 RocketMQ 迁移自建的 MQ.md",
+      "expected_heading": "机器 > nameserver",
+      "required_evidence": [
+        "3台namespace",
+        "1个在A区，两个在B区"
+      ]
+    },
+    {
+      "id": "mq-002",
+      "category": "middleware",
+      "query": "从阿里云 RocketMQ 切到自建集群时，生产者和消费者怎样分阶段切割？",
+      "expected_source": "阿里云 RocketMQ 迁移自建的 MQ.md",
+      "expected_heading": "切割方案",
+      "required_evidence": [
+        "所有系统将消息发送替换为发送消息到自建RocketMQ集群",
+        "所有系统新增消费者消费自建RocketMQ集群消息",
+        "原先消费阿里云的消费者保持不动，继续消费消息"
+      ]
+    },
+    {
+      "id": "mq-003",
+      "category": "middleware",
+      "query": "自建 RocketMQ 的 Broker 应部署几台，主从节点怎样跨可用区分布？",
+      "expected_source": "阿里云 RocketMQ 迁移自建的 MQ.md",
+      "expected_heading": "机器 > Broker",
+      "required_evidence": [
+        "两主两从",
+        "01在A区 02在B区 03在A区 04在B区"
+      ]
+    },
+    {
+      "id": "risk-001",
+      "category": "risk_control",
+      "query": "实时风控支持 userId、deviceId、IP 哪些维度以及哪些接口策略？",
+      "expected_source": "实时风控方案.md",
+      "expected_heading": "支持的策略",
+      "required_evidence": [
+        "userId、deviceId、ip 3个维度",
+        "重点接口包含：商详、collection、评论"
+      ]
+    },
+    {
+      "id": "risk-002",
+      "category": "risk_control",
+      "query": "实时风控有哪些时间窗口，Source 和 Sink 分别使用什么？",
+      "required_targets": [
+        {
+          "source": "实时风控方案.md",
+          "heading": "支持的策略",
+          "required_evidence": [
+            "时间窗口：1m、1h、1d"
+          ]
+        },
+        {
+          "source": "实时风控方案.md",
+          "heading": "SOURCE和SINK",
+          "required_evidence": [
+            "Source: kafka Sink: redis"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "perf-001",
+      "category": "performance",
+      "query": "黑五压测中如何启动 JMeter，并把 jmx 文件导入？",
+      "required_targets": [
+        {
+          "source": "黑五压测白皮书.md",
+          "heading": "打开Jmeter > 命令截图:",
+          "required_evidence": [
+            "cd bin && java -jar ApacheJmeter.jar"
+          ]
+        },
+        {
+          "source": "黑五压测白皮书.md",
+          "heading": "进入PTS > 选择并打开任意一个测试计划",
+          "required_evidence": [
+            "你可以直接把任意一个jmx文件拖拽进入jmeter"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "perf-002",
+      "category": "performance",
+      "query": "上传 PTS 前需要怎样调整 jmx 的 CSV、线程池、断言和请求头？",
+      "expected_source": "黑五压测白皮书.md",
+      "expected_heading": "进入PTS > 调整jmx脚本",
+      "required_evidence": [
+        "调整文本文件数据(就是你需要的csv文件) 2. 调整线程池和循环参数(本地调试)"
+      ]
+    },
+    {
+      "id": "perf-003",
+      "category": "performance",
+      "query": "JMeter 线程数和 rampup 应怎样根据 TPS、RT 和压测倍数计算？",
+      "expected_source": "黑五压测白皮书.md",
+      "expected_heading": "帮助 > 如何设置jmeter中的线程数和rampup?",
+      "required_evidence": [
+        "$$round(TPSXRT)$$"
+      ]
+    },
+    {
+      "id": "agent-001",
+      "category": "agent_security",
+      "query": "客服 Agent 如何通过 PreToolUse Hook、黑白名单限制危险工具？",
+      "expected_source": "客服 Agent 构建.md",
+      "expected_heading": "2. 安全性：工具安全性、数据安全性、数据隔离 > 工具安全性",
+      "required_evidence": [
+        "PreToolUse Hook：在工具调用前拦截，检查工具是不是在黑名单里"
+      ]
+    },
+    {
+      "id": "agent-002",
+      "category": "agent_security",
+      "query": "客服 Agent 如何校验 UID 和订单所有权，防止查询其他用户订单？",
+      "expected_source": "客服 Agent 构建.md",
+      "expected_heading": "2. 安全性：工具安全性、数据安全性、数据隔离 > 数据安全性",
+      "required_evidence": [
+        "订单查询工具会自动验证订单所有权"
+      ]
+    },
+    {
+      "id": "agent-003",
+      "category": "agent_security",
+      "query": "客服 Agent 的会话工作区、Redis key 和 OSS 路径如何实现数据隔离？",
+      "expected_source": "客服 Agent 构建.md",
+      "expected_heading": "2. 安全性：工具安全性、数据安全性、数据隔离 > 数据隔离",
+      "required_evidence": [
+        "每个会话都有独立的工作空间目录"
+      ]
+    },
+    {
+      "id": "incident-008",
+      "category": "incident",
+      "query": "2024 年 9 月推荐接口超时问题的最终发生原因是什么？",
+      "expected_source": "2024年09月05日，推荐接口超时问题复盘.md",
+      "expected_heading": "3、发生原因",
+      "required_evidence": [
+        "在预览集群上线了master分支"
+      ]
+    },
+    {
+      "id": "incident-009",
+      "category": "incident",
+      "query": "验证码邮件为什么会被重复发送，事故根因是什么？",
+      "expected_source": "2024年12月03日，验证码邮件重复发送.md",
+      "expected_heading": "发生原因",
+      "required_evidence": [
+        "用 int 值来处理自增 ID"
+      ]
+    },
+    {
+      "id": "search-001",
+      "category": "search",
+      "query": "搜索无结果场景的技术方案是什么？",
+      "expected_source": "搜索无结果-技术方案.md",
+      "expected_heading": "方案",
+      "required_evidence": [
+        "通过降低标题向量召回的阀值",
+        "通过搜索词来映射到top query进行召回",
+        "对搜索词进行词的相似度扩展同义词进行召回"
+      ]
+    },
+    {
+      "id": "search-002",
+      "category": "search",
+      "query": "搜索无结果优化希望达到什么目标？",
+      "expected_source": "搜索无结果-技术方案.md",
+      "expected_heading": "目标",
+      "required_evidence": [
+        "将无搜索结果降低到 0.1% 以内"
+      ]
+    },
+    {
+      "id": "experiment-001",
+      "category": "experimentation",
+      "query": "AB 实验需要观察哪些基础指标？",
+      "expected_source": "AB实验 观察指标和分流规则.md",
+      "expected_heading": "基础指标：",
+      "required_evidence": [
+        "CTR(ctr_all) CVR (cvr_all)",
+        "曝光数 点击数"
+      ]
+    },
+    {
+      "id": "experiment-002",
+      "category": "experimentation",
+      "query": "AB 实验的分流比例如何设置？",
+      "expected_source": "AB实验 观察指标和分流规则.md",
+      "expected_heading": "分流比例",
+      "required_evidence": [
+        "50% 实验组和 50% 对照组",
+        "按设备类型：如 iOS、Android",
+        "进入特定页面时分流"
+      ]
+    },
+    {
+      "id": "experiment-003",
+      "category": "experimentation",
+      "query": "AB 实验需要观察哪些业务指标？",
+      "expected_source": "AB实验 观察指标和分流规则.md",
+      "expected_heading": "业务指标：",
+      "required_evidence": [
+        "生单率：创建订单数 / 结算页 PV",
+        "加购率：加购数 / 商品详情页 PV",
+        "结算率：checkout / 购物车 PV"
+      ]
+    },
+    {
+      "id": "gateway-001",
+      "category": "gateway",
+      "query": "APISIX 网关在系统中承担什么作用？",
+      "expected_source": "ApiSix 网关介绍.md",
+      "expected_heading": "介绍",
+      "required_evidence": [
+        "安全防护，拦截常见的攻击（SQL 注入)",
+        "协议转换：将外部 HTTP/HTTPS ，转换为内部的通信的协议（如 gRPC)"
+      ]
+    },
+    {
+      "id": "gateway-002",
+      "category": "gateway",
+      "query": "APISIX 网关如何进行灰度路由？",
+      "expected_source": "ApiSix 网关介绍.md",
+      "expected_heading": "灰度路由",
+      "required_evidence": [
+        "灰度路由是通过用户 ID， HTTP Header, Cookie, 设备 ID，按比例分配等路由规则将流量路由到灰度容器"
+      ]
+    },
+    {
+      "id": "tracking-011",
+      "category": "tracking",
+      "query": "新的 SPM 和 SCM 拼接规则以及新旧方案优缺点是什么？",
+      "required_targets": [
+        {
+          "source": "C端埋点的春天--SPM新埋点初探.md",
+          "heading": "SPM和SCM拼接规则",
+          "required_evidence": [
+            "${siteId}.${pageId}.${sectionId}.${clickPosition}"
+          ]
+        },
+        {
+          "source": "C端埋点的春天--SPM新埋点初探.md",
+          "heading": "总结： > 新旧方案的 优缺点对比",
+          "required_evidence": [
+            "SPM新埋点优点： 1、简洁 2、逻辑清晰 缺点： 1、不便于开发校验准确性"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "percentile-001",
+      "category": "percentile_conversational",
+      "query": "应该是风控对于99分位，它的优化是怎么样的，以及99分位是如何在风控服务中存在的，它的意义何在",
+      "required_targets": [
+        {
+          "source": "实时风控方案.md",
+          "heading": "支持的策略",
+          "required_evidence": [
+            "频次根据用户访问统计数据的99%分位来"
+          ]
+        },
+        {
+          "source": "行为风控数据分析.md",
+          "heading": "2024-04-18 > 新加坡爬虫：",
+          "required_evidence": [
+            "99分位阈值大了3倍以上",
+            "新加坡的阈值大概是定在了2倍多"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "percentile-002",
+      "category": "percentile_conversational",
+      "query": "风控服务为什么要使用P99，它的意义是什么，具体如何调整阈值？",
+      "acceptable_targets": [
+        {
+          "source": "实时风控方案.md",
+          "heading": "支持的策略",
+          "required_evidence": [
+            "频次根据用户访问统计数据的99%分位来"
+          ]
+        },
+        {
+          "source": "行为风控数据分析.md",
+          "heading": "2024-04-18 > 新加坡爬虫：",
+          "required_evidence": [
+            "99分位阈值大了3倍以上",
+            "新加坡的阈值大概是定在了2倍多"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "percentile-003",
+      "category": "percentile_conversational",
+      "query": "风控里的九九分位是做什么用的，和拦截爬虫有什么关系？",
+      "acceptable_targets": [
+        {
+          "source": "实时风控方案.md",
+          "heading": "支持的策略",
+          "required_evidence": [
+            "频次根据用户访问统计数据的99%分位来"
+          ]
+        },
+        {
+          "source": "行为风控数据分析.md",
+          "heading": "2024-04-18 > 新加坡爬虫：",
+          "required_evidence": [
+            "99分位阈值大了3倍以上",
+            "新加坡的阈值大概是定在了2倍多"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "percentile-004",
+      "category": "percentile_conversational",
+      "query": "关于99分位是如何在公司的业务项目中作为指标去进行调优的，是在什么样的场景下，他对99分位又对这个场景有什么样的作用呢",
+      "acceptable_targets": [
+        {
+          "source": "实时风控方案.md",
+          "heading": "支持的策略",
+          "required_evidence": [
+            "频次根据用户访问统计数据的99%分位来"
+          ]
+        },
+        {
+          "source": "行为风控数据分析.md",
+          "heading": "2024-04-18 > 新加坡爬虫：",
+          "required_evidence": [
+            "99分位阈值大了3倍以上",
+            "新加坡的阈值大概是定在了2倍多"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "percentile-005",
+      "category": "percentile_conversational",
+      "query": "对于风控，团队是怎么优化99分位的？",
+      "acceptable_targets": [
+        {
+          "source": "实时风控方案.md",
+          "heading": "支持的策略",
+          "required_evidence": [
+            "频次根据用户访问统计数据的99%分位来"
+          ]
+        },
+        {
+          "source": "行为风控数据分析.md",
+          "heading": "2024-04-18 > 新加坡爬虫：",
+          "required_evidence": [
+            "99分位阈值大了3倍以上",
+            "新加坡的阈值大概是定在了2倍多"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "percentile-006",
+      "category": "percentile_conversational",
+      "query": "新加坡爬虫的接口阈值为什么从99分位的3倍调整到2倍多，效果如何？",
+      "acceptable_targets": [
+        {
+          "source": "行为风控数据分析.md",
+          "heading": "2024-04-18 > 新加坡爬虫：",
+          "required_evidence": [
+            "99分位阈值大了3倍以上",
+            "新加坡的阈值大概是定在了2倍多"
+          ]
+        }
+      ]
+    }
+  ],
+  "negative_cases": [
+    {
+      "id": "negative-001",
+      "query": "量子纠缠在量子计算退相干控制中的应用"
+    },
+    {
+      "id": "negative-002",
+      "query": "火星殖民地生态系统如何实现自维持"
+    },
+    {
+      "id": "negative-003",
+      "query": "巴赫平均律中的对位法与和声分析"
+    },
+    {
+      "id": "negative-004",
+      "query": "线粒体 DNA 在细胞衰老中的作用机制"
+    },
+    {
+      "id": "negative-005",
+      "query": "如何在家中培育蓝色兰花新品种"
+    },
+    {
+      "id": "negative-006",
+      "query": "古埃及中王国时期的灌溉税制度"
+    },
+    {
+      "id": "negative-007",
+      "query": "超导量子比特的表面码纠错阈值"
+    },
+    {
+      "id": "negative-008",
+      "query": "南极磷虾种群的季节性迁徙规律"
+    },
+    {
+      "id": "negative-009",
+      "query": "十二平均律与纯律在弦乐四重奏中的差别"
+    },
+    {
+      "id": "negative-010",
+      "query": "月球背面射电望远镜阵列如何部署"
+    }
+  ]
+}

@@ -13,7 +13,7 @@ import pytest
 
 from app.api import deps
 from app.main import app
-from tests.fakes import FakeVectorStore
+from tests.fakes import FakeEmbedder, FakeVectorStore
 
 
 @pytest.fixture(autouse=True)
@@ -22,6 +22,7 @@ def _isolate_local_deps(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
     结束后清空全部 overrides。"""
     deps.import_task_store.clear()
     app.dependency_overrides[deps.get_vector_store] = lambda: FakeVectorStore()
+    app.dependency_overrides[deps.get_embedder] = lambda: FakeEmbedder()
     from app.core import settings_store as settings_store_mod
     from app.core.config import settings
 

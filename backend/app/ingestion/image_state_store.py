@@ -68,6 +68,16 @@ class ImageStateStore:
                     description TEXT NOT NULL,
                     created_at TEXT NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS image_source_descriptions (
+                    src TEXT PRIMARY KEY,
+                    content_hash TEXT NOT NULL,
+                    description TEXT NOT NULL,
+                    created_at TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS image_originals (
+                    content_hash TEXT PRIMARY KEY,
+                    data BLOB NOT NULL
+                );
                 """
             )
             self._conn.commit()
@@ -152,7 +162,50 @@ class ImageStateStore:
         counts["total"] = sum(counts.values())
         return counts
 
+    def delete_by_source(self, source_file: str) -> int:
+        """删除某来源的图片任务；文档去重/删除时避免历史任务计数继续累积。"""
+
+        with self._lock:
+            cursor = self._conn.execute(
+                "DELETE FROM image_tasks WHERE source_file = ?", (source_file,)
+            )
+            self._conn.commit()
+            return max(0, int(cursor.rowcount))
+
+    def delete_by_sources(self, source_files: list[str]) -> int:
+        """批量删除多个来源的图片任务。"""
+
+        if not source_files:
+            return 0
+        with self._lock:
+            before = self._conn.total_changes
+            self._conn.executemany(
+                "DELETE FROM image_tasks WHERE source_file = ?",
+                ((source_file,) for source_file in source_files),
+            )
+            self._conn.commit()
+            return self._conn.total_changes - before
+
     # ------------------------------------------------------------- descriptions
+
+    def save_image_bytes(self, content_hash: str, data: bytes) -> None:
+        if not data or len(data) > 20 * 1024 * 1024:
+            return
+        with self._lock:
+            self._conn.execute("INSERT OR IGNORE INTO image_originals VALUES (?, ?)",
+                               (content_hash, data))
+            self._conn.commit()
+
+    def get_image_bytes(self, content_hash: str) -> bytes | None:
+        with self._lock:
+            row = self._conn.execute("SELECT data FROM image_originals WHERE content_hash = ?",
+                                     (content_hash,)).fetchone()
+        return bytes(row[0]) if row else None
+
+    def has_image_bytes(self, content_hash: str) -> bool:
+        with self._lock:
+            return self._conn.execute("SELECT 1 FROM image_originals WHERE content_hash = ?",
+                                      (content_hash,)).fetchone() is not None
 
     def get_description(self, content_hash: str) -> str | None:
         with self._lock:
@@ -171,10 +224,40 @@ class ImageStateStore:
             )
             self._conn.commit()
 
+    def get_source_description(self, src: str) -> tuple[str, str] | None:
+        """Return ``(content_hash, description)`` cached for an exact image source URL."""
+
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT content_hash, description FROM image_source_descriptions WHERE src = ?",
+                (src,),
+            ).fetchone()
+        if row is None:
+            return None
+        return (str(row["content_hash"]), str(row["description"]))
+
+    def save_source_description(
+        self,
+        src: str,
+        content_hash: str,
+        description: str,
+    ) -> None:
+        """Cache description by source so an expired remote URL remains recoverable."""
+
+        with self._lock:
+            self._conn.execute(
+                "INSERT OR REPLACE INTO image_source_descriptions "
+                "(src, content_hash, description, created_at) VALUES (?, ?, ?, ?)",
+                (src, content_hash, description, _now_iso()),
+            )
+            self._conn.commit()
+
     def clear(self) -> None:
         with self._lock:
             self._conn.execute("DELETE FROM image_tasks")
             self._conn.execute("DELETE FROM image_descriptions")
+            self._conn.execute("DELETE FROM image_source_descriptions")
+            self._conn.execute("DELETE FROM image_originals")
             self._conn.commit()
 
     def close(self) -> None:
