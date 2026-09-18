@@ -9,6 +9,8 @@ export interface StreamChatHandlers {
     queryMode: QueryMode,
   ) => void;
   onToken: (text: string) => void;
+  /** 推理模型思维链增量（本地展示，默认折叠）。 */
+  onReasoning: (text: string) => void;
   onTool: (tool: string, status: string) => void;
   onDone: () => void;
   onError: (message: string) => void;
@@ -30,9 +32,10 @@ const ENDPOINT = "/api/chat";
 
 /**
  * 手写 SSE 客户端：fetch + ReadableStream 增量解码，按 `\n\n` 切帧、
- * 取 `data: ` 后的 JSON 并按 type 分发。不使用 EventSource / 第三方 SSE 库。
+ * 取 `data: ` 后的 JSON 并按 type 分发（meta/reasoning/token/tool/done/error）。
+ * 不使用 EventSource / 第三方 SSE 库。
  * - 帧内 JSON.parse 失败 / 未知帧型 / 非 data: 行 -> 跳过，不崩溃。
- * - 传入 AbortSignal 可在请求进行中中断（如组件卸载）。
+ * - 传入 AbortSignal 可在请求进行中中断（用户点「停止生成」或组件卸载）。
  */
 export async function streamChat(
   message: string,
@@ -123,6 +126,9 @@ function dispatchFrame(frameText: string, handlers: StreamChatHandlers): void {
           isQueryMode(frame.query_mode) ? frame.query_mode : "CONTENT_QA",
         );
       }
+      break;
+    case "reasoning":
+      if (typeof frame.text === "string") handlers.onReasoning(frame.text);
       break;
     case "token":
       if (typeof frame.text === "string") handlers.onToken(frame.text);

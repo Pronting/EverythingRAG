@@ -5,7 +5,8 @@
   不会仅因凭证轮换而强制重建向量空间。
 - get_import_task_store：全局唯一导入任务存储（重启丢失，单用户本地可接受）。
 - get_state_store：增量同步的 SQLite 状态库单例（指纹表/来源根持久化）。
-三者均可被 app.dependency_overrides 替换（测试用 fake）。
+- conversation_store / workspace_store：会话与对话分区（JSON 持久化）单例。
+以上均可被 app.dependency_overrides 替换（测试用 fake）。
 """
 
 from __future__ import annotations
@@ -18,6 +19,7 @@ from threading import RLock
 from app.core.config import settings
 from app.core.conversation_store import ConversationStore
 from app.core.settings_store import EmbedModelConfig, get_settings_store
+from app.core.workspace_store import WorkspaceStore
 from app.ingestion.image_state_store import ImageStateStore
 from app.ingestion.import_task import ImportTaskStore
 from app.ingestion.state_store import DocumentStateStore
@@ -30,6 +32,9 @@ import_task_store = ImportTaskStore()
 
 #: 全局唯一会话存储（持久化到 data_dir/conversations.json）
 conversation_store = ConversationStore(settings.data_dir)
+
+#: 全局唯一工作区存储（持久化到 data_dir/workspaces.json，保证「默认」工作区存在）
+workspace_store = WorkspaceStore(settings.data_dir)
 
 #: 按运行时 Provider 配置摘要分 key 的向量库注册表。
 #: collection 名仍由 ``Embedder.fingerprint`` 决定；这里仅避免包装器继续持有旧客户端。

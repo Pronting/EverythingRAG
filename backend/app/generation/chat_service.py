@@ -26,6 +26,7 @@ from app.generation.providers import ChatProviderError
 from app.generation.vision import CHAT_IMAGE_PROMPT
 from app.ingestion.image_fetch import resolve_image_bytes
 from app.ingestion.image_preprocess import preprocess_image
+from app.memory.retriever import MemoryRetriever
 from app.retrieval.query_transform import (
     QueryVariant,
     build_query_variants,
@@ -56,6 +57,7 @@ class ChatService:
         preferences: AnswerPreferences | None = None,
         knowledge_overview: KnowledgeOverview | Callable[[], KnowledgeOverview] | None = None,
         image_reader: Callable[[RetrievedChunk, str], str] | None = None,
+        memory_retriever: MemoryRetriever | None = None,
     ) -> None:
         self._embedder = embedder
         self._retriever = retriever
@@ -64,6 +66,7 @@ class ChatService:
         self._search_max_results = max(1, int(search_max_results))
         self._vision = vision
         self._image_reader = image_reader
+        self._memory_retriever = memory_retriever
         self._preferences = preferences or AnswerPreferences()
         if callable(knowledge_overview):
             self._knowledge_overview_provider = knowledge_overview
@@ -78,7 +81,11 @@ class ChatService:
         web_search: bool = False,
         images: list[str] | None = None,
     ) -> AsyncIterator[dict[str, Any]]:
-        """逐帧产出 tool/meta/token/done 或 error；原始 reasoning 永不发给前端。"""
+        """逐帧产出 tool/meta/token/reasoning/done 或 error。
+
+        推理模型的思维链以 ``reasoning`` 帧单独下发（本地展示用，前端默认折叠）；
+        正文仍经 OutputGuard 做引用白名单清洗，reasoning 只做长度护栏、不参与清洗。
+        """
 
         mode = classify_query(message)
         knowledge_overview = KnowledgeOverview()
@@ -99,15 +106,19 @@ class ChatService:
                 image_descriptions = self._describe_images(images)
 
         chunks: list[RetrievedChunk] = []
+        memory_chunks: list[RetrievedChunk] = []
         if mode is QueryMode.CONTENT_QA:
             try:
-                chunks = self._retrieve_context(message)
+                variants, vectors = self._embed_query_variants(message)
+                chunks = self._retrieve_context(variants, vectors)
             except (RetrievalError, ChatProviderError) as exc:
                 yield _error_frame(str(exc))
                 return
             except Exception:  # noqa: BLE001 -- 嵌入器为 Protocol，异常不可枚举
                 yield _error_frame(_EMBED_ERROR_MESSAGE)
                 return
+            # 记忆走独立通路：自身失败静默降级，绝不阻断基于文档的问答。
+            memory_chunks = self._retrieve_memories(vectors)
 
         if self._image_reader and needs_image_verification(message):
             indices: list[int] = []
@@ -192,7 +203,7 @@ class ChatService:
             # An ambiguous acronym must not silently fall back to model memory after retrieval
             # established that the user's own corpus has no explicit definition.
             basis = AnswerBasis.INSUFFICIENT
-        meta = self._meta_frame(chunks, web_results, mode, basis)
+        meta = self._meta_frame(chunks, web_results, mode, basis, memory_chunks=memory_chunks)
 
         try:
             stream = self._chat_model.stream_chat(
@@ -206,6 +217,7 @@ class ChatService:
                     knowledge_overview=knowledge_overview,
                     history=history,
                     image_descriptions=image_descriptions,
+                    memory_chunks=memory_chunks,
                 )
             )
             first = await anext(stream)
@@ -223,11 +235,11 @@ class ChatService:
         yield meta
         allowed_ids = {source["source_id"] for source in meta["sources"]}
         output_guard = OutputGuard(allowed_ids)
-        for frame in _content_frames(first, output_guard):
+        for frame in _chunk_frames(first, output_guard):
             yield frame
         try:
             async for chunk in stream:
-                for frame in _content_frames(chunk, output_guard):
+                for frame in _chunk_frames(chunk, output_guard):
                     yield frame
         except ChatProviderError as exc:
             yield _error_frame(str(exc))
@@ -240,12 +252,13 @@ class ChatService:
             yield _token_frame(tail)
         yield _done_frame()
 
-    def _retrieve_context(self, message: str) -> list[RetrievedChunk]:
-        """让线上 Chat 与离线评测走同一条 query-aware 多变体召回路径。
+    def _embed_query_variants(
+        self, message: str
+    ) -> tuple[tuple[QueryVariant, ...], list[list[float]]]:
+        """构造查询变体并嵌入；文档通路与记忆通路共用同一组查询向量。
 
-        新 Embedder 使用 ``embed_queries``（Qwen3 会自动添加 query instruction），
-        HybridRetriever 使用 ``retrieve_variants`` 同时融合原查询与确定性去口语变体。
-        旧测试 fake / 纯 VectorRetriever 没有新方法时，安全退化为单 query 接口。
+        共用向量是刻意的：记忆与文档必须基于**同一个查询表示**召回，
+        否则两个通路的"相关性"不可比，配额融合会变成两种尺度的拼接。
         """
 
         variants = build_query_variants(message)
@@ -263,6 +276,33 @@ class ChatService:
             else:
                 # 只为旧 Protocol fake 保留；生产 CloudEmbedder 不会走到这里。
                 vectors = self._embedder.embed_texts(query_texts)
+        return variants, vectors
+
+    def _retrieve_memories(self, vectors: list[list[float]]) -> list[RetrievedChunk]:
+        """记忆通路召回；未配置记忆或召回失败一律返回空列表。
+
+        失败策略与文档通路刻意不同：文档未建索引要报错让用户知道"还没导入"，
+        记忆只是上下文增强，任何异常都不该影响本轮问答。
+        """
+
+        if self._memory_retriever is None or not vectors:
+            return []
+        try:
+            matches = self._memory_retriever.retrieve(vectors[0])
+        except Exception:  # noqa: BLE001 -- 记忆为增强项，绝不阻断主问答
+            return []
+        return [self._memory_retriever.to_chunk(match) for match in matches]
+
+    def _retrieve_context(
+        self,
+        variants: tuple[QueryVariant, ...],
+        vectors: list[list[float]],
+    ) -> list[RetrievedChunk]:
+        """让线上 Chat 与离线评测走同一条 query-aware 多变体召回路径。
+
+        HybridRetriever 使用 ``retrieve_variants`` 同时融合原查询与确定性去口语变体；
+        旧测试 fake / 纯 VectorRetriever 没有新方法时，安全退化为单 query 接口。
+        """
 
         retrieve_variants = getattr(self._retriever, "retrieve_variants", None)
         if callable(retrieve_variants):
@@ -296,6 +336,7 @@ class ChatService:
         web_results: list[SearchResult],
         mode: QueryMode,
         basis: AnswerBasis,
+        memory_chunks: list[RetrievedChunk] | None = None,
     ) -> dict[str, Any]:
         sources = [
             {
@@ -331,6 +372,29 @@ class ChatService:
                     "url": result.url,
                 }
             )
+        # 记忆源用独立段位 M{n}：与 S/W 分段可让前端在共享来源面板里显式区分
+        # 「文档事实」与「提炼记忆」，前者是原文，后者是推断——二者不可混同展示。
+        for index, chunk in enumerate(memory_chunks or [], start=1):
+            metadata = chunk.metadata or {}
+            sources.append(
+                {
+                    "source_id": f"M{index}",
+                    "block_id": chunk.block_id,
+                    "text": chunk.text,
+                    "source_file": chunk.source_file,
+                    "similarity": chunk.similarity,
+                    "match_type": "memory",
+                    "heading_path": None,
+                    "anchor": chunk.anchor,
+                    "chunk_type": "memory",
+                    "platform": "memory",
+                    "source_type": "memory",
+                    "category": metadata.get("category"),
+                    "confidence": metadata.get("confidence"),
+                    "source_ref": metadata.get("source_ref"),
+                    "quote": metadata.get("quote"),
+                }
+            )
         return {
             "type": "meta",
             "sources": sources,
@@ -351,6 +415,7 @@ def _build_messages(
     knowledge_overview: KnowledgeOverview,
     history: list[dict[str, str]] | None = None,
     image_descriptions: list[str] | None = None,
+    memory_chunks: list[RetrievedChunk] | None = None,
 ) -> list[dict[str, Any]]:
     """根据模式生成互斥的可信运行时上下文，所有外部内容显式标为不可信数据。"""
 
@@ -377,6 +442,10 @@ def _build_messages(
         references.extend(
             (f"W{index}", "web", result.content or result.snippet)
             for index, result in enumerate(web_results, start=1)
+        )
+        references.extend(
+            (f"M{index}", "memory", _memory_context_text(chunk))
+            for index, chunk in enumerate(memory_chunks or [], start=1)
         )
         if image_descriptions:
             references.extend(
@@ -405,6 +474,14 @@ def _build_messages(
                 parts.append(
                     label
                     + f'<untrusted_reference source_id="{source_id}" kind="{kind}">{encoded}</untrusted_reference>'
+                )
+            if memory_chunks:
+                # 记忆是**推断**而非原文：必须让模型知道它比文档证据弱一档，
+                # 否则一句提炼出来的结论会被讲成"你的文档里写着"。
+                parts.append(
+                    "其中 kind=\"memory\" 的来源是系统从以往对话中提炼的推断，"
+                    "不是用户当前问题的最新依据：引用时不得表述为文档原文或用户此刻的陈述；"
+                    "若记忆与本地知识冲突，以本地知识为准并说明差异。"
                 )
             parts.append("请先综合再回答；引用紧跟相关事实，且只能使用允许列表中的 [source_id]。")
         elif basis is AnswerBasis.INSUFFICIENT:
@@ -436,13 +513,51 @@ def _knowledge_context_text(chunk: RetrievedChunk) -> str:
     return chunk.text
 
 
-def _content_frames(chunk: ChatChunk, guard: OutputGuard) -> list[dict[str, Any]]:
-    """仅正文可离开后端；provider 的 reasoning_content 被确定性丢弃。"""
+def _memory_context_text(chunk: RetrievedChunk) -> str:
+    """把一条记忆渲染成模型可读的素材，并显式标注它是**提炼推断**。
 
+    带上类别与来源摘录，让模型能判断这条记忆的语境；"记忆，非文档原文"的措辞
+    是刻意的——它压低模型把推断讲成事实的倾向。
+    """
+
+    metadata = chunk.metadata or {}
+    category = str(metadata.get("category") or "")
+    quote = str(metadata.get("quote") or "").strip()
+    lines = [f"记忆类别：{category}", f"记忆陈述：{chunk.text}"]
+    if quote:
+        lines.append(f"出处原话：{quote}")
+    lines.append("（本条为系统从以往对话提炼的记忆，不是文档原文）")
+    return "\n".join(lines)
+
+
+#: reasoning 帧单帧文本上限（字符）：上游偶发超长块时切片下发，避免单帧撑爆 SSE。
+_MAX_REASONING_FRAME_CHARS = 4000
+
+
+def _chunk_frames(chunk: ChatChunk, guard: OutputGuard) -> list[dict[str, Any]]:
+    """按 kind 分流：正文过引用白名单清洗，思维链原样切片下发。
+
+    思维链只用于本地展示（前端默认折叠），不参与引用清洗——但它同样不得离开本机：
+    出网只发生在模型 provider 调用，SSE 只面向 127.0.0.1 的本机前端。
+    """
+
+    if chunk.kind == "reasoning":
+        return _reasoning_frames(chunk.text)
     if chunk.kind != "content":
         return []
     text = guard.feed(chunk.text)
     return [_token_frame(text)] if text else []
+
+
+def _reasoning_frames(text: str) -> list[dict[str, Any]]:
+    """把思维链增量切成受控大小的 reasoning 帧（空文本不产帧）。"""
+
+    if not text:
+        return []
+    return [
+        _reasoning_frame(text[index : index + _MAX_REASONING_FRAME_CHARS])
+        for index in range(0, len(text), _MAX_REASONING_FRAME_CHARS)
+    ]
 
 
 def _encode_untrusted_text(text: str) -> str:
@@ -458,6 +573,10 @@ def _encode_untrusted_text(text: str) -> str:
 
 def _token_frame(token: str) -> dict[str, Any]:
     return {"type": "token", "text": token}
+
+
+def _reasoning_frame(text: str) -> dict[str, Any]:
+    return {"type": "reasoning", "text": text}
 
 
 def _tool_frame(tool: str, status: str) -> dict[str, Any]:

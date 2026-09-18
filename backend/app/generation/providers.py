@@ -62,7 +62,8 @@ class OpenAICompatChatModel:
         """流式调用云端 chat/completions；逐 chunk 提取正文与思维链增量。
 
         正文走 delta.content，思维链走 delta.reasoning_content（DeepSeek 推理模型
-        等），分别产出 kind=content / reasoning；ChatService 默认丢弃后者，不透传前端。
+        等），分别产出 kind=content / reasoning；ChatService 把 reasoning 作为
+        独立 SSE 帧下发（前端默认折叠展示），不与正文混流。
         MEDIUM-1：收尾 usage-only chunk（choices 空）跳过；MEDIUM-3：空 choices 带
         error -> 抛 ChatProviderError。出网审计同前。
         """

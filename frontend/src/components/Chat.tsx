@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { ChangeEvent, KeyboardEvent } from "react";
 import { streamChat } from "../api/sse";
-import type { AnswerBasis, ConversationMessage, Source } from "../types";
-import { MarkdownContent } from "./MarkdownContent";
+import type { AnswerBasis, ConversationMessage, Source } from "../types";import { MarkdownContent } from "./MarkdownContent";
 import { CitationTooltip } from "./CitationTooltip";
 import { SourceFooter } from "./SourceFooter";
 import BrandMark from "./BrandMark";
@@ -11,10 +11,14 @@ interface ChatMessage {
   id: number;
   role: "user" | "assistant";
   content: string;
+  /** 推理模型思维链；空串表示本轮没有思维链（不渲染折叠块）。 */
+  reasoning: string;
   sources: Source[] | null;
   answerBasis: AnswerBasis | null;
   policyVersion: string | null;
   done: boolean;
+  /** 用户点「停止生成」中断的回复（保留已生成内容，仅提示已停止）。 */
+  stopped: boolean;
   error: string | null;
 }
 
@@ -23,6 +27,12 @@ interface ChatProps {
   conversationId: string | null;
   /** 当前会话的已持久化消息（切换会话时由父级传入）。 */
   initialMessages: ConversationMessage[];
+  /**
+   * 父级修订号：父级改写了 initialMessages 后自增，Chat 据此重新载入消息。
+   *
+   * 用于「编辑重发」——父级把历史截断到编辑点，需要 Chat 重新按新历史渲染。
+   */
+  revision?: number;
   /** 一轮问答完成（非错误）后回调，供父级持久化 + AI 标题。 */
   onExchangeComplete: (
     userContent: string,
@@ -30,7 +40,18 @@ interface ChatProps {
     sources: Source[] | null,
     answerBasis: AnswerBasis | null,
     policyVersion: string | null,
+    reasoning: string | null,
   ) => void;
+  /**
+   * 用户点铅笔「编辑重发」：父级把会话历史从该条起截断并返回新的消息列表。
+   *
+   * Chat 本地只负责把文本回填输入框、移除该条及其之后的消息；真正的历史截断
+   * 由父级落库，因此重发不会追加出重复轮次。
+   */
+  onEditUserMessage?: (
+    messageIndex: number,
+    content: string,
+  ) => Promise<ConversationMessage[] | null>;
   /** 问答结束（含错误/中断）后回调：父级刷新 /api/status（隐私审计状态）。 */
   onChatComplete?: () => void;
   /** 用户 / Agent 头像 URL（设置页配置），null 时用内置 SVG。 */
@@ -44,6 +65,8 @@ interface ChatProps {
 }
 
 const THINKING_TEXT = "思考中…";
+/** 输入框单行高度上限（与 .chat-input 的 max-height 对齐；超出改为内部滚动）。 */
+const INPUT_MAX_HEIGHT = 120;
 
 const SUGGESTIONS = ["知识库里有什么内容？", "帮我总结一下导入的文档", "Everything RAG 是做什么的？"];
 
@@ -70,12 +93,69 @@ function toChatMessages(messages: ConversationMessage[]): ChatMessage[] {
     id: index + 1,
     role: message.role,
     content: message.content,
-    sources: message.sources,
+    reasoning: message.reasoning ?? "",
+    // 归一化为 null：后端历史 / 伪造响应可能整个缺省 sources 键（undefined）
+    sources: message.sources ?? null,
     answerBasis: message.answer_basis ?? null,
     policyVersion: message.policy_version ?? null,
     done: true,
+    stopped: false,
     error: null,
   }));
+}
+
+/**
+ * 思维链折叠块：默认折叠，点击标题栏展开查看模型思考过程。
+ *
+ * 只在思维链含可读字符时渲染（纯标点/空白视为无内容），流式期间标题栏图标呼吸发光。
+ */
+function ThinkingBlock({
+  reasoning,
+  streaming,
+}: {
+  reasoning: string;
+  streaming: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const readable = reasoning.replace(/[\s\p{P}\p{S}]/gu, "");
+  if (readable === "") return null;
+  return (
+    <div className={`thinking-block${open ? " open" : ""}${streaming ? " active" : ""}`}>
+      <button
+        type="button"
+        className="thinking-toggle"
+        aria-expanded={open}
+        onClick={() => setOpen((value) => !value)}
+      >
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path
+            d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.6 10.8c.5.4.8 1 .8 1.7V16h5.6v-.5c0-.7.3-1.3.8-1.7A6 6 0 0 0 12 3Z"
+            stroke="currentColor"
+            strokeWidth="1.6"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+        <span>{streaming ? "思考中…" : `思考过程（${reasoning.length} 字）`}</span>
+        <span className="thinking-chevron" aria-hidden="true">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+            <path
+              d="M6 9l6 6 6-6"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </span>
+      </button>
+      {open && (
+        <div className="thinking-content" data-testid="thinking-content">
+          {reasoning}
+        </div>
+      )}
+    </div>
+  );
 }
 
 const BASIS_LABELS: Record<AnswerBasis, string> = {
@@ -91,7 +171,9 @@ const BASIS_LABELS: Record<AnswerBasis, string> = {
 export default function Chat({
   conversationId,
   initialMessages,
+  revision = 0,
   onExchangeComplete,
+  onEditUserMessage,
   onChatComplete,
   avatars,
   onCitationSelect,
@@ -107,23 +189,40 @@ export default function Chat({
   // 贴图：data URI（src）+ 文件名，纯文本模型由后端识图代理转文字
   const [images, setImages] = useState<{ src: string; name: string }[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   const [hoveredCitation, setHoveredCitation] = useState<{ source: Source; rect: DOMRect } | null>(
     null,
   );
   const nextIdRef = useRef(1);
   const streamMessageIdRef = useRef<number | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  /** 用户主动「停止生成」：区分卸载/切会话中断，避免把半截回答写进会话历史。 */
+  const stoppedRef = useRef(false);
   const chatRootRef = useRef<HTMLDivElement>(null);
   // 用户是否停留在滚动区底部：贴近底部时才自动跟随滚动（流式吐字时用户上滑可停止自动滚动）
   const isAtBottomRef = useRef(true);
   const exchangeRef = useRef<{
     user: string;
     assistant: string;
+    reasoning: string;
     sources: Source[] | null;
     answerBasis: AnswerBasis | null;
     policyVersion: string | null;
     error: boolean;
   } | null>(null);
+
+  /**
+   * 输入框高度自适应：先归零再按内容量高，最多 INPUT_MAX_HEIGHT，超出内部滚动。
+   *
+   * 归零是必需的——否则清除多行长文本后 textarea 不会缩回单行。
+   */
+  const syncInputHeight = useCallback((): void => {
+    const el = inputRef.current;
+    if (el === null) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, INPUT_MAX_HEIGHT)}px`;
+    el.style.overflowY = el.scrollHeight > INPUT_MAX_HEIGHT ? "auto" : "hidden";
+  }, []);
 
   // 切换会话：加载历史消息、重置 id、回到底部跟随
   useEffect(() => {
@@ -132,6 +231,37 @@ export default function Chat({
     isAtBottomRef.current = true;
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 仅在切换会话时加载
   }, [conversationId]);
+
+  // 父级改写了历史（编辑重发截断）：按新历史重载消息，避免旧轮次残留
+  useEffect(() => {
+    if (revision === 0) return;
+    setMessages(toChatMessages(initialMessages));
+    nextIdRef.current = initialMessages.length + 1;
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 仅在父级修订时重载
+  }, [revision]);
+
+  /**
+   * 点铅笔「编辑重发」：把该条提问回填输入框，移除该条及其后的所有消息。
+   *
+   * 真正的历史截断交给父级落库（见 onEditUserMessage），因此重发直接追加即可，
+   * 不会出现「旧卡片 + 新卡片」两份重复轮次。
+   */
+  const handleEditRequest = (messageId: number): void => {
+    if (isSending) return;
+    const index = messages.findIndex((message) => message.id === messageId);
+    if (index < 0) return;
+    const target = messages[index];
+    if (target.role !== "user") return;
+    const content = target.content;
+    // 先本地移除（立即反馈），再让父级截断持久化历史
+    setMessages((prev) => prev.slice(0, index));
+    setInput(content);
+    requestAnimationFrame(() => {
+      syncInputHeight();
+      inputRef.current?.focus();
+    });
+    void onEditUserMessage?.(index, content);
+  };
 
   // 跟踪滚动容器（.app-main = .chat 的父级）是否贴底：用户上滑后 isAtBottomRef 置 false。
   useEffect(() => {
@@ -209,32 +339,38 @@ export default function Chat({
       id: userId,
       role: "user",
       content: message,
+      reasoning: "",
       sources: null,
       answerBasis: null,
       policyVersion: null,
       done: true,
+      stopped: false,
       error: null,
     };
     const assistantMessage: ChatMessage = {
       id: assistantId,
       role: "assistant",
       content: "",
+      reasoning: "",
       sources: null,
       answerBasis: null,
       policyVersion: null,
       done: false,
+      stopped: false,
       error: null,
     };
-    // 发送新消息：回到底部跟随（用户可能在读历史时发送）
+    // 发送新消息：回到底部跟随（用户可能在读历史时发送），输入框收回单行
     isAtBottomRef.current = true;
     setMessages((prev) => [...prev, userMessage, assistantMessage]);
     setInput("");
     setImages([]);
     setIsSending(true);
+    stoppedRef.current = false;
     streamMessageIdRef.current = assistantId;
     exchangeRef.current = {
       user: message,
       assistant: "",
+      reasoning: "",
       sources: null,
       answerBasis: null,
       policyVersion: null,
@@ -268,6 +404,11 @@ export default function Chat({
             if (exchangeRef.current) exchangeRef.current.assistant += text;
             updateMessage(assistantId, (m) => ({ ...m, content: m.content + text }));
           },
+          onReasoning: (text) => {
+            if (streamMessageIdRef.current !== assistantId) return;
+            if (exchangeRef.current) exchangeRef.current.reasoning += text;
+            updateMessage(assistantId, (m) => ({ ...m, reasoning: m.reasoning + text }));
+          },
           onTool: (tool, status) => {
             if (streamMessageIdRef.current !== assistantId) return;
             setSearching(status === "running");
@@ -296,16 +437,19 @@ export default function Chat({
       );
     } finally {
       setSearching(false);
-      // 兜底：流结束但未收到 done/error（如坏帧流）时恢复 UI 并标记消息完成。
+      // 兜底：流结束但未收到 done/error（如坏帧流 / 用户中断）时恢复 UI 并标记消息完成。
+      const stopped = stoppedRef.current;
+      stoppedRef.current = false;
       streamMessageIdRef.current = null;
       abortRef.current = null;
       setMessages((prev) =>
         prev.map((m) =>
-          m.id === assistantId && !m.done && !m.error ? { ...m, done: true } : m,
+          m.id === assistantId && !m.done && !m.error ? { ...m, done: true, stopped } : m,
         ),
       );
       setIsSending(false);
-      if (exchangeRef.current && !exchangeRef.current.error) {
+      // 用户主动停止的半截回答不写进会话历史（历史只保留完整轮次）；卸载中断同理丢弃。
+      if (exchangeRef.current && !exchangeRef.current.error && !stopped) {
         const exchange = exchangeRef.current;
         onExchangeComplete(
           exchange.user,
@@ -313,10 +457,30 @@ export default function Chat({
           exchange.sources,
           exchange.answerBasis,
           exchange.policyVersion,
+          exchange.reasoning === "" ? null : exchange.reasoning,
         );
       }
       onChatComplete?.(); // 问答结束刷新 status（隐私审计状态跟随）
     }
+  };
+
+  /** 停止生成：中断 SSE 流，保留已生成内容（半截回答不入历史）。 */
+  const handleStop = (): void => {
+    if (!isSending || abortRef.current === null) return;
+    stoppedRef.current = true;
+    abortRef.current.abort();
+  };
+
+  const handleInputChange = (event: ChangeEvent<HTMLTextAreaElement>): void => {
+    setInput(event.target.value);
+    syncInputHeight();
+  };
+
+  /** Enter 发送；Shift+Enter 换行（对齐主流对话输入习惯）。 */
+  const handleInputKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>): void => {
+    if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing) return;
+    event.preventDefault();
+    void handleSend();
   };
 
   const inputBar = (
@@ -327,6 +491,16 @@ export default function Chat({
         void handleSend();
       }}
     >
+      <textarea
+        ref={inputRef}
+        className="chat-input"
+        value={input}
+        rows={1}
+        onChange={handleInputChange}
+        onKeyDown={handleInputKeyDown}
+        placeholder="随心输入"
+        aria-label="消息输入框"
+      />
       {images.length > 0 && (
         <div className="chat-image-chips">
           {images.map((img, index) => (
@@ -399,25 +573,31 @@ export default function Chat({
           />
         </svg>
       </button>
-      <input
-        className="chat-input"
-        type="text"
-        value={input}
-        onChange={(e) => setInput(e.target.value)}
-        placeholder="问点什么，比如：这份文档讲了什么？"
-        aria-label="消息输入框"
-      />
-      <span className="composer-label">{webSearch ? "联网搜索已开启" : "从一个好问题开始"}</span>
-      <button
-        className="chat-send"
-        type="submit"
-        disabled={isSending || input.trim() === ""}
-        aria-label="发送"
-      >
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-          <path d="M12 19V5m-6 6 6-6 6 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      </button>
+      <span className="composer-label">{webSearch ? "联网搜索已开启" : ""}</span>
+      {isSending ? (
+        <button
+          type="button"
+          className="chat-stop"
+          onClick={handleStop}
+          aria-label="停止生成"
+          title="停止生成"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <rect x="6" y="6" width="12" height="12" rx="2" />
+          </svg>
+        </button>
+      ) : (
+        <button
+          className="chat-send"
+          type="submit"
+          disabled={input.trim() === ""}
+          aria-label="发送"
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M12 19V5m-6 6 6-6 6 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </button>
+      )}
     </form>
   );
 
@@ -425,27 +605,29 @@ export default function Chat({
     <div className="chat" ref={chatRootRef}>
       {messages.length === 0 ? (
         <div className="chat-empty">
-          <div className="hero-emblem"><BrandMark /><span className="emblem-node" /></div>
-          <p className="hero-eyebrow">连接知识 · 发现新知</p>
-          <h2 className="chat-empty-title">让知识，<span>彼此连接。</span></h2>
-          <p className="chat-empty-description">从散落的笔记到清晰的答案，和你的知识库聊聊。</p>
-          <div className="chat-empty-input">{inputBar}</div>
-          <div className="suggestion-chips">
-            {SUGGESTIONS.map((suggestion, index) => (
-              <button
-                key={suggestion}
-                type="button"
-                className="suggestion-chip"
-                onClick={() => void handleSend(suggestion)}
-              >
-                <span className="suggestion-number" aria-hidden="true">0{index + 1}</span>
-                <span className="suggestion-title">{["探索知识库", "提炼文档重点", "认识 Everything RAG"][index]}</span>
-                <span className="suggestion-description">{suggestion}</span>
-                <span className="suggestion-arrow" aria-hidden="true">↗</span>
-              </button>
-            ))}
+          {/* 品牌 + 标题居中，输入条下沉到底部（参考 Codex 首页布局） */}
+          <div className="chat-empty-center">
+            <div className="hero-emblem"><BrandMark /><span className="emblem-node" /></div>
+            <h2 className="chat-empty-title">问点什么？</h2>
           </div>
-          <p className="chat-empty-note">随时准备好，知无不言</p>
+          <div className="chat-empty-composer">
+            <div className="chat-empty-input">{inputBar}</div>
+            <div className="suggestion-chips">
+              {SUGGESTIONS.map((suggestion, index) => (
+                <button
+                  key={suggestion}
+                  type="button"
+                  className="suggestion-chip"
+                  onClick={() => void handleSend(suggestion)}
+                >
+                  <span className="suggestion-number" aria-hidden="true">0{index + 1}</span>
+                  <span className="suggestion-title">{["探索知识库", "提炼文档重点", "认识 Everything RAG"][index]}</span>
+                  <span className="suggestion-description">{suggestion}</span>
+                  <span className="suggestion-arrow" aria-hidden="true">↗</span>
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
       ) : (
         <div className="chat-messages" role="log" aria-live="polite">
@@ -465,29 +647,62 @@ export default function Chat({
                   </span>
                 )}
                 {msg.role === "user" ? (
-                  <div className="message-content user">{msg.content}</div>
+                  <div className="message-content user">
+                    {msg.content}
+                    {!isSending && onEditUserMessage !== undefined && (
+                      <button
+                        type="button"
+                        className="message-edit-btn"
+                        onClick={() => handleEditRequest(msg.id)}
+                        aria-label="编辑这条提问"
+                        title="编辑这条提问并重新发送"
+                      >
+                        <svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                          <path
+                            d="M11.2 2.3a1.4 1.4 0 0 1 2 2L5.6 11.9l-2.6.7.7-2.6z"
+                            stroke="currentColor"
+                            strokeWidth="1.3"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                        </svg>
+                      </button>
+                    )}
+                  </div>
                 ) : msg.error !== null ? (
                   <div className="message-error" role="alert">
                     {msg.error}
                   </div>
-                ) : msg.content === "" ? (
-                  <div className="message-content thinking">
-                    <span className="thinking-spinner" aria-hidden="true" />
-                    <span>{THINKING_TEXT}</span>
-                  </div>
+                ) : msg.content === "" && msg.reasoning === "" ? (
+                  msg.stopped ? (
+                    <div className="message-content stopped">已停止生成</div>
+                  ) : (
+                    <div className="message-content thinking">
+                      <span className="thinking-spinner" aria-hidden="true" />
+                      <span>{THINKING_TEXT}</span>
+                    </div>
+                  )
                 ) : (
-                  <div className={`message-content${msg.done ? "" : " streaming"}`}>
-                    <MarkdownContent
-                      content={msg.content}
-                      sources={msg.sources}
-                      onCitationClick={onCitationSelect}
-                      onCitationHover={handleCitationHover}
-                    />
-                  </div>
+                  msg.content !== "" && (
+                    <div className={`message-content${msg.done ? "" : " streaming"}`}>
+                      <MarkdownContent
+                        content={msg.content}
+                        sources={msg.sources}
+                        onCitationClick={onCitationSelect}
+                        onCitationHover={handleCitationHover}
+                      />
+                    </div>
+                  )
                 )}
-                {msg.role === "assistant" && msg.sources !== null && msg.sources.length > 0 && (
+                {msg.role === "assistant" && msg.stopped && msg.content !== "" && (
+                  <p className="message-stopped-note">已停止生成</p>
+                )}
+                {msg.role === "assistant" && msg.error === null && (
+                  <ThinkingBlock reasoning={msg.reasoning} streaming={!msg.done && !msg.stopped} />
+                )}
+                {msg.role === "assistant" && (msg.sources?.length ?? 0) > 0 && (
                   <SourceFooter
-                    sources={msg.sources}
+                    sources={msg.sources ?? []}
                     onSelect={(index) => {
                       if (msg.sources) onCitationSelect?.(msg.sources, index);
                     }}

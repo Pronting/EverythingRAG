@@ -1,11 +1,14 @@
-"""会话存储：data_dir/conversations.json 持久化（对话历史 + AI 标题）。
+"""会话存储：data_dir/conversations.json 持久化（对话历史 + AI 标题 + 归档/分支）。
 
 单 JSON 文件足够 MVP（低频写、单用户本地）；量大可迁移 SQLite（aiosqlite 已在依赖）。
 conversation 含消息列表；title 由 AI 生成或回退首个用户消息。
+归档（archived）的会话不进侧边栏列表，改由设置页「归档对话」恢复；
+分支（parent_id）记录 fork 来源，侧边栏据此把子对话折叠在父对话下方（对齐 Codex 客户端）。
 """
 
 from __future__ import annotations
 
+import itertools
 import json
 import os
 import threading
@@ -16,30 +19,89 @@ from uuid import uuid4
 
 from pydantic import BaseModel, Field
 
+from app.core.workspace_store import DEFAULT_WORKSPACE_ID
+
 
 class ConversationMessage(BaseModel):
-    """单条对话消息；只持久化正文、依据标签与来源，不保存原始思维链。"""
+    """单条对话消息；持久化正文、依据标签与来源。
+
+    reasoning 为推理模型思维链（本地展示用，前端默认折叠）；不参与任何后续
+    请求构造，只随历史一起回放。
+    """
 
     role: str  # "user" | "assistant"
     content: str
     sources: list[dict[str, Any]] | None = None
     answer_basis: str | None = None
     policy_version: str | None = None
+    reasoning: str | None = None
     created_at: str = ""
 
 
 class Conversation(BaseModel):
-    """一次会话：标题 + 消息列表。"""
+    """一次会话：标题 + 消息列表 + 归档/分支/工作区元数据。"""
 
     id: str
     title: str = "新对话"
     created_at: str = ""
     updated_at: str = ""
     messages: list[ConversationMessage] = Field(default_factory=list)
+    #: 已归档：从侧边栏隐藏，只能在设置页「归档对话」查看与恢复。
+    archived: bool = False
+    archived_at: str | None = None
+    #: fork 来源会话 id（None = 原始对话）；侧边栏据此把分支折叠在父对话下方。
+    parent_id: str | None = None
+    #: fork 时父对话的标题，用于「原标题 · 分支」命名与归档页展示来源。
+    forked_from_title: str | None = None
+    #: 所属工作区（对话分区）；旧数据缺省落到默认工作区。
+    workspace_id: str = DEFAULT_WORKSPACE_ID
+    #: 工作区内手工排序位（拖拽排序）；None = 未排序，按 updated_at 倒序。
+    sort_index: float | None = None
+    #: 创建/更新序号（仅用于同毫秒时间戳下的稳定排序，不进 UI）。
+    sort_seq: int = 0
+
+
+#: 进程内单调递增序号：解决同一毫秒创建/更新的会话在排序时不稳定（时间戳打平）。
+_CREATED_SEQ = itertools.count(1)
+
+
+def _next_seq() -> int:
+    return next(_CREATED_SEQ)
 
 
 def _now() -> str:
     return datetime.now(UTC).isoformat()
+
+
+def _midpoint(low: float | None, high: float | None) -> float:
+    """插入到 low / high 之间所需的排序位（任一侧为空则向该侧外扩 1.0）。"""
+
+    if low is None and high is None:
+        return 0.0
+    if low is None:
+        return float(high) - 1.0  # type: ignore[arg-type]
+    if high is None:
+        return float(low) + 1.0
+    return (float(low) + float(high)) / 2.0
+
+
+def _sidebar_sort_key(conv: Conversation) -> tuple[float, float, float, str]:
+    """侧边栏排序键（按**升序**排序即可得到显示顺序）。
+
+    - 手工拖拽过的：``(0, sort_index)``（位次越小越靠前）；
+    - 没拖过的：``(1, -updated_at)`` 排在其后，组内越新越靠前；
+    - 末位用创建序号兜底：同一毫秒创建的两条会话时间戳完全相同，否则顺序不稳定。
+    """
+
+    if conv.sort_index is not None:
+        return (0.0, float(conv.sort_index), 0.0, "")
+    try:
+        parsed = datetime.fromisoformat(conv.updated_at)
+    except ValueError:
+        return (1.0, 0.0, 0.0, conv.updated_at)
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=UTC)
+    return (1.0, -parsed.timestamp(), float(conv.sort_seq), conv.updated_at)
 
 
 class ConversationStore:
@@ -73,33 +135,162 @@ class ConversationStore:
         tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
         os.replace(tmp, self._path)
 
-    def list_summaries(self) -> list[dict[str, Any]]:
-        """按最近更新倒序返回摘要列表（供侧边栏）。"""
-        with self._lock:
-            ordered = sorted(
-                self._conversations.values(),
-                key=lambda c: c.updated_at,
-                reverse=True,
-            )
-            return [
-                {
-                    "id": conv.id,
-                    "title": conv.title,
-                    "created_at": conv.created_at,
-                    "updated_at": conv.updated_at,
-                    "message_count": len(conv.messages),
-                }
-                for conv in ordered
-            ]
+    def list_summaries(self, workspace_id: str | None = None) -> list[dict[str, Any]]:
+        """活跃会话摘要列表（侧边栏顺序）。
 
-    def search(self, query: str) -> list[dict[str, Any]]:
-        """Search titles and user/assistant text locally, returning compact match excerpts."""
+        排序：手工拖拽过的（有 sort_index）在前并按其顺序，其余按最近更新倒序；
+        - 已归档的不返回（归档页用 list_archived_summaries）；
+        - 空会话（从未交换过消息）不返回，避免侧边栏堆满「新对话」；
+        - 给定 workspace_id 时只返回该工作区。
+        """
+
+        return self._summaries(
+            lambda conv: (
+                not conv.archived
+                and len(conv.messages) > 0
+                and (workspace_id is None or conv.workspace_id == workspace_id)
+            ),
+            key=_sidebar_sort_key,
+        )
+
+    def list_archived_summaries(self) -> list[dict[str, Any]]:
+        """已归档会话摘要列表（按归档时间倒序，退化到更新时间）。"""
+
+        return self._summaries(
+            lambda conv: conv.archived,
+            key=lambda conv: (conv.archived_at or conv.updated_at),
+            reverse=True,
+        )
+
+    def count_by_workspace(self) -> dict[str, int]:
+        """各工作区的活跃会话数（供侧边栏分区切换器显示计数）。"""
+
+        with self._lock:
+            counts: dict[str, int] = {}
+            for conv in self._conversations.values():
+                if conv.archived or not conv.messages:
+                    continue
+                counts[conv.workspace_id] = counts.get(conv.workspace_id, 0) + 1
+            return counts
+
+    def set_workspace(self, conversation_id: str, workspace_id: str) -> Conversation | None:
+        """把会话移动到指定工作区（不改动消息与归档状态）。"""
+
+        with self._lock:
+            conv = self._conversations.get(conversation_id)
+            if conv is None:
+                return None
+            conv.workspace_id = workspace_id
+            # 换工作区后排到目标区末尾：清除手工位，让它按更新时间自然落位
+            conv.sort_index = None
+            conv.updated_at = _now()
+            conv.sort_seq = _next_seq()
+            self._persist()
+            return conv
+
+    def move_in_sidebar(
+        self,
+        conversation_id: str,
+        workspace_id: str | None = None,
+        target_index: int | None = None,
+    ) -> Conversation | None:
+        """侧边栏拖拽落点：把会话移到（可选的）目标工作区，并放到该区第 target_index 位。
+
+        排序位取插入点前后邻居 sort_index 的中点（浮点插入），无需重排整个区；
+        放到末尾或目标区为空时给一个末尾值。目标区里若还有没排过序（sort_index=None）
+        的会话，会先给它们按当前显示顺序补上位次，避免新旧顺序互相插队。
+        """
+
+        with self._lock:
+            conv = self._conversations.get(conversation_id)
+            if conv is None:
+                return None
+            target_workspace = workspace_id or conv.workspace_id
+            if workspace_id is not None:
+                conv.workspace_id = workspace_id
+
+            siblings = self._siblings_in_order(target_workspace, exclude_id=conversation_id)
+            self._ensure_sort_indexes(siblings)
+            ordered = [item.id for item in siblings]
+            index = len(ordered) if target_index is None else max(0, min(int(target_index), len(ordered)))
+            low = ordered[index - 1] if index - 1 >= 0 else None
+            high = ordered[index] if index < len(ordered) else None
+            conv.sort_index = _midpoint(
+                self._index_of(low),
+                self._index_of(high),
+            )
+            conv.updated_at = _now()
+            conv.sort_seq = _next_seq()
+            self._persist()
+            return conv
+
+    def _siblings_in_order(self, workspace_id: str, exclude_id: str) -> list[Conversation]:
+        """目标工作区里可见（活跃非空）的会话，按当前侧边栏顺序排列。"""
+
+        return sorted(
+            (
+                item
+                for item in self._conversations.values()
+                if item.workspace_id == workspace_id
+                and item.id != exclude_id
+                and not item.archived
+                and item.messages
+            ),
+            key=_sidebar_sort_key,
+        )
+
+    def _ensure_sort_indexes(self, conversations: list[Conversation]) -> None:
+        """给还没手工排序的会话按当前显示顺序补 sort_index（保持视觉顺序不变）。"""
+
+        for position, conv in enumerate(conversations):
+            if conv.sort_index is None:
+                conv.sort_index = float(position)
+
+    def _index_of(self, conversation_id: str | None) -> float | None:
+        if conversation_id is None:
+            return None
+        conv = self._conversations.get(conversation_id)
+        return conv.sort_index if conv is not None else None
+
+    def archive_workspace(self, workspace_id: str) -> int:
+        """归档某工作区下的全部活跃会话，返回归档条数（删除工作区时调用）。
+
+        已归档的会话保持原样（不刷新 archived_at），避免重排归档页顺序。
+        """
+
+        with self._lock:
+            now = _now()
+            moved = 0
+            for conv in self._conversations.values():
+                if conv.workspace_id != workspace_id or conv.archived:
+                    continue
+                conv.archived = True
+                conv.archived_at = now
+                moved += 1
+            if moved:
+                self._persist()
+            return moved
+
+    def search(self, query: str, workspace_id: str | None = None) -> list[dict[str, Any]]:
+        """Search titles and user/assistant text locally, returning compact match excerpts.
+
+        只搜活跃且非空的会话：归档会话不进侧边栏搜索结果（可在归档页浏览）；
+        给定 workspace_id 时限定在该工作区内搜索。
+        """
+
         terms = query.casefold().split()
         if not terms:
-            return self.list_summaries()
+            return self.list_summaries(workspace_id)
         with self._lock:
             results = []
-            for conv in sorted(self._conversations.values(), key=lambda c: c.updated_at, reverse=True):
+            candidates = [
+                conv
+                for conv in self._conversations.values()
+                if not conv.archived
+                and conv.messages
+                and (workspace_id is None or conv.workspace_id == workspace_id)
+            ]
+            for conv in sorted(candidates, key=lambda c: c.updated_at, reverse=True):
                 messages = [m.content for m in conv.messages if m.role in ("user", "assistant")]
                 haystack = "\n".join([conv.title, *messages]).casefold()
                 if not all(term in haystack for term in terms):
@@ -111,20 +302,24 @@ class ConversationStore:
                               if term in snippet.casefold()), default=0)
                 start = max(0, offset - 35)
                 excerpt = snippet[start:start + 140].replace("\n", " ")
-                results.append({
-                    "id": conv.id, "title": conv.title,
-                    "created_at": conv.created_at, "updated_at": conv.updated_at,
-                    "message_count": len(conv.messages),
+                results.append(self._summary(conv) | {
                     "match_excerpt": ("…" if start else "") + excerpt + (
                         "…" if start + 140 < len(snippet) else ""
                     ),
                 })
             return results
 
-    def create(self) -> Conversation:
-        """创建空会话并落盘。"""
+    def create(self, workspace_id: str = DEFAULT_WORKSPACE_ID) -> Conversation:
+        """在指定工作区创建空会话并落盘。"""
         now = _now()
-        conv = Conversation(id=uuid4().hex, title="新对话", created_at=now, updated_at=now)
+        conv = Conversation(
+            id=uuid4().hex,
+            title="新对话",
+            created_at=now,
+            updated_at=now,
+            sort_seq=_next_seq(),
+            workspace_id=workspace_id or DEFAULT_WORKSPACE_ID,
+        )
         with self._lock:
             self._conversations[conv.id] = conv
             self._persist()
@@ -146,6 +341,7 @@ class ConversationStore:
                 return None
             conv.messages.extend(messages)
             conv.updated_at = _now()
+            conv.sort_seq = _next_seq()
             self._persist()
             return conv
 
@@ -159,9 +355,103 @@ class ConversationStore:
             self._persist()
             return conv
 
+    def set_archived(self, conversation_id: str, archived: bool) -> Conversation | None:
+        """归档 / 恢复会话（归档记录时间戳，恢复清空）。"""
+        with self._lock:
+            conv = self._conversations.get(conversation_id)
+            if conv is None:
+                return None
+            conv.archived = archived
+            conv.archived_at = _now() if archived else None
+            self._persist()
+            return conv
+
+    def fork(self, conversation_id: str) -> Conversation | None:
+        """从已有会话分支出新会话：深拷贝消息，标题追加「· 分支」。
+
+        分支对话是独立副本：父对话后续变化（继续问答 / 归档 / 删除）都不影响它，
+        删除父对话时分支会被提升为顶层，不留悬空 parent_id。
+        """
+        with self._lock:
+            parent = self._conversations.get(conversation_id)
+            if parent is None:
+                return None
+            now = _now()
+            branch = Conversation(
+                id=uuid4().hex,
+                title=f"{parent.title} · 分支"[:60],
+                created_at=now,
+                updated_at=now,
+                sort_seq=_next_seq(),
+                messages=[message.model_copy(deep=True) for message in parent.messages],
+                parent_id=parent.id,
+                forked_from_title=parent.title,
+                # 分支与父对话落在同一工作区（分区不会因 fork 而漂移）
+                workspace_id=parent.workspace_id,
+            )
+            self._conversations[branch.id] = branch
+            self._persist()
+            return branch
+
+    def truncate_from(self, conversation_id: str, index: int) -> Conversation | None:
+        """从第 index 条消息起截断（编辑重发：该条及其之后的对话作废）。
+
+        「重新编辑并重发」的语义与 ChatGPT 一致——用户改写某条提问后，它后面的
+        问答全部失效，因此这里真截断历史，避免重发后出现重复或错位的旧轮次。
+        index <= 0 时清空全部消息；index 不小于当前长度时原样返回。
+        """
+
+        with self._lock:
+            conv = self._conversations.get(conversation_id)
+            if conv is None:
+                return None
+            if index <= 0:
+                conv.messages = []
+            elif index < len(conv.messages):
+                conv.messages = conv.messages[:index]
+            conv.updated_at = _now()
+            conv.sort_seq = _next_seq()
+            self._persist()
+            return conv
+
     def delete(self, conversation_id: str) -> bool:
         with self._lock:
             removed = self._conversations.pop(conversation_id, None)
-            if removed is not None:
-                self._persist()
-            return removed is not None
+            if removed is None:
+                return False
+            # 分支的父会话被删除后，分支提升为顶层（不能留下悬空的 parent_id）
+            for conv in self._conversations.values():
+                if conv.parent_id == conversation_id:
+                    conv.parent_id = None
+            self._persist()
+            return True
+
+    def _summaries(
+        self,
+        predicate: Any,
+        key: Any = None,
+        reverse: bool = False,
+    ) -> list[dict[str, Any]]:
+        """按条件筛选并按排序键（缺省 updated_at 升序）投影摘要。"""
+
+        with self._lock:
+            selected = [conv for conv in self._conversations.values() if predicate(conv)]
+            sort_key = key or (lambda conv: conv.updated_at)
+            ordered = sorted(selected, key=sort_key, reverse=reverse)
+            return [self._summary(conv) for conv in ordered]
+
+    @staticmethod
+    def _summary(conv: Conversation) -> dict[str, Any]:
+        return {
+            "id": conv.id,
+            "title": conv.title,
+            "created_at": conv.created_at,
+            "updated_at": conv.updated_at,
+            "message_count": len(conv.messages),
+            "archived": conv.archived,
+            "archived_at": conv.archived_at,
+            "parent_id": conv.parent_id,
+            "forked_from_title": conv.forked_from_title,
+            "workspace_id": conv.workspace_id,
+            "sort_index": conv.sort_index,
+        }

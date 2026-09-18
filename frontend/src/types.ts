@@ -29,7 +29,12 @@ export type AnswerBasis =
 
 export type QueryMode = "PRODUCT_HELP" | "KNOWLEDGE_OVERVIEW" | "CONTENT_QA";
 
-/** SSE 帧联合类型：原始 reasoning 不离开后端。 */
+/**
+ * SSE 帧联合类型。
+ *
+ * `reasoning` 为推理模型思维链增量（本地展示，前端默认折叠）；
+ * 原始 provider 报文不会越过 SSE 边界。
+ */
 export type SSEFrame =
   | {
       type: "meta";
@@ -38,6 +43,7 @@ export type SSEFrame =
       policy_version: string;
       query_mode: QueryMode;
     }
+  | { type: "reasoning"; text: string }
   | { type: "token"; text: string }
   | { type: "tool"; tool: string; status: string }
   | { type: "done" }
@@ -234,17 +240,19 @@ export interface SettingsUpdate {
   theme?: ThemeValue;
 }
 
-/** 持久化的对话消息（只含可展示正文、依据标签与来源快照）。 */
+/** 持久化的对话消息（只含可展示正文、思维链、依据标签与来源快照）。 */
 export interface ConversationMessage {
   role: "user" | "assistant";
   content: string;
   sources: Source[] | null;
   answer_basis: AnswerBasis | null;
   policy_version: string | null;
+  /** 推理模型思维链；旧会话 / 非推理模型为 null（前端不渲染折叠块）。 */
+  reasoning?: string | null;
   created_at: string;
 }
 
-/** 会话摘要（侧边栏列表项）。 */
+/** 会话摘要（侧边栏列表项 / 设置页归档列表项）。 */
 export interface ConversationSummary {
   match_excerpt?: string;
   id: string;
@@ -252,6 +260,17 @@ export interface ConversationSummary {
   created_at: string;
   updated_at: string;
   message_count: number;
+  /** 已归档：不在侧边栏出现，只能在设置页「归档对话」查看与恢复。 */
+  archived?: boolean;
+  archived_at?: string | null;
+  /** fork 来源会话 id；非空表示这是某条对话的分支（侧边栏折叠在父对话下方）。 */
+  parent_id?: string | null;
+  /** fork 时父对话标题（归档页展示来源用）。 */
+  forked_from_title?: string | null;
+  /** 所属工作区（对话分区）id。 */
+  workspace_id?: string;
+  /** 工作区内手工排序位（拖拽排序后写入）；null/缺省 = 按更新时间。 */
+  sort_index?: number | null;
 }
 
 /** 完整会话（含消息列表）。 */
@@ -261,4 +280,24 @@ export interface Conversation {
   created_at: string;
   updated_at: string;
   messages: ConversationMessage[];
+  archived?: boolean;
+  archived_at?: string | null;
+  parent_id?: string | null;
+  forked_from_title?: string | null;
+  workspace_id?: string;
 }
+
+/** 工作区（对话分区）：侧边栏顶部分区切换器的条目。 */
+export interface Workspace {
+  id: string;
+  name: string;
+  created_at: string;
+  updated_at: string;
+  /** 默认分区：不可删除。 */
+  is_default: boolean;
+  /** 该分区下的活跃会话数。 */
+  conversation_count: number;
+}
+
+/** 默认工作区 id（后端常量，旧会话 / 未指定归属时落这里）。 */
+export const DEFAULT_WORKSPACE_ID = "default";

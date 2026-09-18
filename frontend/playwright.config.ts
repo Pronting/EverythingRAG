@@ -17,6 +17,8 @@ export default defineConfig({
   webServer: {
     command: `npm run dev -- --host 127.0.0.1 --port ${e2ePort} --strictPort`,
     url: e2eBaseUrl,
+    // EVERYTHING_RAG_SSE_FIXTURE=slow：dev server 内置慢速 SSE 夹具（真流式，供「停止生成」用例）
+    env: { EVERYTHING_RAG_SSE_FIXTURE: "slow" },
     // 不能复用任意已监听端口：否则会把另一项目的页面当成本项目并产生整组假失败。
     reuseExistingServer: false,
     timeout: 120_000,

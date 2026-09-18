@@ -37,11 +37,25 @@ async function stubConversations(page: import("@playwright/test").Page): Promise
     }),
   );
 
-  await page.route("**/api/conversations", (route) => {
+  await page.route("**/api/workspaces**", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify([
+        { id: "default", name: "默认", is_default: true, created_at: "", updated_at: "", conversation_count: convs.length },
+      ]),
+    }),
+  );
+
+  await page.route("**/api/conversations**", (route) => {
+    const url = new URL(route.request().url());
+    const path = url.pathname;
+    // 只处理列表 / 新建；其余（messages、generate-title）交给后面更具体的路由
+    if (path !== "/api/conversations") return route.fallback();
     if (route.request().method() === "GET") {
       route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(convs) });
     } else {
-      const created = { id: `c${nextId++}`, title: "新对话", message_count: 0 };
+      const created = { id: `c${nextId++}`, title: "新对话", message_count: 0, workspace_id: "default" };
       convs.unshift(created);
       route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify(created) });
     }
@@ -67,8 +81,8 @@ test("会话历史：新对话、交换持久化、AI 标题更新侧边栏", as
   await stubConversations(page);
   await page.goto("/");
 
-  // 加载时侧边栏显示历史会话
-  await expect(page.getByRole("button", { name: "历史对话", exact: true })).toBeVisible();
+  // 加载时侧边栏（默认工作区文件夹下）显示历史会话
+  await expect(page.getByText("历史对话", { exact: true })).toBeVisible();
 
   // 新对话 -> 会话列表出现「新对话」项
   await page.getByRole("button", { name: "新对话" }).click();
@@ -87,12 +101,12 @@ test("会话历史：新对话、交换持久化、AI 标题更新侧边栏", as
 
 test("对话搜索显示正文命中片段并可打开历史", async ({ page }) => {
   await stubConversations(page);
-  await page.route("**/api/conversations?*", route => route.fulfill({ json: [{ id: "c1", title: "历史对话", message_count: 2, match_excerpt: "这里讨论了并行上传的实现" }] }));
-  await page.route("**/api/conversations/c1", route => route.fulfill({ json: { id: "c1", title: "历史对话", messages: [{ role: "user", content: "并行上传如何实现？", created_at: "2026-09-05" }] } }));
+  await page.route("**/api/conversations?*", route => route.fulfill({ json: [{ id: "c1", title: "历史对话", message_count: 2, workspace_id: "default", match_excerpt: "这里讨论了并行上传的实现" }] }));
+  await page.route("**/api/conversations/c1", route => route.fulfill({ json: { id: "c1", title: "历史对话", workspace_id: "default", messages: [{ role: "user", content: "并行上传如何实现？", created_at: "2026-09-05" }] } }));
   await page.goto("/");
   await page.getByRole("textbox", { name: "搜索对话" }).fill("并行上传");
   await expect(page.getByText("这里讨论了并行上传的实现")).toBeVisible();
-  await page.getByRole("button", { name: /历史对话.*并行上传/ }).click();
+  await page.locator(".conversation-list").getByText("历史对话").click();
   await expect(page.getByText("并行上传如何实现？")).toBeVisible();
   await page.getByRole("textbox", { name: "搜索对话" }).fill("");
   await expect(page.getByText("这里讨论了并行上传的实现")).not.toBeVisible();

@@ -33,8 +33,13 @@ def _isolate_local_deps(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
     app.dependency_overrides[settings_store_mod.get_settings_store] = lambda: tmp_store
     from app.api.routes import conversations as conversations_mod
     from app.core.conversation_store import ConversationStore
+    from app.core.workspace_store import WorkspaceStore
 
     app.dependency_overrides[conversations_mod.get_conversation_store] = lambda: ConversationStore(
+        tmp_path / "conv-data"
+    )
+    # 对话分区（工作区）同样隔离到 tmp：否则测试会读写用户真实的 workspaces.json
+    app.dependency_overrides[conversations_mod.get_workspace_store] = lambda: WorkspaceStore(
         tmp_path / "conv-data"
     )
     # 增量同步状态库也隔离到 tmp（避免触碰真实 ~/.everything-rag/state.db）

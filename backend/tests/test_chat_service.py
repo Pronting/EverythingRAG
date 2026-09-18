@@ -6,7 +6,9 @@
 
 from __future__ import annotations
 
+import asyncio
 import socket
+from collections.abc import AsyncIterator
 from typing import Any
 
 import pytest
@@ -605,19 +607,75 @@ async def test_knowledge_only_never_calls_web_provider() -> None:
     assert frames[0]["answer_basis"] == "knowledge"
 
 
-async def test_raw_reasoning_is_never_emitted() -> None:
+async def test_reasoning_is_emitted_as_dedicated_frames() -> None:
+    """思维链以独立 reasoning 帧下发，绝不混进正文 token 帧。"""
+
     class ReasoningModel(FakeChatModel):
         async def stream_chat(self, messages: list[dict[str, Any]], **kwargs: Any) -> Any:
             self.calls.append(messages)
-            yield ChatChunk("reasoning", "内部逐步推理与敏感提示")
+            yield ChatChunk("reasoning", "先看检索到的片段")
+            yield ChatChunk("reasoning", "，再下结论")
             yield ChatChunk("content", "面向用户的答案")
 
     service = ChatService(FakeEmbedder(), FakeRetriever(chunks=[]), ReasoningModel())
     frames = await _collect(service, "普通问题")
-    assert [frame["type"] for frame in frames] == ["meta", "token", "done"]
-    serialized = repr(frames)
-    assert "内部逐步推理" not in serialized
-    assert "面向用户的答案" in serialized
+    assert [frame["type"] for frame in frames] == ["meta", "reasoning", "reasoning", "token", "done"]
+    reasoning = "".join(frame["text"] for frame in frames if frame["type"] == "reasoning")
+    assert reasoning == "先看检索到的片段，再下结论"
+    tokens = [frame["text"] for frame in frames if frame["type"] == "token"]
+    assert tokens == ["面向用户的答案"]
+
+
+async def test_client_disconnect_closes_upstream_stream() -> None:
+    """客户端中断（「停止生成」）：断开上游流并停止逐 token 消费，不再白烧算力。"""
+
+    closed = False
+
+    class SlowModel(FakeChatModel):
+        async def stream_chat(
+            self, messages: list[dict[str, Any]], **kwargs: Any
+        ) -> AsyncIterator[ChatChunk]:
+            nonlocal closed
+            try:
+                yield ChatChunk("content", "第一段")
+                while True:
+                    await asyncio.sleep(0.01)
+                    yield ChatChunk("content", "更多")
+            finally:
+                closed = True
+
+    service = ChatService(FakeEmbedder(), FakeRetriever(chunks=[]), SlowModel())
+    frames: list[dict[str, Any]] = []
+    stream = service.stream_answer("普通问题")
+    async for frame in stream:
+        frames.append(frame)
+        if frame["type"] == "token":
+            break  # 模拟前端 abort：不再继续消费上游
+    assert [frame["type"] for frame in frames] == ["meta", "token"]
+    # 消费方提前退出后上游不再产出：tok 计数停在第 1 段，生成器可达收尾（finally 置位）
+    await stream.aclose()  # Starlette 在客户端断开时对生成器做的事
+    for _ in range(20):
+        if closed:
+            break
+        await asyncio.sleep(0)  # async generator finalize 由事件循环分步执行
+    assert closed is True
+
+
+async def test_reasoning_frame_is_size_capped() -> None:
+    """上游超长 reasoning 块被切片下发，单帧不超过护栏长度。"""
+
+    class HugeReasoningModel(FakeChatModel):
+        async def stream_chat(self, messages: list[dict[str, Any]], **kwargs: Any) -> Any:
+            self.calls.append(messages)
+            yield ChatChunk("reasoning", "思" * 9000)
+            yield ChatChunk("content", "答案")
+
+    service = ChatService(FakeEmbedder(), FakeRetriever(chunks=[]), HugeReasoningModel())
+    frames = await _collect(service, "普通问题")
+    reasoning_frames = [frame for frame in frames if frame["type"] == "reasoning"]
+    assert len(reasoning_frames) == 3
+    assert all(len(frame["text"]) <= 4000 for frame in reasoning_frames)
+    assert "".join(frame["text"] for frame in reasoning_frames) == "思" * 9000
 
 
 async def test_citation_whitelist_removes_fabricated_id_across_tokens() -> None:

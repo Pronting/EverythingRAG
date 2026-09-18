@@ -3,11 +3,13 @@ import { deleteAvatar, getSettings, updateSettings, uploadAvatar } from "../api/
 import type { AvatarKind } from "../api/settingsApi";
 import type { StatusResponse, SettingsUpdate, SettingsView, ThemeValue, ToastType } from "../types";
 import BrandMark from "./BrandMark";
+import ArchiveSettings from "./ArchiveSettings";
 import KnowledgeSettings from "./KnowledgeSettings";
 import SettingsSelect from "./SettingsSelect";
 
 const SETTINGS_PAGES = [
   { id: "knowledge", label: "知识库", icon: "M4 4h6v16H4zM14 4h6v16h-6z" },
+  { id: "archive", label: "归档对话", icon: "M3 7h18v12H3zM3 3h18v4H3zM9 12h6" },
   { id: "appearance", label: "外观与头像", icon: "M12 3a9 9 0 1 0 9 9c0-1.5-1-2-2.5-2H16a2 2 0 0 1-2-2V5.5C14 4 13.5 3 12 3ZM7 10h.01M8 15h.01M12 17h.01" },
   { id: "models", label: "模型服务", icon: "M5 5h14v14H5zM9 9h6v6H9zM9 2v3m6-3v3M9 19v3m6-3v3M2 9h3m-3 6h3m14-6h3m-3 6h3" },
   { id: "search", label: "联网搜索", icon: "M3 12h18M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18Zm0 0c5 5 5 13 0 18-5-5-5-13 0-18Z" },
@@ -25,6 +27,8 @@ function ThemePreview({ mode }: { mode: ThemeValue }) {
 interface SettingsModalProps {
   status: StatusResponse | null;
   onKnowledgeChanged: () => void;
+  /** 归档恢复/删除后回调：父级刷新侧边栏会话列表。 */
+  onConversationsChanged: () => void;
   open: boolean;
   onClose: () => void;
   /** 保存成功后回调（父级刷新 /api/status 等）。 */
@@ -122,6 +126,7 @@ export default function SettingsModal({
   open,
   status,
   onKnowledgeChanged,
+  onConversationsChanged,
   onClose,
   onSaved,
   theme,
@@ -482,6 +487,15 @@ export default function SettingsModal({
           <section className="settings-section settings-knowledge" hidden={activePage !== "knowledge"}>
             <KnowledgeSettings status={status} onChanged={onKnowledgeChanged} onNotify={onNotify} />
           </section>
+          {/* 归档对话：只在切到该页时挂载，避免每次打开设置都多打一次归档接口 */}
+          {activePage === "archive" && (
+            <section className="settings-section settings-archive">
+              <ArchiveSettings
+                onConversationsChanged={onConversationsChanged}
+                onNotify={onNotify}
+              />
+            </section>
+          )}
           {loading && <p className="settings-loading">加载中…</p>}
 
           {!loading && (

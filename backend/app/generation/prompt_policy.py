@@ -221,7 +221,7 @@ def build_system_prompt(preferences: AnswerPreferences | None = None) -> str:
     )
 
 
-_CITATION_TOKEN_RE = re.compile(r"\[(?P<source_id>(?:S|W)\d+|\d+)\]")
+_CITATION_TOKEN_RE = re.compile(r"\[(?P<source_id>(?:S|W|M)\d+|\d+)\]")
 
 
 class OutputGuard:

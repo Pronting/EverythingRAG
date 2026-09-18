@@ -1,4 +1,4 @@
-"""SSE 问答端点：POST /api/chat（帧契约 meta/token/done/error）。
+"""SSE 问答端点：POST /api/chat（帧契约 meta/reasoning/token/tool/done/error）。
 
 路由薄：请求校验 + 组装 StreamingResponse；业务在 ChatService。
 依赖注入用 Depends(get_chat_service)；测试中用 app.dependency_overrides 替换为 fake。
@@ -11,7 +11,7 @@ import json
 from collections.abc import AsyncIterator
 from typing import Literal
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
@@ -106,9 +106,15 @@ def get_chat_service(
 @router.post("/api/chat")
 async def chat(
     request: ChatRequest,
+    raw_request: Request,
     service: ChatService = Depends(get_chat_service),  # noqa: B008
 ) -> StreamingResponse:
-    """流式问答：SSE 帧 meta -> token(s) -> done / error（ensure_ascii=False）。"""
+    """流式问答：SSE 帧 meta -> reasoning/token(s) -> done / error（ensure_ascii=False）。
+
+    客户端中断（前端「停止生成」按钮 abort fetch / 关闭页面）时，本生成器会被
+    Starlette 取消；这里每帧额外检查 is_disconnected，主动结束上游读取，
+    避免断开后仍继续消耗模型算力。
+    """
 
     async def event_stream() -> AsyncIterator[str]:
         history = [{"role": m.role, "content": m.content} for m in request.history]
@@ -116,5 +122,7 @@ async def chat(
             request.message, history, web_search=request.web_search, images=request.images
         ):
             yield f"data: {json.dumps(frame, ensure_ascii=False)}\n\n"
+            if await raw_request.is_disconnected():
+                return
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")

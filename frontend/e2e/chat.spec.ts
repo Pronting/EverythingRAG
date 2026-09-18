@@ -74,6 +74,33 @@ async function stubBackend(page: Page, chatSse: string): Promise<void> {
   await page.route("**/api/status", (route) =>
     route.fulfill({ status: 200, contentType: "application/json", body: STATUS_BODY }),
   );
+  await page.route("**/api/settings", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: "{}" }),
+  );
+  await page.route("**/api/workspaces**", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify([
+        { id: "default", name: "默认", is_default: true, created_at: "", updated_at: "", conversation_count: 0 },
+      ]),
+    }),
+  );
+  await page.route("**/api/conversations**", (route) => {
+    const method = route.request().method();
+    const url = new URL(route.request().url());
+    if (method === "GET" && url.pathname === "/api/conversations") {
+      return route.fulfill({ status: 200, contentType: "application/json", body: "[]" });
+    }
+    if (method === "POST" && url.pathname === "/api/conversations") {
+      return route.fulfill({
+        status: 201,
+        contentType: "application/json",
+        body: JSON.stringify({ id: "conv-1", title: "新对话", message_count: 0, workspace_id: "default" }),
+      });
+    }
+    return route.fulfill({ status: 200, contentType: "application/json", body: "{}" });
+  });
   await page.route("**/api/chat", (route) =>
     route.fulfill({ status: 200, contentType: "text/event-stream", body: chatSse }),
   );
@@ -277,7 +304,7 @@ test("连续两轮对话的用户问题与回答都完整显示（自动滚动�
   await expect(input).toBeEnabled();
 });
 
-test("即使收到旧 reasoning 帧也不展示或持久化原始思维链", async ({ page }) => {
+test("思维链默认折叠展示，点击可展开查看思考过程", async ({ page }) => {
   const REASONING_FRAMES: unknown[] = [
     { type: "reasoning", text: "让我想想" },
     { type: "reasoning", text: "这个问题" },
@@ -292,10 +319,19 @@ test("即使收到旧 reasoning 帧也不展示或持久化原始思维链", asy
   await input.fill("测试思维链");
   await page.getByRole("button", { name: "发送" }).click();
 
-  // 原始 reasoning 被忽略，正文正常显示。
-  await expect(page.getByRole("button", { name: /思考过程/ })).not.toBeVisible();
-  await expect(page.getByText("让我想想这个问题")).not.toBeVisible();
+  // 正文照常显示；思维链聚合为「思考过程」块，默认折叠
   await expect(page.getByText("答案是42")).toBeVisible();
+  const toggle = page.getByRole("button", { name: /思考过程/ });
+  await expect(toggle).toBeVisible();
+  await expect(toggle).toHaveAttribute("aria-expanded", "false");
+  await expect(page.getByTestId("thinking-content")).not.toBeVisible();
+
+  // 点击展开：完整思维链可见，再点击收起
+  await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-expanded", "true");
+  await expect(page.getByTestId("thinking-content")).toHaveText("让我想想这个问题");
+  await toggle.click();
+  await expect(page.getByTestId("thinking-content")).not.toBeVisible();
 });
 
 test("纯标点思维链不渲染「思考过程」块", async ({ page }) => {
@@ -318,6 +354,80 @@ test("纯标点思维链不渲染「思考过程」块", async ({ page }) => {
   await expect(page.getByRole("button", { name: /思考过程/ })).not.toBeVisible();
 });
 
+test("生成中可点击「停止生成」中断真流式输出并保留已生成内容", async ({ page }) => {
+  // /api/chat 故意不 stub：由 dev server 的慢速 SSE 夹具提供（见 vite.config.ts），
+  // 其余接口照常 stub。这样前端拿到的才是真正的「吐一半就停住」的流。
+  await page.route("**/api/status", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: STATUS_BODY }),
+  );
+  await page.route("**/api/settings", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: "{}" }),
+  );
+  let appended = 0;
+  await page.route("**/api/conversations**", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: "[]" }),
+  );
+  await page.route("**/api/conversations/**/messages", (route) => {
+    appended += 1;
+    return route.fulfill({ status: 200, contentType: "application/json", body: "{}" });
+  });
+  await page.goto("/");
+
+  const input = page.getByRole("textbox", { name: "消息输入框" });
+  await input.fill("测试中断");
+  await page.getByRole("button", { name: "发送", exact: true }).click();
+
+  // 流式已吐出的正文与思维链保留在消息流里；生成中发送键让位给「停止生成」
+  await expect(page.getByText("已经生成的前半")).toBeVisible();
+  const stop = page.getByRole("button", { name: "停止生成" });
+  await expect(stop).toBeVisible();
+  await stop.click();
+
+  // 中断后：标注已停止生成、正文保留、恢复可发送状态
+  await expect(page.getByText("已停止生成")).toBeVisible();
+  await expect(page.getByText("已经生成的前半")).toBeVisible();
+  await expect(page.getByRole("button", { name: "发送", exact: true })).toBeVisible();
+  await expect(stop).not.toBeVisible();
+  // 用户问题仍在消息流里（未被中断吞掉）
+  await expect(page.getByText("测试中断")).toBeVisible();
+  // 半截回答不写进会话历史
+  expect(appended).toBe(0);
+  // 已生成的思维链仍可展开回看
+  const thinking = page.getByRole("button", { name: /思考过程/ });
+  await expect(thinking).toBeVisible();
+  await thinking.click();
+  await expect(page.getByTestId("thinking-content")).toHaveText("夹具思维链：先确认检索命中");
+});
+
+test("Shift+Enter 换行、Enter 发送，输入框随内容自动增高", async ({ page }) => {
+  await stubBackend(page, encodeSse(CHAT_SSE_FRAMES));
+  await page.goto("/");
+
+  const input = page.getByRole("textbox", { name: "消息输入框" });
+  const heightOf = (): Promise<number> =>
+    input.evaluate((el) => (el as HTMLTextAreaElement).getBoundingClientRect().height);
+
+  // 1. Shift+Enter 只换行：不发送、草稿保留换行
+  const singleLineHeight = await heightOf();
+  await input.fill("第一行");
+  await input.press("Shift+Enter");
+  await input.type("第二行");
+  await expect(input).toHaveValue("第一行\n第二行");
+
+  // 2. 多行长文本：输入框按宽度换行并撑高（不是固定单行）
+  await input.fill(Array.from({ length: 6 }, (_, index) => `第 ${index} 行内容`).join("\n"));
+  await expect
+    .poll(heightOf, { message: "输入框应随内容增高" })
+    .toBeGreaterThan(singleLineHeight);
+
+  // 3. Enter 直接发送（发送后输入框清空并收回单行）
+  await input.fill("用回车发送");
+  await input.press("Enter");
+  await expect(page.getByText("你好，世界")).toBeVisible();
+  await expect(input).toHaveValue("");
+  await expect.poll(heightOf).toBeLessThanOrEqual(singleLineHeight + 1);
+});
+
 
 test("生成期间可聚焦输入框并保留下一条草稿，不重复发送", async ({ page }) => {
   await stubBackend(page, encodeSse(CHAT_SSE_FRAMES));
@@ -337,9 +447,68 @@ test("生成期间可聚焦输入框并保留下一条草稿，不重复发送",
   await expect(input).toBeFocused();
   await input.fill("下一条草稿");
   await input.press("Enter");
-  await expect(page.getByRole("button", { name: "发送", exact: true })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "停止生成" })).toBeVisible();
   release();
   await expect(page.getByRole("button", { name: "发送", exact: true })).toBeEnabled();
   await expect(input).toHaveValue("下一条草稿");
   expect(requests).toBe(1);
+});
+
+test("悬浮铅笔可召回提问重新编辑，重发后不追加重复卡片", async ({ page }) => {
+  const truncates: { index: number }[] = [];
+  let sends = 0;
+  await stubBackend(page, encodeSse(CHAT_SSE_FRAMES));
+  // 让第二轮回答可区分：每轮换一组 token
+  await page.route("**/api/chat", (route) => {
+    sends += 1;
+    const frames = sends === 1
+      ? [{ type: "token", text: "第一轮回答" }, { type: "done" }]
+      : [{ type: "token", text: "改写后的回答" }, { type: "done" }];
+    return route.fulfill({ status: 200, contentType: "text/event-stream", body: encodeSse(frames) });
+  });
+  await page.route("**/api/conversations/conv-1/truncate", (route) => {
+    truncates.push(route.request().postDataJSON() as { index: number });
+    return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ message_count: 0 }) });
+  });
+  await page.route("**/api/conversations/conv-1", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ id: "conv-1", title: "新对话", workspace_id: "default", messages: [] }),
+    }),
+  );
+  await page.goto("/");
+
+  const input = page.getByRole("textbox", { name: "消息输入框" });
+  await input.fill("第一个问题");
+  await page.getByRole("button", { name: "发送", exact: true }).click();
+  await expect(page.getByText("第一轮回答")).toBeVisible();
+  // 第二轮：制造「后面还有历史」的场景
+  await input.fill("第二个问题");
+  await page.getByRole("button", { name: "发送", exact: true }).click();
+  await expect(page.getByText("第一轮回答")).toBeVisible();
+  await expect(page.locator(".message-row.message-user")).toHaveCount(2);
+
+  // 悬浮第一条提问 → 右下角铅笔出现（默认 opacity:0，悬浮才显形）→ 点击召回
+  const firstQuestion = page.locator(".message-row.message-user").first();
+  const pencil = firstQuestion.getByRole("button", { name: "编辑这条提问" });
+  await expect(pencil).toBeAttached();
+  await firstQuestion.locator(".message-content.user").hover();
+  await expect(pencil).toHaveCSS("opacity", "1");
+  await pencil.click();
+
+  // 召回后：文本回到输入框，该条及其之后的卡片都被移除（不留旧卡片）
+  await expect(input).toHaveValue("第一个问题");
+  await expect(page.locator(".message-row.message-user")).toHaveCount(0);
+  await expect(page.getByText("第一轮回答")).toHaveCount(0);
+  expect(truncates).toEqual([{ index: 0 }]);
+
+  // 编辑后重发：直接接在截断点之后，只有一张新卡片
+  await input.fill("第一个问题（改写）");
+  await page.getByRole("button", { name: "发送", exact: true }).click();
+  await expect(page.getByText("改写后的回答")).toBeVisible();
+  await expect(page.locator(".message-row.message-user")).toHaveCount(1);
+  await expect(page.getByText("第一个问题（改写）")).toBeVisible();
+  await expect(page.getByText("第二个问题")).toHaveCount(0);
+  expect(sends).toBe(3);
 });
