@@ -1,0 +1,1042 @@
+{
+  "schema_version": 1,
+  "redaction": {
+    "policy": "PRD RAG-REL-001 §7.2",
+    "private_fields": [
+      "query",
+      "targets[].source",
+      "targets[].heading",
+      "targets[].required_evidence",
+      "targets[].irrelevant_spans",
+      "targets[].relevant_spans",
+      "targets[].note",
+      "cases[].note"
+    ],
+    "kept_in_repo": "结构字段 + 私文内容的 SHA-256（哈希不算私文）",
+    "private_dataset": ".tmp_probe/rag-relevance/relevance-private/private-C06.json",
+    "loader": "scripts/relevance_cases/loader.py"
+  },
+  "family": "C06",
+  "dataset_id": "cases-C06",
+  "corpus_sha256": "e3824befd301531dfe2e1d3d891a690555c44981014728227cc74f3ff2037134",
+  "annotation_protocol": {
+    "protocol": "PRD 7.1 等级 0/1/2/3 + unjudged",
+    "grading_rule": "只有直接给出问题所问信息的块给 2/3；同文档/同主题但未回答所问的块一律给 1；来源主题与问题无关给 0。"
+  },
+  "counts": {
+    "cases": 20,
+    "targets": 121,
+    "calibration": 10,
+    "test": 10,
+    "targets_with_heading": 120,
+    "targets_with_required_evidence": 119,
+    "required_evidence_items": 119,
+    "irrelevant_span_items": 33,
+    "relevant_span_items": 0,
+    "distinct_sources": 17,
+    "distinct_headings": 66,
+    "grades": {
+      "1": 96,
+      "2": 10,
+      "3": 15
+    },
+    "roles": {
+      "allowed": 5,
+      "forbidden": 96,
+      "required": 20
+    },
+    "required_groups": {
+      "required_targets": 20,
+      "required_effective_groups": 20,
+      "declared_equivalent_groups": 0
+    }
+  },
+  "cases": [
+    {
+      "case_id": "C06-001",
+      "family": "C06",
+      "group_id": "C06-g-spm",
+      "split": "calibration",
+      "needs_answer": true,
+      "scope_id": "global",
+      "review_status": "reviewed",
+      "query_sha256": "9690332498b9550f6a9f54fcb28fa50633333886924fdb3084ee4600f8d1d4a3",
+      "case_sha256": "31b911c0f75e0d2a0e62712e16a3102065b94003c3d9f4e6bad584a369bfa06e",
+      "targets": [
+        {
+          "target_id": "C06-001-T1",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        },
+        {
+          "target_id": "C06-001-T2",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        },
+        {
+          "target_id": "C06-001-T3",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        },
+        {
+          "target_id": "C06-001-T4",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        },
+        {
+          "target_id": "C06-001-T5",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        },
+        {
+          "target_id": "C06-001-T6",
+          "role": "required",
+          "grade": 3,
+          "group": ""
+        },
+        {
+          "target_id": "C06-001-T7",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        },
+        {
+          "target_id": "C06-001-T8",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        },
+        {
+          "target_id": "C06-001-T9",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        }
+      ]
+    },
+    {
+      "case_id": "C06-002",
+      "family": "C06",
+      "group_id": "C06-g-spm",
+      "split": "calibration",
+      "needs_answer": true,
+      "scope_id": "global",
+      "review_status": "reviewed",
+      "query_sha256": "9a7ceb5e3f8b79bd4d60318b021a9789c189051965fc6a3423f13390601d0f61",
+      "case_sha256": "2c20f670253dfabcdcf8e70163cd784d4fb6494f2f8fb8ca7d82c10bc51b8749",
+      "targets": [
+        {
+          "target_id": "C06-002-T1",
+          "role": "required",
+          "grade": 3,
+          "group": ""
+        },
+        {
+          "target_id": "C06-002-T2",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        }
+      ]
+    },
+    {
+      "case_id": "C06-019",
+      "family": "C06",
+      "group_id": "C06-g-spm",
+      "split": "calibration",
+      "needs_answer": true,
+      "scope_id": "global",
+      "review_status": "reviewed",
+      "query_sha256": "0bba5603b712a4bbfed8163a12904b2972dad4e831c29a1a39dcc89c1f44d88b",
+      "case_sha256": "cf4053f1b9f423c80134d06484435b27b3a424ec8e2d7e3b0f00379aef888759",
+      "targets": [
+        {
+          "target_id": "C06-019-T1",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        },
+        {
+          "target_id": "C06-019-T2",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        },
+        {
+          "target_id": "C06-019-T3",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        },
+        {
+          "target_id": "C06-019-T4",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        },
+        {
+          "target_id": "C06-019-T5",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        },
+        {
+          "target_id": "C06-019-T6",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        },
+        {
+          "target_id": "C06-019-T7",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        },
+        {
+          "target_id": "C06-019-T8",
+          "role": "required",
+          "grade": 2,
+          "group": ""
+        },
+        {
+          "target_id": "C06-019-T9",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        },
+        {
+          "target_id": "C06-019-T10",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        }
+      ]
+    },
+    {
+      "case_id": "C06-003",
+      "family": "C06",
+      "group_id": "C06-g-act",
+      "split": "calibration",
+      "needs_answer": true,
+      "scope_id": "global",
+      "review_status": "reviewed",
+      "query_sha256": "8d66b7b49979a13959c6b4fbdf3d28d76937f21dc52ee52c7b29b93152c11feb",
+      "case_sha256": "98d49a5f4352d3ef5e5665c6811d9ff92fb57ddf3b583ac766a5de88ffc11f1f",
+      "targets": [
+        {
+          "target_id": "C06-003-T1",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        },
+        {
+          "target_id": "C06-003-T2",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        },
+        {
+          "target_id": "C06-003-T3",
+          "role": "required",
+          "grade": 3,
+          "group": ""
+        },
+        {
+          "target_id": "C06-003-T4",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        },
+        {
+          "target_id": "C06-003-T5",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        },
+        {
+          "target_id": "C06-003-T6",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        }
+      ]
+    },
+    {
+      "case_id": "C06-004",
+      "family": "C06",
+      "group_id": "C06-g-act",
+      "split": "calibration",
+      "needs_answer": true,
+      "scope_id": "global",
+      "review_status": "reviewed",
+      "query_sha256": "913fd67016731934044ed7a5b41bc7ce6a83d2aae9d08e012fcfeba1c3115fa3",
+      "case_sha256": "3680ab30fe4a6f65784b50e95cdbfdfb80cb43b8cf46e973c9f964e4e6692d81",
+      "targets": [
+        {
+          "target_id": "C06-004-T1",
+          "role": "required",
+          "grade": 3,
+          "group": ""
+        },
+        {
+          "target_id": "C06-004-T2",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        },
+        {
+          "target_id": "C06-004-T3",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        }
+      ]
+    },
+    {
+      "case_id": "C06-005",
+      "family": "C06",
+      "group_id": "C06-g-eb2b",
+      "split": "calibration",
+      "needs_answer": true,
+      "scope_id": "global",
+      "review_status": "reviewed",
+      "query_sha256": "00897f4a66bda0ad3bcb723c26e305e07dea462b5fe6ae64a340cb55fb27cf26",
+      "case_sha256": "42d9d375ff76ca35629800b088f6198d0bd2f3cdc4003fe7b7290f0f363325dd",
+      "targets": [
+        {
+          "target_id": "C06-005-T1",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        },
+        {
+          "target_id": "C06-005-T2",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        },
+        {
+          "target_id": "C06-005-T3",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        },
+        {
+          "target_id": "C06-005-T4",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        },
+        {
+          "target_id": "C06-005-T5",
+          "role": "required",
+          "grade": 3,
+          "group": ""
+        },
+        {
+          "target_id": "C06-005-T6",
+          "role": "allowed",
+          "grade": 2,
+          "group": ""
+        },
+        {
+          "target_id": "C06-005-T7",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        },
+        {
+          "target_id": "C06-005-T8",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        }
+      ]
+    },
+    {
+      "case_id": "C06-006",
+      "family": "C06",
+      "group_id": "C06-g-eb2b",
+      "split": "calibration",
+      "needs_answer": true,
+      "scope_id": "global",
+      "review_status": "reviewed",
+      "query_sha256": "578f0442ea919adef2b2df2cb8ce40c93020354d46ec6d215557820a82a59848",
+      "case_sha256": "146e4b61dafd670db96e3e70148b92f1f8ba855ec1bbbc16bf37ca5c46bb8005",
+      "targets": [
+        {
+          "target_id": "C06-006-T1",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        },
+        {
+          "target_id": "C06-006-T2",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        },
+        {
+          "target_id": "C06-006-T3",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        },
+        {
+          "target_id": "C06-006-T4",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        },
+        {
+          "target_id": "C06-006-T5",
+          "role": "required",
+          "grade": 2,
+          "group": ""
+        },
+        {
+          "target_id": "C06-006-T6",
+          "role": "allowed",
+          "grade": 3,
+          "group": ""
+        },
+        {
+          "target_id": "C06-006-T7",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        },
+        {
+          "target_id": "C06-006-T8",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        }
+      ]
+    },
+    {
+      "case_id": "C06-007",
+      "family": "C06",
+      "group_id": "C06-g-embedding",
+      "split": "calibration",
+      "needs_answer": true,
+      "scope_id": "global",
+      "review_status": "reviewed",
+      "query_sha256": "c35c7e9260ad6d24c7aba274f5b42285f8162c1791ffcc63e87442cffa7fc1e9",
+      "case_sha256": "ea2eb9de0d83a6b21aa885097717eac8c58d98c7537c0db70979bc7286a11925",
+      "targets": [
+        {
+          "target_id": "C06-007-T1",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        },
+        {
+          "target_id": "C06-007-T2",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        },
+        {
+          "target_id": "C06-007-T3",
+          "role": "required",
+          "grade": 3,
+          "group": ""
+        },
+        {
+          "target_id": "C06-007-T4",
+          "role": "allowed",
+          "grade": 2,
+          "group": ""
+        },
+        {
+          "target_id": "C06-007-T5",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        },
+        {
+          "target_id": "C06-007-T6",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        }
+      ]
+    },
+    {
+      "case_id": "C06-008",
+      "family": "C06",
+      "group_id": "C06-g-embedding",
+      "split": "calibration",
+      "needs_answer": true,
+      "scope_id": "global",
+      "review_status": "reviewed",
+      "query_sha256": "17a2477d1b69b5812f5cee55f2359c8d63065690ef2f845f137e97d9f2fb82b4",
+      "case_sha256": "19ed5602a83018857e5b11e5aae6caca06d6546c140f549dd198d1092f7ee226",
+      "targets": [
+        {
+          "target_id": "C06-008-T1",
+          "role": "required",
+          "grade": 3,
+          "group": ""
+        },
+        {
+          "target_id": "C06-008-T2",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        },
+        {
+          "target_id": "C06-008-T3",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        }
+      ]
+    },
+    {
+      "case_id": "C06-020",
+      "family": "C06",
+      "group_id": "C06-g-embedding",
+      "split": "calibration",
+      "needs_answer": true,
+      "scope_id": "global",
+      "review_status": "reviewed",
+      "query_sha256": "088b1f1f17f52fc301f3eeecf81d8608ad6b463c5f86fd6edb68451e6fd563ce",
+      "case_sha256": "28a78fda84f8868ca6a23af79469e0ec4c83b4ce1596e88ae5838d310c6da2fe",
+      "targets": [
+        {
+          "target_id": "C06-020-T1",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        },
+        {
+          "target_id": "C06-020-T2",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        },
+        {
+          "target_id": "C06-020-T3",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        },
+        {
+          "target_id": "C06-020-T4",
+          "role": "required",
+          "grade": 2,
+          "group": ""
+        },
+        {
+          "target_id": "C06-020-T5",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        },
+        {
+          "target_id": "C06-020-T6",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        }
+      ]
+    },
+    {
+      "case_id": "C06-009",
+      "family": "C06",
+      "group_id": "C06-g-kse",
+      "split": "test",
+      "needs_answer": true,
+      "scope_id": "global",
+      "review_status": "reviewed",
+      "query_sha256": "526cca526b434866a634ddfb89fd94fb7a53a92cb8891d6a6739867512f0696b",
+      "case_sha256": "11ecb9f4c3e721aa045c24c2acf96fadbe4d4e09bb439a7e56776a64aafe1355",
+      "targets": [
+        {
+          "target_id": "C06-009-T1",
+          "role": "required",
+          "grade": 3,
+          "group": ""
+        },
+        {
+          "target_id": "C06-009-T2",
+          "role": "allowed",
+          "grade": 2,
+          "group": ""
+        },
+        {
+          "target_id": "C06-009-T3",
+          "role": "allowed",
+          "grade": 2,
+          "group": ""
+        },
+        {
+          "target_id": "C06-009-T4",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        }
+      ]
+    },
+    {
+      "case_id": "C06-010",
+      "family": "C06",
+      "group_id": "C06-g-kse",
+      "split": "test",
+      "needs_answer": true,
+      "scope_id": "global",
+      "review_status": "reviewed",
+      "query_sha256": "91deae7ac72fb897ef96359404f960794d675cf0775e10a31d72d7d9dd2db61c",
+      "case_sha256": "d113dc9310e5596584d9a1c8a86736836693b79e45f9e249047bbf5103f29703",
+      "targets": [
+        {
+          "target_id": "C06-010-T1",
+          "role": "required",
+          "grade": 3,
+          "group": ""
+        },
+        {
+          "target_id": "C06-010-T2",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        },
+        {
+          "target_id": "C06-010-T3",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        }
+      ]
+    },
+    {
+      "case_id": "C06-011",
+      "family": "C06",
+      "group_id": "C06-g-rfid-field",
+      "split": "test",
+      "needs_answer": true,
+      "scope_id": "global",
+      "review_status": "reviewed",
+      "query_sha256": "aef6e9442973ee4dd408dafff5ed4f873b4156a3fa0281d359466d75897c9f82",
+      "case_sha256": "f294d4bbd18c69aa06ab3abfad49ee47d1f9a0411c59f378a786d2d794521ab2",
+      "targets": [
+        {
+          "target_id": "C06-011-T1",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        },
+        {
+          "target_id": "C06-011-T2",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        },
+        {
+          "target_id": "C06-011-T3",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        },
+        {
+          "target_id": "C06-011-T4",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        },
+        {
+          "target_id": "C06-011-T5",
+          "role": "required",
+          "grade": 3,
+          "group": ""
+        },
+        {
+          "target_id": "C06-011-T6",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        },
+        {
+          "target_id": "C06-011-T7",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        },
+        {
+          "target_id": "C06-011-T8",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        }
+      ]
+    },
+    {
+      "case_id": "C06-012",
+      "family": "C06",
+      "group_id": "C06-g-rfid-field",
+      "split": "test",
+      "needs_answer": true,
+      "scope_id": "global",
+      "review_status": "reviewed",
+      "query_sha256": "6c4ae98e1dd9d98a9c247e51690ca2c728124c804029c5cb6f69cd4b9a9d439a",
+      "case_sha256": "225cb761f1eb29cca443e8ed351234584d0235b2497eb8284048d3d26b6a0de1",
+      "targets": [
+        {
+          "target_id": "C06-012-T1",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        },
+        {
+          "target_id": "C06-012-T2",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        },
+        {
+          "target_id": "C06-012-T3",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        },
+        {
+          "target_id": "C06-012-T4",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        },
+        {
+          "target_id": "C06-012-T5",
+          "role": "required",
+          "grade": 3,
+          "group": ""
+        },
+        {
+          "target_id": "C06-012-T6",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        },
+        {
+          "target_id": "C06-012-T7",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        },
+        {
+          "target_id": "C06-012-T8",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        }
+      ]
+    },
+    {
+      "case_id": "C06-013",
+      "family": "C06",
+      "group_id": "C06-g-artemis-api",
+      "split": "test",
+      "needs_answer": true,
+      "scope_id": "global",
+      "review_status": "reviewed",
+      "query_sha256": "7dce2ab38514858a9863c71ad00d9f19ab453c5a248f011caa541847137bf8ac",
+      "case_sha256": "a65df94da5ac54ca29eb8ae2453a37ee9b6e9dcf14a8bffb9c9e6f382e3a8b93",
+      "targets": [
+        {
+          "target_id": "C06-013-T1",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        },
+        {
+          "target_id": "C06-013-T2",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        },
+        {
+          "target_id": "C06-013-T3",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        },
+        {
+          "target_id": "C06-013-T4",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        },
+        {
+          "target_id": "C06-013-T5",
+          "role": "required",
+          "grade": 2,
+          "group": ""
+        },
+        {
+          "target_id": "C06-013-T6",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        },
+        {
+          "target_id": "C06-013-T7",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        },
+        {
+          "target_id": "C06-013-T8",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        }
+      ]
+    },
+    {
+      "case_id": "C06-014",
+      "family": "C06",
+      "group_id": "C06-g-artemis-api",
+      "split": "test",
+      "needs_answer": true,
+      "scope_id": "global",
+      "review_status": "reviewed",
+      "query_sha256": "5ba73d57c11c52888c9c70da6f52fcd99c12b4cd55443d28c2599b7c9af395a5",
+      "case_sha256": "8ae668919d6b1b6e8ecc972cc78c1b9fdc6c882811e25b943e8ff10c2a8eb1c3",
+      "targets": [
+        {
+          "target_id": "C06-014-T1",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        },
+        {
+          "target_id": "C06-014-T2",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        },
+        {
+          "target_id": "C06-014-T3",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        },
+        {
+          "target_id": "C06-014-T4",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        },
+        {
+          "target_id": "C06-014-T5",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        },
+        {
+          "target_id": "C06-014-T6",
+          "role": "required",
+          "grade": 2,
+          "group": ""
+        },
+        {
+          "target_id": "C06-014-T7",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        },
+        {
+          "target_id": "C06-014-T8",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        },
+        {
+          "target_id": "C06-014-T9",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        }
+      ]
+    },
+    {
+      "case_id": "C06-015",
+      "family": "C06",
+      "group_id": "C06-g-network",
+      "split": "test",
+      "needs_answer": true,
+      "scope_id": "global",
+      "review_status": "reviewed",
+      "query_sha256": "20a5813f8c861edcb1eaa36e79dcdc03c798f2380915e0e3639386901b31a6e2",
+      "case_sha256": "c27d04617fb868158900130abd5598a3574de17f2d4a3994b5a6e878786637ba",
+      "targets": [
+        {
+          "target_id": "C06-015-T1",
+          "role": "required",
+          "grade": 3,
+          "group": ""
+        },
+        {
+          "target_id": "C06-015-T2",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        }
+      ]
+    },
+    {
+      "case_id": "C06-016",
+      "family": "C06",
+      "group_id": "C06-g-network",
+      "split": "test",
+      "needs_answer": true,
+      "scope_id": "global",
+      "review_status": "reviewed",
+      "query_sha256": "a2324e8c014030c252c74a7a9f2744f658d2f1b2f34c48b4044da2cdee4cfe72",
+      "case_sha256": "c223ba1e9abcde24f480aa3db4746a5aa2ebce753a327de6c13e895a1d6ee0e1",
+      "targets": [
+        {
+          "target_id": "C06-016-T1",
+          "role": "required",
+          "grade": 2,
+          "group": ""
+        },
+        {
+          "target_id": "C06-016-T2",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        }
+      ]
+    },
+    {
+      "case_id": "C06-017",
+      "family": "C06",
+      "group_id": "C06-g-simpledesign",
+      "split": "test",
+      "needs_answer": true,
+      "scope_id": "global",
+      "review_status": "reviewed",
+      "query_sha256": "9556b8e49ad7fbb7cc84dd330d0535b65cdc116733d71fa05861d94c1ce3211f",
+      "case_sha256": "4af1b9488b6418adb055b19a70dc1671b7453faf971b540dad8e9beea438e594",
+      "targets": [
+        {
+          "target_id": "C06-017-T1",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        },
+        {
+          "target_id": "C06-017-T2",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        },
+        {
+          "target_id": "C06-017-T3",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        },
+        {
+          "target_id": "C06-017-T4",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        },
+        {
+          "target_id": "C06-017-T5",
+          "role": "required",
+          "grade": 3,
+          "group": ""
+        },
+        {
+          "target_id": "C06-017-T6",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        },
+        {
+          "target_id": "C06-017-T7",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        },
+        {
+          "target_id": "C06-017-T8",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        }
+      ]
+    },
+    {
+      "case_id": "C06-018",
+      "family": "C06",
+      "group_id": "C06-g-simpledesign",
+      "split": "test",
+      "needs_answer": true,
+      "scope_id": "global",
+      "review_status": "reviewed",
+      "query_sha256": "70cded12b1848f81740f2f0f0dece969c867e47dd4d9c0be4902cb0487e5b110",
+      "case_sha256": "ca2dca91f6d034191f2005c9d8cf954a314e690d39bd7bc1123f4001fc73928f",
+      "targets": [
+        {
+          "target_id": "C06-018-T1",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        },
+        {
+          "target_id": "C06-018-T2",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        },
+        {
+          "target_id": "C06-018-T3",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        },
+        {
+          "target_id": "C06-018-T4",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        },
+        {
+          "target_id": "C06-018-T5",
+          "role": "required",
+          "grade": 3,
+          "group": ""
+        },
+        {
+          "target_id": "C06-018-T6",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        },
+        {
+          "target_id": "C06-018-T7",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        },
+        {
+          "target_id": "C06-018-T8",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        }
+      ]
+    }
+  ]
+}

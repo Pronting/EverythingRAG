@@ -1,0 +1,1097 @@
+{
+  "schema_version": 1,
+  "redaction": {
+    "policy": "PRD RAG-REL-001 §7.2",
+    "private_fields": [
+      "query",
+      "targets[].source",
+      "targets[].heading",
+      "targets[].required_evidence",
+      "targets[].irrelevant_spans",
+      "targets[].relevant_spans",
+      "targets[].note",
+      "cases[].note"
+    ],
+    "kept_in_repo": "结构字段 + 私文内容的 SHA-256（哈希不算私文）",
+    "private_dataset": ".tmp_probe/rag-relevance/relevance-private/private-C04.json",
+    "loader": "scripts/relevance_cases/loader.py"
+  },
+  "family": "C04",
+  "dataset_id": "cases-C04",
+  "corpus_sha256": "e3824befd301531dfe2e1d3d891a690555c44981014728227cc74f3ff2037134",
+  "annotation_protocol": {
+    "protocol": "PRD 7.1 等级 0/1/2/3 + unjudged",
+    "grading_rule": "只有直接给出问题所问信息的块给 2/3；同文档/同主题但未回答所问的块一律给 1；来源主题与问题无关给 0。"
+  },
+  "counts": {
+    "cases": 20,
+    "targets": 130,
+    "calibration": 10,
+    "test": 10,
+    "targets_with_heading": 123,
+    "targets_with_required_evidence": 130,
+    "required_evidence_items": 130,
+    "irrelevant_span_items": 0,
+    "relevant_span_items": 0,
+    "distinct_sources": 34,
+    "distinct_headings": 104,
+    "grades": {
+      "0": 10,
+      "1": 57,
+      "2": 33,
+      "3": 30
+    },
+    "roles": {
+      "allowed": 23,
+      "forbidden": 67,
+      "required": 40
+    },
+    "required_groups": {
+      "required_targets": 40,
+      "required_effective_groups": 40,
+      "declared_equivalent_groups": 0
+    }
+  },
+  "cases": [
+    {
+      "case_id": "C04-001",
+      "family": "C04",
+      "group_id": "C04-g-warebase",
+      "split": "calibration",
+      "needs_answer": true,
+      "scope_id": "global",
+      "review_status": "reviewed",
+      "query_sha256": "42bdaeb57f94ee43bbf0f4fd253aec2cb404b7c23941feb0984bac2511b3eed5",
+      "case_sha256": "1f009a089d121d059b81dc4eb8f8d5089e0a3163afbddc386baeb0b427169f2a",
+      "targets": [
+        {
+          "target_id": "C04-001-T1",
+          "role": "required",
+          "grade": 3,
+          "group": ""
+        },
+        {
+          "target_id": "C04-001-T2",
+          "role": "required",
+          "grade": 2,
+          "group": ""
+        },
+        {
+          "target_id": "C04-001-T3",
+          "role": "allowed",
+          "grade": 2,
+          "group": ""
+        },
+        {
+          "target_id": "C04-001-T4",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        },
+        {
+          "target_id": "C04-001-T5",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        },
+        {
+          "target_id": "C04-001-T6",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        },
+        {
+          "target_id": "C04-001-T7",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        },
+        {
+          "target_id": "C04-001-T8",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        }
+      ]
+    },
+    {
+      "case_id": "C04-002",
+      "family": "C04",
+      "group_id": "C04-g-cart-rollback",
+      "split": "calibration",
+      "needs_answer": true,
+      "scope_id": "global",
+      "review_status": "reviewed",
+      "query_sha256": "54a6ebc2df8c8fd637d789d5edfeb1d2f832f90691d52b4037ee4900508b043c",
+      "case_sha256": "c8c0f9a0d8e64ee24239ae6e31b0e184cf59c6a0fdf418f5f30e8a39e36e9c5b",
+      "targets": [
+        {
+          "target_id": "C04-002-T1",
+          "role": "required",
+          "grade": 3,
+          "group": ""
+        },
+        {
+          "target_id": "C04-002-T2",
+          "role": "required",
+          "grade": 2,
+          "group": ""
+        },
+        {
+          "target_id": "C04-002-T3",
+          "role": "allowed",
+          "grade": 2,
+          "group": ""
+        },
+        {
+          "target_id": "C04-002-T4",
+          "role": "allowed",
+          "grade": 2,
+          "group": ""
+        },
+        {
+          "target_id": "C04-002-T5",
+          "role": "allowed",
+          "grade": 2,
+          "group": ""
+        },
+        {
+          "target_id": "C04-002-T6",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        },
+        {
+          "target_id": "C04-002-T7",
+          "role": "forbidden",
+          "grade": 0,
+          "group": ""
+        },
+        {
+          "target_id": "C04-002-T8",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        }
+      ]
+    },
+    {
+      "case_id": "C04-003",
+      "family": "C04",
+      "group_id": "C04-g-elastic",
+      "split": "calibration",
+      "needs_answer": true,
+      "scope_id": "global",
+      "review_status": "reviewed",
+      "query_sha256": "2e72c675ad773081068177bed2827045e9b5fda81140f10c639e7c013d8c9ece",
+      "case_sha256": "2a61412e56033527cfdb5654f03a00007e43a42fdadba300854a380bc31105b9",
+      "targets": [
+        {
+          "target_id": "C04-003-T1",
+          "role": "required",
+          "grade": 3,
+          "group": ""
+        },
+        {
+          "target_id": "C04-003-T2",
+          "role": "required",
+          "grade": 3,
+          "group": ""
+        },
+        {
+          "target_id": "C04-003-T3",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        },
+        {
+          "target_id": "C04-003-T4",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        }
+      ]
+    },
+    {
+      "case_id": "C04-004",
+      "family": "C04",
+      "group_id": "C04-g-heiwu-drill",
+      "split": "calibration",
+      "needs_answer": true,
+      "scope_id": "global",
+      "review_status": "reviewed",
+      "query_sha256": "50604a646e1fabcc97b14d9f76adf0c49d4a286d7acc3fc1c2ecca738b5e5ccf",
+      "case_sha256": "0b21cdc1bf3c7232a13b7cf28ec2a53b119a39e62066dfd627ea24a64db8be08",
+      "targets": [
+        {
+          "target_id": "C04-004-T1",
+          "role": "required",
+          "grade": 3,
+          "group": ""
+        },
+        {
+          "target_id": "C04-004-T2",
+          "role": "required",
+          "grade": 2,
+          "group": ""
+        },
+        {
+          "target_id": "C04-004-T3",
+          "role": "allowed",
+          "grade": 2,
+          "group": ""
+        },
+        {
+          "target_id": "C04-004-T4",
+          "role": "allowed",
+          "grade": 2,
+          "group": ""
+        },
+        {
+          "target_id": "C04-004-T5",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        },
+        {
+          "target_id": "C04-004-T6",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        },
+        {
+          "target_id": "C04-004-T7",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        },
+        {
+          "target_id": "C04-004-T8",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        },
+        {
+          "target_id": "C04-004-T9",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        }
+      ]
+    },
+    {
+      "case_id": "C04-005",
+      "family": "C04",
+      "group_id": "C04-g-risk-threshold",
+      "split": "calibration",
+      "needs_answer": true,
+      "scope_id": "global",
+      "review_status": "reviewed",
+      "query_sha256": "ada218f4dd5135a5e2ecca85f06be98951bb01607b08e65324ac20018be71a7e",
+      "case_sha256": "35b83851a48482e573ddc5bed96cf9bfe7915ff45923f37ffde91f64ce4d4e9f",
+      "targets": [
+        {
+          "target_id": "C04-005-T1",
+          "role": "required",
+          "grade": 3,
+          "group": ""
+        },
+        {
+          "target_id": "C04-005-T2",
+          "role": "required",
+          "grade": 2,
+          "group": ""
+        },
+        {
+          "target_id": "C04-005-T3",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        }
+      ]
+    },
+    {
+      "case_id": "C04-006",
+      "family": "C04",
+      "group_id": "C04-g-heiwu-press2",
+      "split": "calibration",
+      "needs_answer": true,
+      "scope_id": "global",
+      "review_status": "reviewed",
+      "query_sha256": "da30a0b65136ea854795af0ef663a41ce076a01fe261bc03996c6222a74bd226",
+      "case_sha256": "f11ea17d0b96fc770ad935c98c592d14010bd1a24631b378d39632850778c8c1",
+      "targets": [
+        {
+          "target_id": "C04-006-T1",
+          "role": "required",
+          "grade": 3,
+          "group": ""
+        },
+        {
+          "target_id": "C04-006-T2",
+          "role": "required",
+          "grade": 3,
+          "group": ""
+        },
+        {
+          "target_id": "C04-006-T3",
+          "role": "allowed",
+          "grade": 2,
+          "group": ""
+        },
+        {
+          "target_id": "C04-006-T4",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        },
+        {
+          "target_id": "C04-006-T5",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        },
+        {
+          "target_id": "C04-006-T6",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        },
+        {
+          "target_id": "C04-006-T7",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        },
+        {
+          "target_id": "C04-006-T8",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        }
+      ]
+    },
+    {
+      "case_id": "C04-007",
+      "family": "C04",
+      "group_id": "C04-g-misfire",
+      "split": "calibration",
+      "needs_answer": true,
+      "scope_id": "global",
+      "review_status": "reviewed",
+      "query_sha256": "2b13af71dac0c7693ef5cd42d63aa9224aeb49e35320a8f025e9a3b47d02c4e1",
+      "case_sha256": "3d3127d439155df9ab3d857e890940a3683911add129a1f978bfc8ad17fb4538",
+      "targets": [
+        {
+          "target_id": "C04-007-T1",
+          "role": "required",
+          "grade": 3,
+          "group": ""
+        },
+        {
+          "target_id": "C04-007-T2",
+          "role": "required",
+          "grade": 3,
+          "group": ""
+        },
+        {
+          "target_id": "C04-007-T3",
+          "role": "allowed",
+          "grade": 2,
+          "group": ""
+        },
+        {
+          "target_id": "C04-007-T4",
+          "role": "allowed",
+          "grade": 2,
+          "group": ""
+        },
+        {
+          "target_id": "C04-007-T5",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        },
+        {
+          "target_id": "C04-007-T6",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        },
+        {
+          "target_id": "C04-007-T7",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        },
+        {
+          "target_id": "C04-007-T8",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        }
+      ]
+    },
+    {
+      "case_id": "C04-008",
+      "family": "C04",
+      "group_id": "C04-g-heiwu-incident",
+      "split": "calibration",
+      "needs_answer": true,
+      "scope_id": "global",
+      "review_status": "reviewed",
+      "query_sha256": "cf77b935286e10724e859e5e5b38050766da6e2c65ab57b9dd9df017bacf9f6e",
+      "case_sha256": "6ecff12f582ee7825700a2c51a8e64ebea2956bf673f1e4533ceb4ce63e7694e",
+      "targets": [
+        {
+          "target_id": "C04-008-T1",
+          "role": "required",
+          "grade": 3,
+          "group": ""
+        },
+        {
+          "target_id": "C04-008-T2",
+          "role": "required",
+          "grade": 3,
+          "group": ""
+        },
+        {
+          "target_id": "C04-008-T3",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        }
+      ]
+    },
+    {
+      "case_id": "C04-009",
+      "family": "C04",
+      "group_id": "C04-g-warebase-arch",
+      "split": "calibration",
+      "needs_answer": true,
+      "scope_id": "global",
+      "review_status": "reviewed",
+      "query_sha256": "6bf2be814ddc316b01c5c3278ea09df3c8693fb5a4ac553514b30f881c50b6e3",
+      "case_sha256": "abfec59d2db0a0431702f1e1a42a20fcc21e510832f3a0ce5267a7d50d6a7f4a",
+      "targets": [
+        {
+          "target_id": "C04-009-T1",
+          "role": "required",
+          "grade": 3,
+          "group": ""
+        },
+        {
+          "target_id": "C04-009-T2",
+          "role": "required",
+          "grade": 2,
+          "group": ""
+        },
+        {
+          "target_id": "C04-009-T3",
+          "role": "allowed",
+          "grade": 2,
+          "group": ""
+        },
+        {
+          "target_id": "C04-009-T4",
+          "role": "allowed",
+          "grade": 2,
+          "group": ""
+        },
+        {
+          "target_id": "C04-009-T5",
+          "role": "forbidden",
+          "grade": 0,
+          "group": ""
+        },
+        {
+          "target_id": "C04-009-T6",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        },
+        {
+          "target_id": "C04-009-T7",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        }
+      ]
+    },
+    {
+      "case_id": "C04-010",
+      "family": "C04",
+      "group_id": "C04-g-tracking2",
+      "split": "calibration",
+      "needs_answer": true,
+      "scope_id": "global",
+      "review_status": "reviewed",
+      "query_sha256": "c702de221cd87029ad756a0c5a0209f0ec61d67eb693d8e005dcab90f9ca89cf",
+      "case_sha256": "e5ec85934803fe39f413bbf244b0cc5df33145f70373a9522c6c6e97e34ec21c",
+      "targets": [
+        {
+          "target_id": "C04-010-T1",
+          "role": "required",
+          "grade": 3,
+          "group": ""
+        },
+        {
+          "target_id": "C04-010-T2",
+          "role": "required",
+          "grade": 2,
+          "group": ""
+        },
+        {
+          "target_id": "C04-010-T3",
+          "role": "allowed",
+          "grade": 2,
+          "group": ""
+        },
+        {
+          "target_id": "C04-010-T4",
+          "role": "allowed",
+          "grade": 2,
+          "group": ""
+        },
+        {
+          "target_id": "C04-010-T5",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        },
+        {
+          "target_id": "C04-010-T6",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        },
+        {
+          "target_id": "C04-010-T7",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        },
+        {
+          "target_id": "C04-010-T8",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        }
+      ]
+    },
+    {
+      "case_id": "C04-011",
+      "family": "C04",
+      "group_id": "C04-g-percentile-threshold",
+      "split": "test",
+      "needs_answer": true,
+      "scope_id": "global",
+      "review_status": "reviewed",
+      "query_sha256": "2d5eb7db675d958810707257b5373a648d8a82435f4884526bb52c87f22f8db6",
+      "case_sha256": "82a4d2e1567dca00c3a8cb629d85e275efc3b1630f20cf16a0216cfd5e388827",
+      "targets": [
+        {
+          "target_id": "C04-011-T1",
+          "role": "required",
+          "grade": 3,
+          "group": ""
+        },
+        {
+          "target_id": "C04-011-T2",
+          "role": "required",
+          "grade": 2,
+          "group": ""
+        },
+        {
+          "target_id": "C04-011-T3",
+          "role": "allowed",
+          "grade": 2,
+          "group": ""
+        },
+        {
+          "target_id": "C04-011-T4",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        }
+      ]
+    },
+    {
+      "case_id": "C04-012",
+      "family": "C04",
+      "group_id": "C04-g-giftcard2",
+      "split": "test",
+      "needs_answer": true,
+      "scope_id": "global",
+      "review_status": "reviewed",
+      "query_sha256": "eb136d5ccb88acedad386ef88e8c36ca4aa1668f43ed7f05293f4885435f3783",
+      "case_sha256": "c2971b785176dd67c79691f49abc70f8ec0fc67d87a3fc92961f9c3162cb8460",
+      "targets": [
+        {
+          "target_id": "C04-012-T1",
+          "role": "required",
+          "grade": 3,
+          "group": ""
+        },
+        {
+          "target_id": "C04-012-T2",
+          "role": "required",
+          "grade": 3,
+          "group": ""
+        },
+        {
+          "target_id": "C04-012-T3",
+          "role": "allowed",
+          "grade": 2,
+          "group": ""
+        },
+        {
+          "target_id": "C04-012-T4",
+          "role": "forbidden",
+          "grade": 0,
+          "group": ""
+        }
+      ]
+    },
+    {
+      "case_id": "C04-013",
+      "family": "C04",
+      "group_id": "C04-g-imagesearch",
+      "split": "test",
+      "needs_answer": true,
+      "scope_id": "global",
+      "review_status": "reviewed",
+      "query_sha256": "9e0cc95ccea2d2a288a0990ff7943f35a0a0e064ab54aa975e0147f39abe12a9",
+      "case_sha256": "f9d47341cb8338080187dcb9d3cc4818f29c54817d22a9d0aa6ae35292f5f561",
+      "targets": [
+        {
+          "target_id": "C04-013-T1",
+          "role": "required",
+          "grade": 3,
+          "group": ""
+        },
+        {
+          "target_id": "C04-013-T2",
+          "role": "required",
+          "grade": 2,
+          "group": ""
+        },
+        {
+          "target_id": "C04-013-T3",
+          "role": "forbidden",
+          "grade": 0,
+          "group": ""
+        }
+      ]
+    },
+    {
+      "case_id": "C04-014",
+      "family": "C04",
+      "group_id": "C04-g-risk-open",
+      "split": "test",
+      "needs_answer": true,
+      "scope_id": "global",
+      "review_status": "reviewed",
+      "query_sha256": "3406a91c4a36fa234c6c88fd549cc99f6adcc5eb1e7fb25f3fe96c1fc3f30805",
+      "case_sha256": "5c65d0e9e9742709a8635f9b7100da88b2980d161512370dcce4e4a6d1aae1cb",
+      "targets": [
+        {
+          "target_id": "C04-014-T1",
+          "role": "required",
+          "grade": 3,
+          "group": ""
+        },
+        {
+          "target_id": "C04-014-T2",
+          "role": "required",
+          "grade": 2,
+          "group": ""
+        },
+        {
+          "target_id": "C04-014-T3",
+          "role": "forbidden",
+          "grade": 0,
+          "group": ""
+        },
+        {
+          "target_id": "C04-014-T4",
+          "role": "forbidden",
+          "grade": 0,
+          "group": ""
+        }
+      ]
+    },
+    {
+      "case_id": "C04-015",
+      "family": "C04",
+      "group_id": "C04-g-heiwu-stability2",
+      "split": "test",
+      "needs_answer": true,
+      "scope_id": "global",
+      "review_status": "reviewed",
+      "query_sha256": "0fe44d0c2ad86350e0a72920c76d426da86cac35f6c10888a7503699889b84c9",
+      "case_sha256": "59c9f7be32c17fca5cabd6627ac582a1dadb1ff9aad86ab2ff1612d55cbc84f9",
+      "targets": [
+        {
+          "target_id": "C04-015-T1",
+          "role": "required",
+          "grade": 3,
+          "group": ""
+        },
+        {
+          "target_id": "C04-015-T2",
+          "role": "required",
+          "grade": 3,
+          "group": ""
+        },
+        {
+          "target_id": "C04-015-T3",
+          "role": "allowed",
+          "grade": 2,
+          "group": ""
+        },
+        {
+          "target_id": "C04-015-T4",
+          "role": "allowed",
+          "grade": 2,
+          "group": ""
+        },
+        {
+          "target_id": "C04-015-T5",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        },
+        {
+          "target_id": "C04-015-T6",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        },
+        {
+          "target_id": "C04-015-T7",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        },
+        {
+          "target_id": "C04-015-T8",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        }
+      ]
+    },
+    {
+      "case_id": "C04-016",
+      "family": "C04",
+      "group_id": "C04-g-release2",
+      "split": "test",
+      "needs_answer": true,
+      "scope_id": "global",
+      "review_status": "reviewed",
+      "query_sha256": "f328a5b7d444ada100f986dc3887afe2ce6170924b5bc38e6f1f5ebd5deb8a81",
+      "case_sha256": "0329268f0dbff3bee9bb65161b6bcd68fbae8218d292b138ae021b2ee8cfe89e",
+      "targets": [
+        {
+          "target_id": "C04-016-T1",
+          "role": "required",
+          "grade": 3,
+          "group": ""
+        },
+        {
+          "target_id": "C04-016-T2",
+          "role": "required",
+          "grade": 3,
+          "group": ""
+        },
+        {
+          "target_id": "C04-016-T3",
+          "role": "allowed",
+          "grade": 2,
+          "group": ""
+        },
+        {
+          "target_id": "C04-016-T4",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        },
+        {
+          "target_id": "C04-016-T5",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        },
+        {
+          "target_id": "C04-016-T6",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        },
+        {
+          "target_id": "C04-016-T7",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        },
+        {
+          "target_id": "C04-016-T8",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        }
+      ]
+    },
+    {
+      "case_id": "C04-017",
+      "family": "C04",
+      "group_id": "C04-g-artemis2",
+      "split": "test",
+      "needs_answer": true,
+      "scope_id": "global",
+      "review_status": "reviewed",
+      "query_sha256": "d730b7a99c55f4e89ce4b7f7b15c12dfda0b56bdb5abd5e11621752155f57194",
+      "case_sha256": "f352d97bfda97081a4c507fbe7ea8e25c2940a94c8dd2e3c0fd3288c6ee8ef16",
+      "targets": [
+        {
+          "target_id": "C04-017-T1",
+          "role": "required",
+          "grade": 3,
+          "group": ""
+        },
+        {
+          "target_id": "C04-017-T2",
+          "role": "required",
+          "grade": 3,
+          "group": ""
+        },
+        {
+          "target_id": "C04-017-T3",
+          "role": "allowed",
+          "grade": 2,
+          "group": ""
+        },
+        {
+          "target_id": "C04-017-T4",
+          "role": "allowed",
+          "grade": 2,
+          "group": ""
+        },
+        {
+          "target_id": "C04-017-T5",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        },
+        {
+          "target_id": "C04-017-T6",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        },
+        {
+          "target_id": "C04-017-T7",
+          "role": "forbidden",
+          "grade": 0,
+          "group": ""
+        },
+        {
+          "target_id": "C04-017-T8",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        }
+      ]
+    },
+    {
+      "case_id": "C04-018",
+      "family": "C04",
+      "group_id": "C04-g-influencer2",
+      "split": "test",
+      "needs_answer": true,
+      "scope_id": "global",
+      "review_status": "reviewed",
+      "query_sha256": "9611a819b113a2cc080cb8e2dcc81e9cea5e7e5c7ef09300512aa83b1e97d707",
+      "case_sha256": "e4df89085908ec5100a6f2962417b15073d9e7c53dd26736da404bd123fb536d",
+      "targets": [
+        {
+          "target_id": "C04-018-T1",
+          "role": "required",
+          "grade": 3,
+          "group": ""
+        },
+        {
+          "target_id": "C04-018-T2",
+          "role": "required",
+          "grade": 3,
+          "group": ""
+        },
+        {
+          "target_id": "C04-018-T3",
+          "role": "allowed",
+          "grade": 2,
+          "group": ""
+        },
+        {
+          "target_id": "C04-018-T4",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        },
+        {
+          "target_id": "C04-018-T5",
+          "role": "forbidden",
+          "grade": 0,
+          "group": ""
+        },
+        {
+          "target_id": "C04-018-T6",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        },
+        {
+          "target_id": "C04-018-T7",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        },
+        {
+          "target_id": "C04-018-T8",
+          "role": "forbidden",
+          "grade": 0,
+          "group": ""
+        }
+      ]
+    },
+    {
+      "case_id": "C04-019",
+      "family": "C04",
+      "group_id": "C04-g-price2",
+      "split": "test",
+      "needs_answer": true,
+      "scope_id": "global",
+      "review_status": "reviewed",
+      "query_sha256": "302017d20f5c9a49e10a78efd8980b47b5f6553403bd09955fa313655f9af00b",
+      "case_sha256": "c5023f4c723404f3080ec975c44ccfaf7ea7bd09ecafa14ec173d739b5e0fb3c",
+      "targets": [
+        {
+          "target_id": "C04-019-T1",
+          "role": "required",
+          "grade": 3,
+          "group": ""
+        },
+        {
+          "target_id": "C04-019-T2",
+          "role": "required",
+          "grade": 2,
+          "group": ""
+        },
+        {
+          "target_id": "C04-019-T3",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        },
+        {
+          "target_id": "C04-019-T4",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        },
+        {
+          "target_id": "C04-019-T5",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        },
+        {
+          "target_id": "C04-019-T6",
+          "role": "forbidden",
+          "grade": 0,
+          "group": ""
+        },
+        {
+          "target_id": "C04-019-T7",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        },
+        {
+          "target_id": "C04-019-T8",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        },
+        {
+          "target_id": "C04-019-T9",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        }
+      ]
+    },
+    {
+      "case_id": "C04-020",
+      "family": "C04",
+      "group_id": "C04-g-heiwu-redis2",
+      "split": "test",
+      "needs_answer": true,
+      "scope_id": "global",
+      "review_status": "reviewed",
+      "query_sha256": "6aadf8b34fa616b81c9ad03d134eba5f383543b69157c127668f1282d880f732",
+      "case_sha256": "46140e91e105250f7670d5e33429f522e810b8739ee433542660903f7d7018dd",
+      "targets": [
+        {
+          "target_id": "C04-020-T1",
+          "role": "required",
+          "grade": 3,
+          "group": ""
+        },
+        {
+          "target_id": "C04-020-T2",
+          "role": "required",
+          "grade": 3,
+          "group": ""
+        },
+        {
+          "target_id": "C04-020-T3",
+          "role": "allowed",
+          "grade": 2,
+          "group": ""
+        },
+        {
+          "target_id": "C04-020-T4",
+          "role": "allowed",
+          "grade": 2,
+          "group": ""
+        },
+        {
+          "target_id": "C04-020-T5",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        },
+        {
+          "target_id": "C04-020-T6",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        },
+        {
+          "target_id": "C04-020-T7",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        },
+        {
+          "target_id": "C04-020-T8",
+          "role": "forbidden",
+          "grade": 1,
+          "group": ""
+        }
+      ]
+    }
+  ]
+}

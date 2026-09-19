@@ -1,0 +1,240 @@
+{
+  "artifact": "RAG relevance graded dataset manifest",
+  "prd": "RAG-REL-001 §7.1/§7.2/§10.1",
+  "redacted": true,
+  "redaction_policy": "PRD §7.2：仓库只保存数据集结构、脱敏 manifest 与统计；问题原文、来源名、标题、证据正文与候选正文、查询向量、服务原始响应均不入仓库。",
+  "privacy": "本文件与 cases-C*.json 只含结构、哈希与统计；私文（问题原文/来源 basename/标题/证据片段）保存在 Git 忽略的 .tmp_probe/rag-relevance/relevance-private/，由 scripts/relevance_cases/loader.py 按 case_id/target_id 组装。",
+  "schema_version": 1,
+  "generated_at_unix": 1789826550.8208086,
+  "generated_at_local": "2026-09-19T22:02:30+0800",
+  "corpus_sha256": "e3824befd301531dfe2e1d3d891a690555c44981014728227cc74f3ff2037134",
+  "structure_hash_algorithm": "sha256 over canonical JSON of 私文字段 (query + 来源/标题/证据原文/范围/note)",
+  "annotation_protocol": {
+    "grades": {
+      "0": "含义不同、对象错误或完全无关",
+      "1": "仅话题相近，未提供回答所需信息",
+      "2": "有效支持一个明确需求或必要解释",
+      "3": "直接提供关键结论、步骤、数值或必要证据"
+    },
+    "unjudged": "未标注项不得当作无关；参与最终结果时该次 Precision 评测无效",
+    "grading_rule": "只有直接给出问题所问信息的块给 2/3；同文档/同主题但未回答所问的块一律给 1；来源主题与问题无关给 0。0/1 必须写明依据。",
+    "required_evidence": "必要证据必须给出逐字取自真实块的片段；片段正文只存在于本地私文，仓库内只保留其 SHA-256。",
+    "hard_negatives": "每题至少标注一个真实候选池内的明确排除块",
+    "grouping": {
+      "case_level_group_id": "同一原始问题的改写、同一关键证据族、复用的干扰分块族 → 同一 group_id，整组只进入 calibration 或 test 之一",
+      "target_level_group": "证据族：只有真正互为等价（同一事实的不同块表述）的目标才共用，且必须写成 <case_id>:<族名>，不得跨题、跨集合复用；留空表示该目标自成一族（按 target_id 计一次）",
+      "guards": [
+        "validate_relevance_cases 拒绝未按案例限定的 target 级族名",
+        "拒绝只有一个成员的族、拒绝来自同一个块的成员",
+        "backend/tests/test_relevance_datasets.py 断言族名按案例限定且不跨集合"
+      ]
+    }
+  },
+  "totals": {
+    "families": 6,
+    "cases": 120,
+    "targets": 729,
+    "calibration": 60,
+    "test": 60,
+    "grades": {
+      "0": 36,
+      "1": 505,
+      "2": 83,
+      "3": 105
+    },
+    "roles": {
+      "allowed": 67,
+      "forbidden": 540,
+      "required": 122
+    },
+    "required_targets": 122,
+    "required_evidence_items": 660,
+    "irrelevant_span_items": 86
+  },
+  "families": [
+    {
+      "family": "C01",
+      "file": "cases-C01.json",
+      "cases": 20,
+      "calibration": 10,
+      "test": 10,
+      "targets": 169,
+      "grades": {
+        "0": 23,
+        "1": 95,
+        "2": 31,
+        "3": 20
+      },
+      "roles": {
+        "allowed": 30,
+        "forbidden": 117,
+        "required": 22
+      },
+      "distinct_sources": 44,
+      "distinct_headings": 120,
+      "targets_with_heading": 157,
+      "targets_with_required_evidence": 107,
+      "required_evidence_items": 107,
+      "irrelevant_span_items": 0,
+      "relevant_span_items": 0,
+      "required_targets": 22,
+      "required_effective_groups": 22,
+      "declared_equivalent_groups": 0,
+      "cases_without_required": 0,
+      "cases_without_forbidden": 0
+    },
+    {
+      "family": "C02",
+      "file": "cases-C02.json",
+      "cases": 20,
+      "calibration": 10,
+      "test": 10,
+      "targets": 127,
+      "grades": {
+        "0": 3,
+        "1": 95,
+        "2": 9,
+        "3": 20
+      },
+      "roles": {
+        "allowed": 9,
+        "forbidden": 98,
+        "required": 20
+      },
+      "distinct_sources": 25,
+      "distinct_headings": 84,
+      "targets_with_heading": 126,
+      "targets_with_required_evidence": 127,
+      "required_evidence_items": 127,
+      "irrelevant_span_items": 0,
+      "relevant_span_items": 0,
+      "required_targets": 20,
+      "required_effective_groups": 20,
+      "declared_equivalent_groups": 0,
+      "cases_without_required": 0,
+      "cases_without_forbidden": 0
+    },
+    {
+      "family": "C03",
+      "file": "cases-C03.json",
+      "cases": 20,
+      "calibration": 10,
+      "test": 10,
+      "targets": 122,
+      "grades": {
+        "1": 102,
+        "3": 20
+      },
+      "roles": {
+        "forbidden": 102,
+        "required": 20
+      },
+      "distinct_sources": 14,
+      "distinct_headings": 40,
+      "targets_with_heading": 82,
+      "targets_with_required_evidence": 122,
+      "required_evidence_items": 122,
+      "irrelevant_span_items": 53,
+      "relevant_span_items": 0,
+      "required_targets": 20,
+      "required_effective_groups": 20,
+      "declared_equivalent_groups": 0,
+      "cases_without_required": 0,
+      "cases_without_forbidden": 0
+    },
+    {
+      "family": "C04",
+      "file": "cases-C04.json",
+      "cases": 20,
+      "calibration": 10,
+      "test": 10,
+      "targets": 130,
+      "grades": {
+        "0": 10,
+        "1": 57,
+        "2": 33,
+        "3": 30
+      },
+      "roles": {
+        "allowed": 23,
+        "forbidden": 67,
+        "required": 40
+      },
+      "distinct_sources": 34,
+      "distinct_headings": 104,
+      "targets_with_heading": 123,
+      "targets_with_required_evidence": 130,
+      "required_evidence_items": 130,
+      "irrelevant_span_items": 0,
+      "relevant_span_items": 0,
+      "required_targets": 40,
+      "required_effective_groups": 40,
+      "declared_equivalent_groups": 0,
+      "cases_without_required": 0,
+      "cases_without_forbidden": 0
+    },
+    {
+      "family": "C05",
+      "file": "cases-C05.json",
+      "cases": 20,
+      "calibration": 10,
+      "test": 10,
+      "targets": 60,
+      "grades": {
+        "1": 60
+      },
+      "roles": {
+        "forbidden": 60
+      },
+      "distinct_sources": 26,
+      "distinct_headings": 53,
+      "targets_with_heading": 58,
+      "targets_with_required_evidence": 55,
+      "required_evidence_items": 55,
+      "irrelevant_span_items": 0,
+      "relevant_span_items": 0,
+      "required_targets": 0,
+      "required_effective_groups": 0,
+      "declared_equivalent_groups": 0,
+      "cases_without_required": 20,
+      "cases_without_forbidden": 0
+    },
+    {
+      "family": "C06",
+      "file": "cases-C06.json",
+      "cases": 20,
+      "calibration": 10,
+      "test": 10,
+      "targets": 121,
+      "grades": {
+        "1": 96,
+        "2": 10,
+        "3": 15
+      },
+      "roles": {
+        "allowed": 5,
+        "forbidden": 96,
+        "required": 20
+      },
+      "distinct_sources": 17,
+      "distinct_headings": 66,
+      "targets_with_heading": 120,
+      "targets_with_required_evidence": 119,
+      "required_evidence_items": 119,
+      "irrelevant_span_items": 33,
+      "relevant_span_items": 0,
+      "required_targets": 20,
+      "required_effective_groups": 20,
+      "declared_equivalent_groups": 0,
+      "cases_without_required": 0,
+      "cases_without_forbidden": 0
+    }
+  ],
+  "verification": {
+    "repo_contract_test": "backend/tests/test_relevance_datasets.py",
+    "anti_regression_guard": "backend/tests/test_relevance_datasets.py::test_private_strings_never_leak_into_repo_dataset",
+    "local_assembly": "scripts/relevance_cases/loader.py --cases-dir scripts/relevance_cases",
+    "local_corpus_verification": ".tmp_probe/rag-relevance/relevance_tools.py verify --private-dir .tmp_probe/rag-relevance/relevance-private",
+    "six_metric_baseline": ".tmp_probe/rag-relevance/relevance-baseline-C01.json"
+  }
+}
