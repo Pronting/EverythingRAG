@@ -35,6 +35,8 @@ class RetrievedChunk:
     # A short atomic block remains the citation target, while this optional same-section view
     # gives the model and source panel enough surrounding meaning to interpret it correctly.
     context_text: str | None = None
+    #: 可选证据视图（PRD §5.3）：新流程用它做评分与引用；未设置时调用方按旧路径渲染来源。
+    evidence_view: Any | None = None
 
 
 # 缺失字段的安全默认值（真实索引源_file 必有；mock/历史数据可缺）

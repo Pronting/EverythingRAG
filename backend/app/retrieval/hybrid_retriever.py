@@ -24,6 +24,7 @@ from app.retrieval.query_transform import (
     extract_identifier_definition_subjects,
     normalize_query,
 )
+from app.retrieval.reranker import RouteSignals
 from app.retrieval.trace import (
     RetrievalCandidateTrace,
     RetrievalResult,
@@ -40,6 +41,68 @@ class _LexicalEvidence:
     rank: int
     hit: BM25Hit
     rescue_eligible: bool
+
+
+@dataclass(frozen=True)
+class HybridCandidate:
+    """One logical candidate: a canonical block plus its independent channel signals.
+
+    ``dense_similarity`` stays ``None`` when no dense route returned the block; a missing dense
+    score is unknown evidence, never a synthetic ``0.0``.  ``bm25_score`` is the strongest lexical
+    score across every query variant, and ``rescue_eligible`` records whether at least one route
+    satisfied the guarded lexical-rescue gate.  Both are *diagnostic* signals: PRD 5.2 forbids
+    using them to authorize or delete a candidate before the reranker has scored it.
+
+    ``route_signals`` renders the same evidence in the canonical
+    :class:`app.retrieval.reranker.RouteSignals` shape, so the downstream evidence view and
+    reranker consume one signal vocabulary instead of a parallel one (PRD §5.2/§9).
+    """
+
+    candidate_id: str
+    rrf_score: float
+    rrf_rank: int
+    dense_similarity: float | None
+    bm25_score: float | None
+    bm25_rank: int | None
+    dense_rank: int | None
+    rescue_eligible: bool
+    signals: tuple[RetrievalSignalTrace, ...] = ()
+
+    @property
+    def lexical_only(self) -> bool:
+        """Whether the block was recovered by lexical evidence alone (no dense score at all)."""
+
+        return self.dense_similarity is None
+
+    @property
+    def route_signals(self) -> RouteSignals:
+        """Canonical channel-signal projection of this candidate (diagnostic only)."""
+
+        return RouteSignals(
+            dense_score=self.dense_similarity,
+            dense_rank=self.dense_rank,
+            bm25_score=self.bm25_score,
+            bm25_rank=self.bm25_rank,
+            rrf_score=self.rrf_score,
+            rrf_rank=self.rrf_rank,
+            lexical_only=self.lexical_only,
+        )
+
+
+@dataclass(frozen=True)
+class HybridCandidateCollection:
+    """Candidates returned by :meth:`HybridRetriever.collect_candidates`.
+
+    Ordered by RRF score descending, ties broken by ascending stable ``candidate_id``.  The
+    candidate window has not been trimmed and no final source selection has run.
+    """
+
+    candidates: tuple[HybridCandidate, ...]
+    variant_kinds: tuple[str, ...] = ()
+
+    @property
+    def candidate_ids(self) -> tuple[str, ...]:
+        return tuple(candidate.candidate_id for candidate in self.candidates)
 
 
 @dataclass(frozen=True)
@@ -163,6 +226,41 @@ class HybridRetriever:
         )
         return chunks
 
+    def collect_candidates(
+        self,
+        query_variants: Sequence[QueryVariant],
+        query_vectors: Sequence[list[float]],
+        where: dict[str, Any] | None = None,
+    ) -> HybridCandidateCollection:
+        """Collect the deduplicated logical candidates with their channel signals (PRD 5.2).
+
+        This is the candidate-generation interface shared by the online pipeline and offline
+        evaluation.  It reuses the existing query-variant expansion (including the lexical-only
+        definition-subject route), dense over-fetch, scope filter, logical-block canonicalisation
+        and RRF fusion, and returns the fused ranking **without** running the final eight-source
+        selection, the gate thresholds or the parent/section expansion.
+
+        Candidates are ordered by RRF score descending; equal scores break by ascending stable
+        ``candidate_id``.  ``RRF rank`` is recorded in that same order and is a deterministic
+        signal of the fusion stage only.
+        """
+
+        variants = self._validate_variants(query_variants, query_vectors)
+        dense_routes = tuple(zip(variants, query_vectors, strict=True))
+        self._ensure_indexable(dense_routes)
+        # Load the local block map before fusing: canonical dedup and the local scope re-check both
+        # read it, and a real vector store may omit metadata or return out-of-scope neighbours.
+        self._ensure_bm25()
+        effective_variants = self._effective_lexical_variants(variants)
+        dense_hits = self._search_dense_routes(dense_routes, where)
+        dense_hits = self._scoped_dense_routes(dense_hits, where)
+        lexical_hits = self._search_lexical_routes(effective_variants, where)
+        fusion = self._fuse(dense_hits, lexical_hits, include_trace=True)
+        return HybridCandidateCollection(
+            candidates=self._candidate_records(fusion),
+            variant_kinds=tuple(variant.kind for variant in effective_variants),
+        )
+
     def retrieve_with_trace(
         self,
         query_text: str,
@@ -224,39 +322,16 @@ class HybridRetriever:
         where: dict[str, Any] | None,
         include_trace: bool,
     ) -> tuple[list[RetrievedChunk], RetrievalTrace | None]:
-        for _variant, vector in dense_routes:
-            self._reject_empty_query(vector)
-        if self._vectorstore.count() == 0:
-            raise RetrievalError("知识库尚未建立索引，请先导入并同步文档")
-
-        # Historical imports may contain the same logical block under several source paths.
-        # Over-fetch before canonicalisation so duplicate ANN neighbours cannot consume the
-        # complete candidate window and hide otherwise relevant documents.
-        dense_k = self._candidate_k * self._dense_overfetch_factor
-        dense_hits = [
-            (variant.kind, self._vectorstore.query(vector, dense_k, where=where))
-            for variant, vector in dense_routes
-        ]
+        self._ensure_indexable(dense_routes)
+        dense_hits = self._search_dense_routes(dense_routes, where)
         original_query = lexical_variants[0].text if lexical_variants else ""
-        metric = canonical_percentiles(normalize_query(original_query)).strip()
         intent = _QueryIntent(
             definition_subjects=extract_identifier_definition_subjects(original_query),
-            percentile_subject=metric if re.fullmatch(r"p\d{1,2}(?:\.\d+)?", metric) else None,
+            percentile_subject=_percentile_subject(original_query),
         )
-        # Definition questions need one subject-only lexical route. Query scaffolding such as
-        # “什么是” can otherwise push the actual definition outside BM25's candidate window.
-        # This route is lexical-only, so it fixes recall without adding another embedding call.
-        effective_lexical_variants = list(lexical_variants)
-        existing_token_sets = {
-            frozenset(tokenize(variant.text)) for variant in effective_lexical_variants
-        }
-        for subject in intent.definition_subjects:
-            token_set = frozenset(tokenize(subject))
-            if token_set not in existing_token_sets:
-                effective_lexical_variants.append(
-                    QueryVariant(kind="definition_subject", text=subject)
-                )
-                existing_token_sets.add(token_set)
+        effective_lexical_variants = self._effective_lexical_variants(
+            lexical_variants, intent
+        )
         lexical_hits = self._search_lexical_routes(effective_lexical_variants, where)
         fusion = self._fuse(dense_hits, lexical_hits, include_trace=include_trace)
         chunks, decisions, selections = self._select_with_expansion(fusion, intent)
@@ -267,6 +342,118 @@ class HybridRetriever:
             effective_lexical_variants, fusion, decisions, selections
         )
         return chunks, trace
+
+    def _ensure_indexable(
+        self,
+        dense_routes: Sequence[tuple[QueryVariant, list[float]]],
+    ) -> None:
+        """Reject empty query vectors and an unindexed knowledge base before any route runs."""
+
+        for _variant, vector in dense_routes:
+            self._reject_empty_query(vector)
+        if self._vectorstore.count() == 0:
+            raise RetrievalError("知识库尚未建立索引，请先导入并同步文档")
+
+    def _search_dense_routes(
+        self,
+        dense_routes: Sequence[tuple[QueryVariant, list[float]]],
+        where: dict[str, Any] | None,
+    ) -> list[tuple[str, list[dict[str, Any]]]]:
+        # Historical imports may contain the same logical block under several source paths.
+        # Over-fetch before canonicalisation so duplicate ANN neighbours cannot consume the
+        # complete candidate window and hide otherwise relevant documents.
+        dense_k = self._candidate_k * self._dense_overfetch_factor
+        return [
+            (variant.kind, self._vectorstore.query(vector, dense_k, where=where))
+            for variant, vector in dense_routes
+        ]
+
+    def _scoped_dense_routes(
+        self,
+        dense_routes: Sequence[tuple[str, list[dict[str, Any]]]],
+        where: dict[str, Any] | None,
+    ) -> list[tuple[str, list[dict[str, Any]]]]:
+        """Re-check the caller scope against the locally loaded block metadata before fusion.
+
+        The vector store still receives ``where`` so unfiltered neighbours never consume the
+        over-fetched window.  A hit whose stored metadata contradicts the requested scope is
+        dropped here instead of being documented as a scope violation later (PRD 5.2, R13).  The
+        locally loaded block map is authoritative because it is the same data the lexical route
+        filters on; hit payload metadata is only a fallback for unknown block IDs.
+        """
+
+        if not where:
+            return list(dense_routes)
+
+        scoped: list[tuple[str, list[dict[str, Any]]]] = []
+        for route_kind, hits in dense_routes:
+            kept: list[dict[str, Any]] = []
+            for hit in hits:
+                block_id = str(hit.get("block_id", ""))
+                metadata = self._blocks.get(block_id, (None, {}))[1]
+                if not metadata:
+                    payload = hit.get("metadata")
+                    metadata = payload if isinstance(payload, dict) else {}
+                if _metadata_matches_where(metadata, where):
+                    kept.append(hit)
+            scoped.append((route_kind, kept))
+        return scoped
+
+    def _effective_lexical_variants(
+        self,
+        lexical_variants: Sequence[QueryVariant],
+        intent: _QueryIntent | None = None,
+    ) -> list[QueryVariant]:
+        """Add the lexical-only definition-subject route without a second embedding call.
+
+        Definition questions need one subject-only lexical route.  Query scaffolding such as
+        “什么是” can otherwise push the actual definition outside BM25's candidate window.
+
+        A subject route is skipped only when an existing variant has exactly the same token set:
+        adding it again would double-count identical BM25 evidence and let a duplicate route
+        outrank independent candidates in RRF.
+        """
+
+        intent = intent or _QueryIntent(
+            definition_subjects=extract_identifier_definition_subjects(
+                lexical_variants[0].text if lexical_variants else ""
+            )
+        )
+        effective = list(lexical_variants)
+        seen_token_sets = {frozenset(tokenize(variant.text)) for variant in effective}
+        for subject in intent.definition_subjects:
+            token_set = frozenset(tokenize(subject))
+            if token_set not in seen_token_sets:
+                effective.append(QueryVariant(kind="definition_subject", text=subject))
+                seen_token_sets.add(token_set)
+        return effective
+
+    def _candidate_records(self, fusion: _FusionState) -> tuple[HybridCandidate, ...]:
+        """Project a fusion state into ordered channel-signal records (PRD 5.2 ordering)."""
+
+        records: list[HybridCandidate] = []
+        for rank, block_id in enumerate(fusion.ordered, 1):
+            evidence = fusion.lexical.get(block_id, [])
+            signals = fusion.signals.get(block_id, [])
+            bm25_scores = [item.hit.score for item in evidence]
+            bm25_ranks = [item.rank for item in evidence]
+            dense_ranks = [
+                signal.rank for signal in signals if signal.route.startswith("dense:")
+            ]
+            records.append(
+                HybridCandidate(
+                    candidate_id=block_id,
+                    rrf_score=fusion.fused_scores.get(block_id, 0.0),
+                    rrf_rank=rank,
+                    dense_similarity=fusion.dense_sims.get(block_id),
+                    bm25_score=max(bm25_scores) if bm25_scores else None,
+                    bm25_rank=min(bm25_ranks) if bm25_ranks else None,
+                    dense_rank=min(dense_ranks) if dense_ranks else None,
+                    rescue_eligible=any(item.rescue_eligible for item in evidence),
+                    signals=tuple(signals),
+                )
+            )
+        return tuple(records)
 
     def _search_lexical_routes(
         self,
@@ -1058,6 +1245,13 @@ class HybridRetriever:
 def _title_from_path(source_file: str) -> str:
     name = Path(source_file).name
     return name[: -len(".md")] if name.lower().endswith(".md") else name
+
+
+def _percentile_subject(query_text: str) -> str | None:
+    """Return the canonical percentile mention (``p95``/``p99.9``) of a query, if any."""
+
+    metric = canonical_percentiles(normalize_query(query_text)).strip()
+    return metric if re.fullmatch(r"p\d{1,2}(?:\.\d+)?", metric) else None
 
 
 def _has_definition_evidence(
