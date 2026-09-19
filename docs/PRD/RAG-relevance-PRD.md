@@ -165,6 +165,8 @@
 
 已选择组合与其成员单独视图重叠时，只保留信息覆盖完整且分数合格的一个版本。被排除的组合不得通过章节扩展、保留位置或补足结果重新进入。
 
+> **本批交付状态（2026-09-19）**：`support_bundle` 的**选择侧语义已完成并有测试**（组合合格即代表整组、其成员记 `covered_by_bundle`；组合自己未入选时成员作为后备入选；任一原文范围在 `selected` 中最多出现一次；不得互相误排除、不得全空），但**组合构造器（生产者）尚未实现**，线上 `chat_service` 以 `include_structure_views=False` 建视图：§5.4 的组合与 §5.3 的多主题小引用视图**在线上未启用**，`covered_by_bundle` 线上不可触发。因此 **A06 的 C03/C06 量化目标不计入本批成绩**，也不得声称已实现 §5.4；完整交付（组合构造器 + 线上开启结构视图）归后续批次 T15/T24，并依赖独立测试集质量验收（T32）与校准档案（T30）。
+
 ### 5.5 图片文字变化
 
 图片初始候选使用已存在的图片文字证据。现有原图核对能力由用户原有配置和授权控制，本功能不增加新的图像模型。
@@ -172,6 +174,8 @@
 需要核对时，最多核对当前排序靠前的两个合格图片。核对结果替换相关视图并产生新的 `payload_hash`；同图的旧文字补充同步移除。对更新后的完整候选列表再执行一次重排和筛选，保持模型评分的候选集合口径一致。第二次筛选不得触发新一轮图片核对。对于当前问题要求原图核对的图片，只有本轮已完成核对的视图可以进入最终上下文；其余视图记录 `image_not_verified` 并排除，不能因为重新排序进入最终集合。
 
 原图核对失败则本轮失败，禁止将未核对的旧文字标记为已核对。取消请求立即停止后续模型调用。评测需要同时覆盖纯文本路径和图片更新路径。
+
+> **本批交付状态（2026-09-19）**：完整 §5.5（核对 ≤2 张 → 替换视图并重算 `payload_hash` → 移除同图旧文字补充 → 对更新后候选**再评一次** → 未核对者按 `image_not_verified` 排除）**未实现**，归后续批次 T25。本批落地的只是**过渡期保护**：相关性筛选路径下**禁止在评分后改写正文**（生成上下文与来源面板逐字等于被评分的 `evidence_text`，A07 成立），筛选路径因此不做评分后图片核对，并把「本轮本该核对却没核对」的图片视图数量显式记入 `meta.retrieval.image_not_verified`，绝不静默当成已核对。旧检索路径（未启用筛选）的图片核对行为不变。
 
 ### 5.6 最终选择
 
@@ -185,9 +189,10 @@
 
 ### 6.1 选型和服务边界
 
-本需求选择独立 HTTP 重排 Provider，使用现有 `httpx` 及 `outbound_client`。重点接入阿里云百炼 `qwen3-rerank` 的官方 HTTP 协议，接受独立 endpoint 与 API key。服务模型名与开源 `Qwen3-Reranker-4B` 分别标识，不能假定二者权重、长度限制和分数行为相同。
+本需求选择独立 HTTP 重排 Provider，使用现有 `httpx` 及 `outbound_client`。**本交付的基线提供方为 SiliconFlow 重排服务**（`provider_type=siliconflow_rerank`，`POST https://api.siliconflow.cn/v1/rerank`，Bearer 鉴权，请求体 `model`/`query`/`documents`/`top_n`（可省略 `top_n`，省略时返回全部候选），响应顶层 `results[].{index, relevance_score}` 与 `meta.tokens`/`meta.billed_units`）。**模型名不写死在 PRD**：由用户在设置中选择、由校准档案固定并校验。
 
-2026-09-19 官方文档给出的 `qwen3-rerank` 请求使用完整 endpoint `/compatible-api/v1/reranks`，顶层字段为 `model`、`query`、`documents`、`top_n`、`instruct`；响应的 `results` 位于顶层，每项含 `index`、`relevance_score`。正式服务地址由用户所在区域和业务空间确定，不拼接或猜测业务空间 ID。[官方 HTTP 协议](https://help.aliyun.com/zh/model-studio/text-rerank-api)
+> **决策记录 D-PRD-6.1（2026-09-19，本会话批准改选）**：原基线为阿里云百炼 `qwen3-rerank`（`/compatible-api/v1/reranks`、`provider_type=dashscope_qwen3`）。改选 SiliconFlow 的依据是当日真实探针实测：① `top_n` 可省略并返回全部候选，一次提交即可拿到同一候选集合的全部分数（与 §6.2 的「一次提交、不跨请求合并相对分数」一致）；② 分数随模型差异极大，必须由档案固定模型身份，不能假定跨模型可比；③ `instruction` 仅对 `Qwen3-Reranker` 系列生效，服务对不支持的模型**静默忽略**该字段，因此客户端必须显式拒绝而不是依赖服务报错；④ 长度/数量上限**尚未实测**（见 §6.3），不得从其他厂商数值推断。
+> 百炼协议差异（保留备查）：endpoint 为 `/compatible-api/v1/reranks`，指令字段名是 `instruct` 而不是 `instruction`，`top_n` 必填。两种协议都只描述「提交同一候选集合、取回全部分数」，新厂家通过 `RerankProvider` 子类接入。
 
 当前服务是否开通、endpoint、凭证由任务 T11 验证，真实延迟和费用由 T34 验证。配置页面允许保存未启用配置；发布版本只能使用完成全部验收的模型档案。
 
@@ -198,17 +203,17 @@
 - 校验每个 `index` 为整数、范围有效、无重复；数量与输入一致。
 - 每个分数必须为有限数值并符合 Provider 声明范围；缺失、NaN、越界及错误结构立即失败。
 - 记录服务返回的请求 ID、model、usage；无 usage 时显示“服务未返回”，不估造费用。
-- 使用标准 JSON 库和 Pydantic 解析与校验。
+- 响应解析与校验使用标准 JSON 库解码 + 显式结构校验器（`results` 数量/`index`/重复/有限性/声明范围），**不使用 Pydantic 建模响应**：解析层的契约是「逐位校验并立即失败」，显式校验器能让每个拒绝点带上位置序号，且不引入与 Pydantic 版本相关的隐式宽松转换（例如把字符串 `"0.9"` 强制成浮点）。等价性由 `tests/test_live_rerank_provider.py` 用真实响应副本与其变体覆盖。
 - SDK 和 HTTP 客户端隐式重试关闭；429、认证失败、超时、协议异常终止本轮。
 - 连接超时 5 秒，读取超时 60 秒；这是单次网络请求限制。执行任务的总时长由调用方控制。
 
 ### 6.3 长度限制
 
-Provider 能力描述包含 `max_documents`、`max_query_tokens`、`max_document_tokens`、`max_request_tokens` 和对应 tokenizer 标识。官方当前 `qwen3-rerank` 对单条 query/document 限制为 4,000 tokens，超过限制返回错误。[长度限制](https://help.aliyun.com/zh/model-studio/text-rerank-api)
+Provider 能力描述包含 `max_documents`、`max_query_tokens`、`max_document_tokens`、`max_request_tokens` 和对应 tokenizer 标识。**本交付中这些上限全部保持 `None`（未实测）**：不得编造上限、不得用字符数替代 token 数、也不得从其他厂商或模型推断；真实请求实测与落档归 T29/T30。因此 `RERANK_INPUT_TOO_LONG` 在本批**不可达**（这是如实状态，不是缺陷掩盖）。
 
-T11 必须确认官方对应 tokenizer 或服务提供的计数方式，按验证结果使用成熟 tokenizer 依赖。token 数不能用字符数替代。服务总请求上限不能从其他模型推断；必须通过文档和真实请求确认并记录。
+T11 必须确认官方对应 tokenizer 或服务提供的计数方式，按验证结果使用成熟 tokenizer 依赖。服务总请求上限不能从其他模型推断；必须通过真实请求确认并记录。
 
-不满足长度限制的单个视图在调用前报 `RERANK_INPUT_TOO_LONG`。候选总预算超限时按确定性顺序缩小候选集。档案保存 `min_candidate_count`，其值通过校准确定；本次最低保留数量为该值与实际可用候选数的较小值。缩小至该数量仍超限则失败，原本候选较少不构成错误。禁止静默截断正文、问题、表格或代码。候选缩小行为必须纳入档案和覆盖率评测。
+长度限制的检查与缩容口径（代码已实现、待上限实测后生效）：不满足长度限制的单个视图在调用前报 `RERANK_INPUT_TOO_LONG`；候选总预算超限时按确定性顺序（RRF 降序 + 同分 `candidate_id` 升序）缩小候选集，缩容目标为档案 `min_candidate_count` 与实际可用候选数的较小值（`window_candidates(..., token_counter=...)` 的 `shrunk_to`/`shrunk_out`/`token_budget_exceeded` 三个诊断字段）；缩小至该数量仍超限则失败，原本候选较少不构成错误。禁止静默截断正文、问题、表格或代码。候选缩小行为必须纳入档案和覆盖率评测。
 
 ### 6.4 任务指令
 
@@ -223,7 +228,7 @@ T11 必须确认官方对应 tokenizer 或服务提供的计数方式，按验�
 | 字段 | 规则 |
 |---|---|
 | `enabled` | 旧配置迁移为 false；用户明确启用后使用本功能 |
-| `provider_type` | 本交付为 `dashscope_qwen3` |
+| `provider_type` | 本交付为 `siliconflow_rerank`（决策记录见 §6.1） |
 | `endpoint` | 完整 HTTPS endpoint；本地测试服务只允许明确配置的回环 HTTP |
 | `model` | 经过真实服务验证的模型名 |
 | `api_key` | SecretStr；省略/null 保留，空字符串清除；响应只给是否设置和末四位 |
@@ -236,6 +241,8 @@ T11 必须确认官方对应 tokenizer 或服务提供的计数方式，按验�
 档案状态依次为 `candidate`、`quality_passed`、`validated`：T30 固定候选参数，T32 完成质量验收，T36 核对全部验收证据后标记 `validated`。生产启用只接受 `validated`。隔离验收环境通过启动参数显式允许测试档案，绑定独立配置目录并在页面显示“验收环境”；该参数不能通过线上设置接口开启，相关测试也必须覆盖生产环境拒绝未验收档案的行为。
 
 模型、指令、tokenizer、视图版本和评分协议变化时档案立即失配，启用请求返回校验错误。语料新增或修改后标记 `needs_validation`，继续使用当前兼容档案并明确记录新知识版本；“已验收”标记只对应档案验证过的语料版本。下一次发布需要在新语料上重新验收。
+
+`needs_validation` 的**生产者**（2026-09-19 补齐）：`corpus_identity_hash(collection, embed_fingerprint, block_ids)` 计算当前语料身份（只含块 id，不含正文；块 id 排序后哈希，因此与遍历顺序无关），在**启用校验**与**设置页状态快照**两处与档案 `corpus_manifest_hash` 比较（`validate_rerank_enable(..., corpus_identity=...)`）：不一致、档案未登记、或当前身份取不到（无从证明）时标记 `needs_validation`；一致时清除标记。标记**不阻止**继续使用当前兼容档案，设置页状态显示 `needs_validation` 并给出档案验证日期。
 
 凭证变化会重建 Provider 客户端，但不改变模型相关性档案。密钥不得进入档案、日志或导出文件。没有配置时不能自动复用对话模型或嵌入模型的地址和密钥。
 
@@ -313,6 +320,15 @@ AI 提效原始案例固定为发布回归案例。它用于确认已知故障�
 | `RERANK_INVALID_RESPONSE` | 筛选服务返回的数据不完整或无效 |
 | `EVIDENCE_VERSION_CHANGED` | 资料在本轮处理期间发生变化，请重新提问 |
 
+补充码（实现已使用，2026-09-19 登记，保证错误契约与实现一致）：
+
+| 错误码 | 行为与文案 |
+|---|---|
+| `RERANK_SERVICE_UNAVAILABLE` | 筛选服务暂不可用（真实服务 503/504，实测返回 `{"code":50505,"message":"Model service overloaded"}`）；终止本轮并提示稍后重试，不得伪装成「返回数据无效」或「无相关资料」 |
+| `RERANK_INVALID_INPUT` | 内部契约违例（空候选、重复候选、越界 scope、非法字段等）；终止本轮，不向用户展示细节，只记录脱敏诊断 |
+
+两个补充码都不是「8 个固定用户错误」的替代：`RERANK_SERVICE_UNAVAILABLE` 是真实服务失败态，`RERANK_INVALID_INPUT` 是本侧契约违例态；两者都不降级成「无相关资料」，也都不静默回落未筛选内容。
+
 错误在出现位置抛出类型明确的异常，仅 API/任务边界转换为用户事件并记录脱敏审计。禁止静默返回未筛选内容、换用其他模型、自动重试或把错误当作无相关资料。
 
 ## 9. 诊断、性能与范围约束
@@ -324,6 +340,8 @@ AI 提效原始案例固定为发布回归案例。它用于确认已知故障�
 排除原因固定为 `below_threshold`、`duplicate`、`covered_by_bundle`、`outside_candidate_window`、`budget_exceeded`、`scope_mismatch`、`version_mismatch`。词法补充条件继续记录为候选阶段信号，不能覆盖最终决定。
 
 普通文字问答一次重排；图片文字更新时最多两次。HTTP 同时执行上限为两个请求；取消等待中的任务不会继续外呼。模型客户端按完整运行时配置创建，切换配置不影响已经固定快照的请求。
+
+并发上限与取消的实现口径（2026-09-19 落地）：闸门是 `rerank_provider` 里的**进程级** `asyncio.Semaphore(2)`（`request_gate()`，按运行中的事件循环惰性创建），只覆盖真实出网那一段；等待期间被取消的任务由 `Semaphore.acquire` 直接抛 `CancelledError`，请求根本不会发出。用例：`tests/test_live_rerank_provider.py`（并发峰值恰好 2、取消等待者不发出请求）。
 
 纯文本路径的新增等待时间目标为 P50 ≤ 2 秒、P95 ≤ 5 秒，属于验收目标，尚无本机测量结果。性能报告使用至少 50 个真实问题、单请求和双请求并发各执行三轮，分别报告首次调用和后续调用。图片路径单独记录核对耗时，不计作重排模型耗时。
 
