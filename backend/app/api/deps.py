@@ -15,11 +15,13 @@ import hashlib
 import json
 from functools import lru_cache
 from threading import RLock
+from typing import Any
 
 from app.core.config import settings
 from app.core.conversation_store import ConversationStore
 from app.core.settings_store import EmbedModelConfig, get_settings_store
 from app.core.workspace_store import WorkspaceStore
+from app.generation.chat_service import RerankRuntime
 from app.ingestion.image_state_store import ImageStateStore
 from app.ingestion.import_task import ImportTaskStore
 from app.ingestion.state_store import DocumentStateStore
@@ -118,6 +120,104 @@ def get_image_state_store() -> ImageStateStore:
     持久化：图片任务表（重启续跑）+ 图片描述缓存（跨 URL / 跨导入内容去重）。
     """
     return ImageStateStore(settings.data_dir / "image_state.db")
+
+
+def current_corpus_identity() -> str | None:
+    """当前语料身份哈希（PRD §6.5）：collection 结构版本 + 嵌入 fingerprint + 块 id 清单。
+
+    只读块 id，不读正文，因此结果可安全写进档案与设置页。取不到向量库或块清单时返回
+    ``None``（**不猜**）：调用方据此把「无从证明语料一致」保守地标为 ``needs_validation``。
+    调用点是设置页的状态快照与启用校验（低频用户动作），不在每轮问答路径上。
+    """
+
+    from app.retrieval.reranker import corpus_identity_hash
+    from app.vectorstore.chroma_store import INGESTION_SCHEMA_VERSION
+
+    try:
+        embedder = get_embedder()
+        store = get_vector_store()
+        block_ids = [str(block_id) for block_id, _text, _meta in store.list_blocks()]
+    except Exception:  # noqa: BLE001 -- 配置缺失 / 向量库不可用不得阻断设置页状态展示
+        return None
+    return corpus_identity_hash(
+        collection=f"ingestion-schema-v{INGESTION_SCHEMA_VERSION}",
+        embed_fingerprint=str(getattr(embedder, "fingerprint", "")),
+        block_ids=block_ids,
+    )
+
+
+def build_rerank_runtime() -> RerankRuntime:
+    """按当前设置组装筛选运行态（Provider + 档案快照）。
+
+    * 未启用 -> 空运行态（ChatService 走旧检索路径并在 meta 标 ``disabled``）；
+    * 已启用但配置不可用（缺 endpoint/模型/密钥/档案、档案失配或非 validated）
+      -> ``config_error_code``，ChatService 终止本轮并指向设置，**不静默回落**旧路径；
+    * 可用 -> 构造真实 Provider 与档案快照。
+
+    只读设置与本地档案文件；不发起任何外呼（外呼只在真实问答/连接测试时发生）。
+    """
+
+    from app.core.settings_store import (
+        RerankProfileStore,
+        get_settings_store,
+        validate_rerank_enable,
+    )
+    from app.retrieval.rerank_provider import SiliconFlowRerankProvider
+    from app.retrieval.reranker import RerankError, RerankProviderType
+
+    rerank = get_settings_store().load().rerank
+    if not rerank.enabled:
+        return RerankRuntime()
+    if str(rerank.provider_type) != str(RerankProviderType.SILICONFLOW_RERANK):
+        return RerankRuntime(
+            config_error_code="RERANK_PROFILE_MISMATCH",
+            config_error_message="当前版本只支持已验收的筛选服务类型，请在设置中重新选择",
+        )
+    profiles = RerankProfileStore.for_data_dir(settings.data_dir).load()
+    try:
+        profile = validate_rerank_enable(rerank, profiles)
+    except RerankError as exc:
+        return RerankRuntime(
+            config_error_code=exc.code.value,
+            config_error_message=exc.user_message,
+        )
+    except Exception:  # noqa: BLE001 -- 配置解析异常也不得阻断服务启动
+        return RerankRuntime(
+            config_error_code="RERANK_NOT_CONFIGURED",
+            config_error_message="筛选服务配置无效，请在设置中检查",
+        )
+    return RerankRuntime(
+        provider=SiliconFlowRerankProvider(
+            model=str(rerank.model or "").strip(),
+            api_key=rerank.api_key,
+            endpoint=rerank.endpoint,
+            instruction_text=profile.instruction_text,
+            connect_timeout_seconds=rerank.connect_timeout_seconds,
+            read_timeout_seconds=rerank.read_timeout_seconds,
+            token_counter=_rerank_token_counter(),
+        ),
+        profile=profile,
+        config_error_code=None,
+    )
+
+
+@lru_cache(maxsize=1)
+def _rerank_token_counter() -> Any | None:
+    """可选的 token 计数函数（PRD §6.3：token 数不能用字符数替代）。
+
+    只有能拿到成熟 tokenizer 时才提供；拿不到返回 ``None``，让 Provider 在能力声明了限制时
+    显式拒绝构造——绝不退化成按字符数估算。
+    """
+
+    try:
+        import tiktoken  # type: ignore[import-not-found]
+    except ImportError:
+        return None
+    try:
+        encoding = tiktoken.get_encoding("cl100k_base")
+    except Exception:  # noqa: BLE001 -- 离线环境取不到编码表时不提供计数函数
+        return None
+    return lambda text: len(encoding.encode(text))
 
 
 def resume_pending_image_tasks() -> int:

@@ -5,7 +5,8 @@ from __future__ import annotations
 import asyncio
 import json
 from collections.abc import AsyncIterator, Callable
-from dataclasses import replace
+from dataclasses import dataclass, field, replace
+from time import perf_counter
 from typing import Any
 
 from app.generation.base import ChatChunk, ChatModel, VisionModel
@@ -27,11 +28,21 @@ from app.generation.vision import CHAT_IMAGE_PROMPT
 from app.ingestion.image_fetch import resolve_image_bytes
 from app.ingestion.image_preprocess import preprocess_image
 from app.memory.retriever import MemoryRetriever
+from app.retrieval.evidence_view import HeadingLookup, RetrievalScope, build_chunk_views
 from app.retrieval.query_transform import (
     QueryVariant,
     build_query_variants,
     extract_identifier_definition_subjects,
 )
+from app.retrieval.relevance_selector import score_candidates, select_from_scores
+from app.retrieval.reranker import (
+    RerankError,
+    RerankProfile,
+    RerankProvider,
+    SelectionResult,
+    SelectionStatus,
+)
+from app.retrieval.trace import RelevanceTrace, build_relevance_trace, new_trace_id
 from app.retrieval.vector_retriever import RetrievalError, RetrievedChunk, VectorRetriever
 from app.search.base import SearchError, SearchProvider, SearchResult
 from app.vectorstore.embedder import Embedder
@@ -41,6 +52,90 @@ _CHAT_ERROR_MESSAGE = "对话服务暂时不可用，请稍后重试"
 _WEB_SEARCH_ERROR_MESSAGE = "联网搜索暂时不可用，请稍后重试"
 _WEB_SEARCH_UNCONFIGURED_MESSAGE = "联网搜索未配置，请在设置中启用并配置搜索服务"
 _CATALOG_ERROR_MESSAGE = "知识概览暂时不可用，请稍后重试"
+_RERANK_ERROR_MESSAGE = "资料相关性筛选失败，本轮未生成答案"
+_RERANK_UNCONFIGURED_MESSAGE = "资料相关性筛选已启用但未正确配置，请在设置中检查"
+
+#: meta.retrieval.status（PRD §8.2）：filtered / empty / disabled 之外，
+#: 「筛选服务失败」与「用户取消」是终止本轮的原因，不能伪装成 empty。
+_RETRIEVAL_STATUS_FILTERED = "filtered"
+_RETRIEVAL_STATUS_EMPTY = "empty"
+_RETRIEVAL_STATUS_DISABLED = "disabled"
+_RETRIEVAL_STATUS_FAILED = "failed"
+_RETRIEVAL_STATUS_CANCELLED = "cancelled"
+
+
+@dataclass
+class _RetrievalOutcome:
+    """一轮知识证据的最终结果：状态 + 可用于生成与来源面板的同一份证据。"""
+
+    status: str
+    chunks: list[RetrievedChunk]
+    profile_id: str = ""
+    candidate_count: int = 0
+    error_code: str | None = None
+    error_message: str | None = None
+    #: 诊断：候选块里查不到标题的数量（「有标题却取不到」必须可观测，PRD §9）。
+    missing_headings: int = 0
+    #: 诊断：缺失来源三类拆分（缺键 / 键为空 / 调用方漏传查表）。
+    heading_diagnostics: dict[str, int] = field(default_factory=dict)
+    #: 诊断：本轮相关性筛选的脱敏 trace（PRD §9；未启用筛选时为 None）。
+    trace: RelevanceTrace | None = None
+    #: 诊断（PRD §5.5 过渡期）：本轮**本该按 §5.5 核对原图、却因筛选路径未核对**的图片视图
+    #: 数量。筛选路径下禁止在评分后改写正文（A07），因此本轮宁可不核对——但必须显式可见，
+    #: 绝不静默当作已核对。完整 §5.5（核对 → 替换视图 → 重评一次 → 真实排除原因）归 T25。
+    image_not_verified: int = 0
+
+    @property
+    def selected_count(self) -> int:
+        return len(self.chunks)
+
+    def meta_dict(self) -> dict[str, Any]:
+        payload = {
+            "status": self.status,
+            "profile_id": self.profile_id,
+            "candidate_count": self.candidate_count,
+            "selected_count": self.selected_count,
+        }
+        if self.trace is not None:
+            # PRD §8.2：meta.retrieval 带 trace_id，便于按 id 取脱敏 trace 复现选择过程。
+            payload["trace_id"] = self.trace.trace_id
+        if self.missing_headings:
+            # 诊断可见性（PRD §9）：「有标题却取不到」不能静默。
+            payload["missing_headings"] = self.missing_headings
+            # 缺失来源三类分开（缺键 / 键为空 / 调用方漏传查表），便于定位是 ingestion
+            # 没写还是取值路径分叉。
+            for key in ("heading_missing_key", "heading_blank_value", "heading_lookup_absent"):
+                value = int(self.heading_diagnostics.get(key, 0))
+                if value:
+                    payload[key] = value
+        if self.image_not_verified:
+            # PRD §5.5 过渡期：本该核对却未核对的原图证据必须显式可见（不得静默当成已核对）。
+            payload["image_not_verified"] = self.image_not_verified
+        return payload
+
+
+@dataclass(frozen=True)
+class RerankRuntime:
+    """一轮可用的筛选运行态：Provider + 档案快照，或明确的配置错误。
+
+    ``config_error_code`` 非空表示「用户已启用但配置不可用」——此时必须终止本轮并指向设置，
+    绝不静默回落到未筛选的旧路径（PRD §8.4：禁止静默返回未筛选内容）。
+    """
+
+    provider: RerankProvider | None = None
+    profile: RerankProfile | None = None
+    config_error_code: str | None = None
+    config_error_message: str | None = None
+
+    @property
+    def enabled(self) -> bool:
+        return self.provider is not None and self.profile is not None
+
+    @property
+    def configured(self) -> bool:
+        """用户是否启用了本功能（无论配置是否可用）。"""
+
+        return self.enabled or self.config_error_code is not None
 
 
 class ChatService:
@@ -58,6 +153,10 @@ class ChatService:
         knowledge_overview: KnowledgeOverview | Callable[[], KnowledgeOverview] | None = None,
         image_reader: Callable[[RetrievedChunk, str], str] | None = None,
         memory_retriever: MemoryRetriever | None = None,
+        rerank_provider: RerankProvider | None = None,
+        rerank_profile: RerankProfile | Callable[[], RerankProfile | None] | None = None,
+        rerank_scope: Any | Callable[[], Any] | None = None,
+        rerank_runtime: RerankRuntime | Callable[[], RerankRuntime] | None = None,
     ) -> None:
         self._embedder = embedder
         self._retriever = retriever
@@ -68,11 +167,25 @@ class ChatService:
         self._image_reader = image_reader
         self._memory_retriever = memory_retriever
         self._preferences = preferences or AnswerPreferences()
+        self._rerank_provider = rerank_provider
+        self._rerank_profile_snapshot = rerank_profile
+        self._rerank_scope = rerank_scope
+        self._rerank_runtime: Callable[[], RerankRuntime] | None = (
+            None if rerank_runtime is None else (
+                rerank_runtime if callable(rerank_runtime) else (lambda: rerank_runtime)
+            )
+        )
         if callable(knowledge_overview):
             self._knowledge_overview_provider = knowledge_overview
         else:
             snapshot = knowledge_overview or KnowledgeOverview()
             self._knowledge_overview_provider = lambda: snapshot
+
+    @property
+    def rerank_enabled(self) -> bool:
+        """相关性筛选是否可用（未配置 provider/档案时保持旧检索路径）。"""
+
+        return self._resolve_rerank_runtime().enabled
 
     async def stream_answer(
         self,
@@ -107,63 +220,96 @@ class ChatService:
 
         chunks: list[RetrievedChunk] = []
         memory_chunks: list[RetrievedChunk] = []
+        retrieval = _RetrievalOutcome(_RETRIEVAL_STATUS_DISABLED, [])
+        #: 本轮证据是否来自相关性筛选（评分）路径。评分路径下**禁止**再改写正文：生成上下文与
+        #: 来源面板必须逐字等于被评分的文本（PRD §5.5 过渡期保护，A07）。
+        scored_evidence = False
         if mode is QueryMode.CONTENT_QA:
             try:
                 variants, vectors = self._embed_query_variants(message)
-                chunks = self._retrieve_context(variants, vectors)
             except (RetrievalError, ChatProviderError) as exc:
                 yield _error_frame(str(exc))
                 return
             except Exception:  # noqa: BLE001 -- 嵌入器为 Protocol，异常不可枚举
                 yield _error_frame(_EMBED_ERROR_MESSAGE)
                 return
+
+            if self._resolve_rerank_runtime().configured:
+                # 评分期间不得生成正式答案：先通过 SSE 报告进度，再执行筛选。
+                yield _tool_frame("rerank", "running")
+                retrieval = await self._retrieve_with_rerank(message, variants, vectors)
+                chunks = list(retrieval.chunks)
+                if retrieval.status in (
+                    _RETRIEVAL_STATUS_FAILED,
+                    _RETRIEVAL_STATUS_CANCELLED,
+                ):
+                    yield _tool_frame("rerank", "error")
+                    yield _error_frame(
+                        retrieval.error_message
+                        or (_RERANK_UNCONFIGURED_MESSAGE
+                            if retrieval.error_code == "RERANK_NOT_CONFIGURED"
+                            else _RERANK_ERROR_MESSAGE)
+                    )
+                    return
+                yield _tool_frame("rerank", "done")
+                scored_evidence = True
+            else:
+                try:
+                    chunks = self._retrieve_context(variants, vectors)
+                except (RetrievalError, ChatProviderError) as exc:
+                    yield _error_frame(str(exc))
+                    return
+                except Exception:  # noqa: BLE001 -- 嵌入器为 Protocol，异常不可枚举
+                    yield _error_frame(_EMBED_ERROR_MESSAGE)
+                    return
             # 记忆走独立通路：自身失败静默降级，绝不阻断基于文档的问答。
             memory_chunks = self._retrieve_memories(vectors)
+            if retrieval.status == _RETRIEVAL_STATUS_DISABLED:
+                # 旧检索路径：状态标 disabled 并如实报告来源数量（不假装筛选过）。
+                retrieval = replace(retrieval, chunks=list(chunks))
 
         if self._image_reader and needs_image_verification(message):
-            indices: list[int] = []
-            seen_images: set[str] = set()
-            for index, chunk in enumerate(chunks):
-                if chunk.chunk_type != "image_description":
-                    continue
-                identity = str((chunk.metadata or {}).get("image_content_hash") or (chunk.metadata or {}).get("image_path") or chunk.block_id)
-                if identity in seen_images:
-                    continue
-                seen_images.add(identity)
-                indices.append(index)
-                if len(indices) == 2:
-                    break
-            if indices:
-                yield _tool_frame("image_verify", "running")
-                results = await asyncio.gather(
-                    *(asyncio.to_thread(self._image_reader, chunks[i], message) for i in indices),
-                    return_exceptions=True,
-                )
-                verified_headings: set[tuple[str, str | None]] = set()
-                for index, result in zip(indices, results, strict=True):
-                    chunk = chunks[index]
-                    if isinstance(result, BaseException):
-                        context = "原图暂时无法核对，以下识别数字不可视为已验证。\n" + (chunk.context_text or chunk.text)
-                    else:
-                        # Do not mix possibly-wrong old OCR numbers into newly verified evidence.
-                        context = f"标题：{chunk.heading_path or ''}\n按本轮问题读取的原图证据：\n{result}"
-                    metadata = chunk.metadata or {}
-                    identity = metadata.get("image_content_hash") or metadata.get("image_path") or chunk.block_id
-                    for alias_index, alias in enumerate(chunks):
-                        alias_meta = alias.metadata or {}
-                        alias_identity = alias_meta.get("image_content_hash") or alias_meta.get("image_path") or alias.block_id
-                        if alias.chunk_type == "image_description" and identity == alias_identity:
-                            chunks[alias_index] = replace(alias, context_text=context)
-                            if not isinstance(result, BaseException):
-                                verified_headings.add((alias.source_file, alias.heading_path))
-                # Hydration may have copied the old image into an adjacent text source as well.
-                # Retain that source's prose, but use the verified image source for visual facts.
-                for index, chunk in enumerate(chunks):
-                    if (chunk.chunk_type != "image_description" and chunk.context_text
-                            and (chunk.source_file, chunk.heading_path) in verified_headings):
-                        chunks[index] = replace(chunk, context_text=chunk.context_text.split(
-                            "\n\n同标题图片信息：", 1)[0])
-                yield _tool_frame("image_verify", "done")
+            image_indices = _distinct_image_indices(chunks)
+            if scored_evidence:
+                # PRD §5.5 过渡期保护（完整 T25 归后续批次）：筛选路径下**禁止**在评分后改写
+                # 正文——生成上下文与来源面板都读 ``context_text``，一旦改写，发送的文本就不再
+                # 是被评分的文本（A07 失效）。因此本轮宁可不做核对，但必须显式记录「未核对」，
+                # 绝不静默把它当成已核对。
+                if image_indices:
+                    retrieval = replace(retrieval, image_not_verified=len(image_indices))
+            else:
+                indices = image_indices[:2]  # §5.5：最多核对两张
+                if indices:
+                    yield _tool_frame("image_verify", "running")
+                    results = await asyncio.gather(
+                        *(asyncio.to_thread(self._image_reader, chunks[i], message) for i in indices),
+                        return_exceptions=True,
+                    )
+                    verified_headings: set[tuple[str, str | None]] = set()
+                    for index, result in zip(indices, results, strict=True):
+                        chunk = chunks[index]
+                        if isinstance(result, BaseException):
+                            context = "原图暂时无法核对，以下识别数字不可视为已验证。\n" + (chunk.context_text or chunk.text)
+                        else:
+                            # Do not mix possibly-wrong old OCR numbers into newly verified evidence.
+                            context = f"标题：{chunk.heading_path or ''}\n按本轮问题读取的原图证据：\n{result}"
+                        metadata = chunk.metadata or {}
+                        identity = metadata.get("image_content_hash") or metadata.get("image_path") or chunk.block_id
+                        for alias_index, alias in enumerate(chunks):
+                            alias_meta = alias.metadata or {}
+                            alias_identity = alias_meta.get("image_content_hash") or alias_meta.get("image_path") or alias.block_id
+                            if alias.chunk_type == "image_description" and identity == alias_identity:
+                                chunks[alias_index] = replace(alias, context_text=context)
+                                if not isinstance(result, BaseException):
+                                    verified_headings.add((alias.source_file, alias.heading_path))
+                    # Hydration may have copied the old image into an adjacent text source as well.
+                    # Retain that source's prose, but use the verified image source for visual facts.
+                    for index, chunk in enumerate(chunks):
+                        if (chunk.chunk_type != "image_description" and chunk.context_text
+                                and (chunk.source_file, chunk.heading_path) in verified_headings):
+                            chunks[index] = replace(chunk, context_text=chunk.context_text.split(
+                                "\n\n同标题图片信息：", 1)[0])
+                    yield _tool_frame("image_verify", "done")
 
         web_results: list[SearchResult] = []
         # 产品说明和全库概览由本地可信结构提供，不把问题外发，也不让 Web 覆盖产品事实。
@@ -203,7 +349,14 @@ class ChatService:
             # An ambiguous acronym must not silently fall back to model memory after retrieval
             # established that the user's own corpus has no explicit definition.
             basis = AnswerBasis.INSUFFICIENT
-        meta = self._meta_frame(chunks, web_results, mode, basis, memory_chunks=memory_chunks)
+        meta = self._meta_frame(
+            chunks,
+            web_results,
+            mode,
+            basis,
+            memory_chunks=memory_chunks,
+            retrieval=retrieval,
+        )
 
         try:
             stream = self._chat_model.stream_chat(
@@ -309,6 +462,247 @@ class ChatService:
             return retrieve_variants(variants, vectors)
         return self._retriever.retrieve(variants[0].text, vectors[0])
 
+    # ---------------------------------------------------------------- 相关性筛选接入
+
+    async def _retrieve_with_rerank(
+        self,
+        message: str,
+        variants: tuple[QueryVariant, ...],
+        vectors: list[list[float]],
+    ) -> _RetrievalOutcome:
+        """启用筛选时的证据通路（PRD §5.1/§8.2）。
+
+        本轮开始即固定配置快照，筛选期间不生成正式答案；失败/取消以状态返回，
+        由调用方转成 SSE 终止事件，绝不静默回落到未筛选上下文。
+        """
+
+        runtime = self._resolve_rerank_runtime()
+        if runtime.config_error_code is not None:
+            # 用户已启用但配置不可用：终止本轮并指向设置，绝不静默回落旧路径。
+            return _RetrievalOutcome(
+                _RETRIEVAL_STATUS_FAILED,
+                [],
+                profile_id="",
+                error_code=runtime.config_error_code,
+                error_message=runtime.config_error_message
+                or _RERANK_UNCONFIGURED_MESSAGE,
+            )
+        profile = runtime.profile
+        provider = runtime.provider
+        if profile is None or provider is None:
+            return _RetrievalOutcome(
+                _RETRIEVAL_STATUS_FAILED,
+                [],
+                error_code="RERANK_NOT_CONFIGURED",
+                error_message=_RERANK_UNCONFIGURED_MESSAGE,
+            )
+
+        scope = self._selector_scope()
+        started = perf_counter()
+        # 召回与评分都含同步 I/O（ANN 查询 / 真实 HTTP），必须离开事件循环。
+        chunks = await asyncio.to_thread(self._retrieve_context, variants, vectors)
+        heading_lookup = self._heading_lookup()
+        views: list[Any] = []
+        source_chunks: dict[str, RetrievedChunk] = {}
+        for chunk in chunks:
+            for view in build_chunk_views(
+                chunk,
+                scope,
+                include_structure_views=False,
+                heading_lookup=heading_lookup,
+            ):
+                # 同一逻辑视图只保留第一个：原始块顺序即候选阶段顺序。
+                if view.candidate_id in source_chunks:
+                    continue
+                views.append(view)
+                source_chunks[view.candidate_id] = chunk
+        missing_headings = heading_lookup.missing if heading_lookup is not None else 0
+        heading_diagnostics: dict[str, int] = {}
+        if heading_lookup is not None and missing_headings:
+            stats = heading_lookup.stats()
+            heading_diagnostics = {
+                "heading_missing_key": stats.get("missing_key", 0),
+                "heading_blank_value": stats.get("blank_value", 0),
+                "heading_lookup_absent": stats.get("lookup_absent", 0),
+            }
+        elif heading_lookup is None:
+            # 没有查表能力却需要标题：隐性口径分叉，必须可诊断。
+            heading_diagnostics = {"heading_lookup_absent": len(chunks)}
+
+        # 显式评分再筛选：同一批分数既用于最终选择，也用于来源面板的 rerank_score
+        # （避免为取分数把同一批候选重复提交给 Provider）。
+        try:
+            outcome = await score_candidates(
+                query=message,
+                candidates=views,
+                profile=profile,
+                provider=provider,
+                scope=scope,
+            )
+        except RerankError as error:
+            return _RetrievalOutcome(
+                _RETRIEVAL_STATUS_FAILED,
+                [],
+                profile_id=profile.profile_id,
+                error_code=error.code.value,
+                error_message=error.user_message,
+                missing_headings=missing_headings,
+                heading_diagnostics=heading_diagnostics,
+                trace=_trace_for(
+                    scope=scope,
+                    profile_id=profile.profile_id,
+                    views=views,
+                    status=_RETRIEVAL_STATUS_FAILED,
+                    error_code=error.code.value,
+                    total_latency_ms=_elapsed_ms(started),
+                    missing_headings=missing_headings,
+                ),
+            )
+        selection = select_from_scores(
+            candidates=views,
+            scores=outcome.score_by_id,
+            profile=profile,
+        )
+        trace = _trace_for(
+            scope=scope,
+            profile_id=profile.profile_id,
+            views=views,
+            selection=selection,
+            scores=outcome.score_by_id,
+            provider_trace_id=outcome.trace_id,
+            request_id=outcome.request_id,
+            usage=getattr(outcome, "usage", None),
+            rerank_latency_ms=outcome.latency_ms,
+            total_latency_ms=_elapsed_ms(started),
+            missing_headings=missing_headings,
+        )
+        return replace(
+            self._outcome_from_selection(
+                selection,
+                source_chunks,
+                profile_id=profile.profile_id,
+                scores=outcome.score_by_id,
+            ),
+            missing_headings=missing_headings,
+            heading_diagnostics=heading_diagnostics,
+            trace=trace,
+        )
+
+    def _heading_lookup(self) -> HeadingLookup | None:
+        """本轮的标题查表：真实索引的标题在块元数据 ``heading_path`` 里。
+
+        取不到时返回 ``None``（视图标题留空，绝不猜标题）；统计缺失数量用于诊断
+        「哪种块缺标题、缺多少」。
+        """
+
+        vectorstore = getattr(self._retriever, "_vectorstore", None)
+        if vectorstore is None:
+            return None
+        try:
+            return HeadingLookup.for_vectorstore(vectorstore)
+        except Exception:  # noqa: BLE001 -- 元数据不可读时降级为空标题，不阻断问答
+            return None
+
+    def _resolve_rerank_runtime(self) -> RerankRuntime:
+        """本轮筛选运行态快照（PRD §9：切换配置不影响已经固定快照的请求）。"""
+
+        if self._rerank_runtime is not None:
+            try:
+                runtime = self._rerank_runtime()
+            except Exception:  # noqa: BLE001 -- 运行态解析异常收敛为配置错误
+                return RerankRuntime(
+                    config_error_code="RERANK_NOT_CONFIGURED",
+                    config_error_message=_RERANK_UNCONFIGURED_MESSAGE,
+                )
+            if isinstance(runtime, RerankRuntime):
+                return runtime
+            return RerankRuntime(
+                config_error_code="RERANK_NOT_CONFIGURED",
+                config_error_message=_RERANK_UNCONFIGURED_MESSAGE,
+            )
+        if self._rerank_provider is None and self._rerank_profile_snapshot is None:
+            return RerankRuntime()
+        profile = self._resolve_rerank_profile()
+        provider = self._rerank_provider
+        if provider is not None and profile is not None:
+            return RerankRuntime(provider=provider, profile=profile)
+        # 只给了一半配置：不静默回落旧路径，按「已启用但配置不可用」处理。
+        return RerankRuntime(
+            config_error_code="RERANK_NOT_CONFIGURED",
+            config_error_message=_RERANK_UNCONFIGURED_MESSAGE,
+        )
+
+    def _resolve_rerank_profile(self) -> RerankProfile | None:
+        """解析本轮档案快照；配置缺失或解析失败返回 ``None``（转 failed，不回落旧路径）。"""
+
+        snapshot = self._rerank_profile_snapshot
+        if snapshot is None:
+            return None
+        if isinstance(snapshot, RerankProfile):
+            return snapshot
+        try:
+            resolved = snapshot()
+        except Exception:  # noqa: BLE001 -- 档案存储异常收敛为筛选失败
+            return None
+        return resolved if isinstance(resolved, RerankProfile) else None
+
+    def _selector_scope(self) -> Any:
+        """本轮 scope 与知识版本；调用方未注入时按全局知识库显式标记。"""
+
+        from app.retrieval.evidence_view import index_revision_for
+
+        scope = self._rerank_scope
+        if callable(scope):
+            scope = scope()
+        if isinstance(scope, RetrievalScope):
+            return scope
+        vectorstore = getattr(self._retriever, "_vectorstore", None)
+        return RetrievalScope(
+            scope_id="global",
+            index_revision=index_revision_for(vectorstore) if vectorstore is not None else "unknown-index",
+        )
+
+    def _outcome_from_selection(
+        self,
+        selection: SelectionResult,
+        source_chunks: dict[str, RetrievedChunk],
+        *,
+        profile_id: str,
+        scores: dict[str, float] | None = None,
+    ) -> _RetrievalOutcome:
+        if selection.status is SelectionStatus.SELECTED:
+            return _RetrievalOutcome(
+                _RETRIEVAL_STATUS_FILTERED,
+                _selected_chunks(selection, source_chunks, profile_id=profile_id, scores=scores),
+                profile_id=profile_id,
+                candidate_count=selection.candidate_count,
+            )
+        if selection.status is SelectionStatus.EMPTY:
+            return _RetrievalOutcome(
+                _RETRIEVAL_STATUS_EMPTY,
+                [],
+                profile_id=profile_id,
+                candidate_count=selection.candidate_count,
+            )
+        if selection.status is SelectionStatus.CANCELLED:
+            return _RetrievalOutcome(
+                _RETRIEVAL_STATUS_CANCELLED,
+                [],
+                profile_id=profile_id,
+                candidate_count=selection.candidate_count,
+                error_code="CANCELLED",
+                error_message="本轮生成已取消",
+            )
+        error = selection.error
+        return _RetrievalOutcome(
+            _RETRIEVAL_STATUS_FAILED,
+            [],
+            profile_id=profile_id,
+            candidate_count=selection.candidate_count,
+            error_code=error.code.value if error is not None else "RERANK_INVALID_RESPONSE",
+            error_message=error.user_message if error is not None else _RERANK_ERROR_MESSAGE,
+        )
+
     def _describe_images(self, images: list[str]) -> list[str]:
         """把每张图转成文字描述；单张失败降级，不阻塞整轮。"""
 
@@ -337,11 +731,13 @@ class ChatService:
         mode: QueryMode,
         basis: AnswerBasis,
         memory_chunks: list[RetrievedChunk] | None = None,
+        retrieval: _RetrievalOutcome | None = None,
     ) -> dict[str, Any]:
         sources = [
             {
                 "source_id": f"S{index}",
                 "block_id": chunk.block_id,
+                # 生成上下文与来源面板必须使用同一份已接受检查的文本（PRD §5.3/§8.3）。
                 "text": chunk.context_text or chunk.text,
                 "source_file": chunk.source_file,
                 "similarity": chunk.similarity,
@@ -352,6 +748,7 @@ class ChatService:
                 "platform": chunk.platform,
                 "source_type": "knowledge",
                 "image_url": self._source_image_url(chunk),
+                **_relevance_source_fields(chunk),
             }
             for index, chunk in enumerate(chunks, start=1)
         ]
@@ -395,13 +792,17 @@ class ChatService:
                     "quote": metadata.get("quote"),
                 }
             )
-        return {
+        frame: dict[str, Any] = {
             "type": "meta",
             "sources": sources,
             "answer_basis": basis.value,
             "policy_version": POLICY_VERSION,
             "query_mode": mode.value,
         }
+        if retrieval is not None and mode is QueryMode.CONTENT_QA:
+            # 可选 meta.retrieval（PRD §8.2）：仅 CONTENT_QA 报告筛选状态与计数。
+            frame["retrieval"] = retrieval.meta_dict()
+        return frame
 
 
 def _build_messages(
@@ -511,6 +912,165 @@ def _knowledge_context_text(chunk: RetrievedChunk) -> str:
     if heading:
         return f"标题：{heading}\n内容：{chunk.text}"
     return chunk.text
+
+
+#: 来源面板中「已筛选资料」相关的元数据键（PRD §8.3/§9）。
+_RELEVANCE_METADATA_KEYS = (
+    "relevance_checked",
+    "rerank_score",
+    "score_type",
+    "profile_id",
+    "evidence_hash",
+    "member_refs",
+)
+
+
+def _distinct_image_indices(chunks: list[RetrievedChunk]) -> list[int]:
+    """按图片身份去重后的 ``image_description`` 块下标（PRD §5.5，顺序即上下文顺序）。
+
+    身份取 ``image_content_hash`` → ``image_path`` → ``block_id`` 的降级链：同一张图可能以
+    多条块出现，去重后才是「图片」这个粒度（§5.5 的「最多核对两张」按图片数计）。
+    """
+
+    indices: list[int] = []
+    seen: set[str] = set()
+    for index, chunk in enumerate(chunks):
+        if chunk.chunk_type != "image_description":
+            continue
+        metadata = chunk.metadata or {}
+        identity = str(
+            metadata.get("image_content_hash") or metadata.get("image_path") or chunk.block_id
+        )
+        if identity in seen:
+            continue
+        seen.add(identity)
+        indices.append(index)
+    return indices
+
+
+def _source_chunk(
+    original: RetrievedChunk | None,
+    view: Any,
+    *,
+    profile_id: str = "",
+    rerank_score: float | None = None,
+) -> RetrievedChunk:
+    """把入选证据视图投影回 ``RetrievedChunk``。
+
+    ``context_text`` 一律写为视图的 ``evidence_text``：生成上下文（``_knowledge_context_text``）
+    与来源面板（``_meta_frame``）都读 ``context_text or text``，因此两处必然使用同一份
+    已经接受检查的原文——旧的同标题补充文字不会因 hydration 重新进入本轮输入（PRD §5.3/C06）。
+    向量相似度保持原值，重排分数只放进独立字段（不得改写 ``similarity`` 语义）。
+    """
+
+    metadata = dict(original.metadata) if original is not None else {}
+    similarity = getattr(original, "similarity", None)
+    metadata.update(
+        {
+            "relevance_checked": True,
+            "rerank_score": rerank_score,
+            "score_type": "rerank",
+            "profile_id": profile_id,
+            "evidence_hash": getattr(view, "payload_hash", None),
+            "member_refs": [member.to_dict() for member in getattr(view, "member_refs", ())],
+            "scope_id": getattr(view, "scope_id", ""),
+            "index_revision": getattr(view, "index_revision", ""),
+            "view_kind": str(getattr(view, "view_kind", "block")),
+        }
+    )
+    metadata.pop("image_path", None)
+    metadata.pop("image_content_hash", None)
+    return RetrievedChunk(
+        block_id=str(getattr(view, "primary_block_id", "") or getattr(view, "block_id", "")),
+        text=str(getattr(view, "evidence_text", "")),
+        similarity=similarity if isinstance(similarity, (int, float)) else None,
+        source_file=(
+            getattr(original, "source_file", "")
+            or str(getattr(view, "source_file", "") or "")
+        ),
+        platform=getattr(original, "platform", "local") or "local",
+        chunk_type=getattr(original, "chunk_type", "text") or "text",
+        anchor=getattr(original, "anchor", None),
+        # 标题优先取视图值：候选对象常常不带标题，而视图已按块元数据补齐（PRD §5.3）。
+        heading_path=(
+            str(getattr(view, "heading_path", "") or "")
+            or getattr(original, "heading_path", None)
+        ),
+        metadata=metadata,
+        match_type="rerank",
+        context_text=str(getattr(view, "evidence_text", "")),
+    )
+
+
+def _selected_chunks(
+    selection: SelectionResult,
+    source_chunks: dict[str, RetrievedChunk],
+    *,
+    profile_id: str = "",
+    scores: dict[str, float] | None = None,
+) -> list[RetrievedChunk]:
+    """按最终顺序把入选视图投影成 ``RetrievedChunk``（分数取自本次评分记录）。"""
+
+    resolved = scores or {}
+    return [
+        _source_chunk(
+            source_chunks.get(str(view.candidate_id)),
+            view,
+            profile_id=profile_id,
+            rerank_score=resolved.get(str(view.candidate_id)),
+        )
+        for view in selection.selected
+    ]
+
+
+def _relevance_source_fields(chunk: RetrievedChunk) -> dict[str, Any]:
+    """来源面板的「已筛选资料」可选字段（未启用筛选的来源保持原字段）。"""
+
+    if not chunk.metadata or not chunk.metadata.get("relevance_checked"):
+        return {}
+    return {key: chunk.metadata.get(key) for key in _RELEVANCE_METADATA_KEYS}
+
+
+def _elapsed_ms(started: float) -> float:
+    """自 ``perf_counter`` 起点起经过的毫秒数（≥0）。"""
+
+    return max(0.0, (perf_counter() - started) * 1000.0)
+
+
+def _trace_for(
+    *,
+    scope: Any,
+    profile_id: str,
+    views: list[Any],
+    selection: Any | None = None,
+    scores: dict[str, float] | None = None,
+    provider_trace_id: str | None = None,
+    request_id: str | None = None,
+    usage: Any = None,
+    rerank_latency_ms: float | None = None,
+    total_latency_ms: float | None = None,
+    status: str | None = None,
+    error_code: str | None = None,
+    missing_headings: int = 0,
+) -> RelevanceTrace:
+    """构造本轮脱敏诊断 trace（PRD §9）：只有引用、枚举、计数与耗时。"""
+
+    return build_relevance_trace(
+        trace_id=new_trace_id(),
+        scope=scope,
+        profile_id=profile_id,
+        candidates=views,
+        selection=selection,
+        scores=scores,
+        status=status,
+        provider_trace_id=provider_trace_id,
+        request_id=request_id,
+        usage=usage,
+        rerank_latency_ms=rerank_latency_ms,
+        total_latency_ms=total_latency_ms,
+        error_code=error_code,
+        missing_headings=missing_headings,
+    )
 
 
 def _memory_context_text(chunk: RetrievedChunk) -> str:

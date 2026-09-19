@@ -15,7 +15,7 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
-from app.api.deps import get_embedder, get_image_state_store, get_vector_store
+from app.api.deps import build_rerank_runtime, get_embedder, get_image_state_store, get_vector_store
 from app.core.outbound import outbound_client
 from app.core.settings_store import (
     SettingsStore,
@@ -32,6 +32,7 @@ from app.generation.providers import (
     create_chat_model_from_config,
 )
 from app.generation.vision import VisionProviderError, create_vision_model_from_config
+from app.retrieval.evidence_view import RetrievalScope
 from app.retrieval.hybrid_retriever import HybridRetriever
 from app.retrieval.vector_retriever import DEFAULT_MIN_SIMILARITY
 from app.search.base import SearchError
@@ -100,6 +101,10 @@ def get_chat_service(
         preferences=app_settings.answer_preferences,
         # 仅知识概览问题才枚举全库元数据，普通问答不额外扫描 collection。
         knowledge_overview=lambda: build_knowledge_overview(vectorstore),
+        # 相关性筛选运行态按请求快照解析：未启用走旧路径并标 disabled；
+        # 已启用但配置不可用则终止本轮并指向设置（不静默回落）。
+        rerank_runtime=build_rerank_runtime,
+        rerank_scope=lambda: RetrievalScope.for_vectorstore(vectorstore),
     )
 
 
