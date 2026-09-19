@@ -188,3 +188,8 @@
 .settings-knowledge .knowledge-danger-zone { margin-top: 32px; padding-top: 28px; }
 .conversation-item:has(.conversation-match) { display: flex; flex-direction: column; align-items: stretch; gap: 5px; }
 .conversation-match { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; white-space: normal; color: var(--text-secondary); font-size: 11px; line-height: 1.5; }
+
+/* 资料相关性筛选（PRD §8.1）：状态徽标克制，日常页面不展示 RRF/tokenizer 等实现参数。 */
+.settings-badge { display: inline-flex; align-items: center; margin-left: 8px; padding: 2px 8px; border: 1px solid var(--border-strong); border-radius: 999px; color: var(--text-secondary); font-size: 11px; }
+.settings-rerank .settings-toggle { border-top: none; padding-top: 0; }
+.settings-rerank .settings-warning { margin: 0 0 16px; }

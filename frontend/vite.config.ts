@@ -25,6 +25,8 @@ function sseFixturePlugin(): Plugin {
           return;
         }
         const frames = [
+          // 相关性筛选进度帧（PRD §8.2）：真实顺序是 tool/rerank/running 先于 meta。
+          { type: "tool", tool: "rerank", status: "running" },
           {
             type: "meta",
             answer_basis: "knowledge",
@@ -45,6 +47,7 @@ function sseFixturePlugin(): Plugin {
         }
         // 之后不再吐字：客户端只能靠 abort 结束这一轮（模拟长回答生成中）
         const timer = setTimeout(() => {
+          response.write('data: {"type":"tool","tool":"rerank","status":"done"}\n\n');
           response.end('data: {"type":"done"}\n\n');
         }, SSE_FIXTURE_DELAY_MS);
         // 客户端断开（fetch abort）：Node 会在响应对象上抛出 EPIPE / ECONNRESET

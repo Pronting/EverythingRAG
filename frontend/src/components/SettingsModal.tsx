@@ -1,7 +1,22 @@
 import { useEffect, useRef, useState } from "react";
-import { deleteAvatar, getSettings, updateSettings, uploadAvatar } from "../api/settingsApi";
+import {
+  deleteAvatar,
+  getSettings,
+  testRerankConnection,
+  updateSettings,
+  uploadAvatar,
+} from "../api/settingsApi";
 import type { AvatarKind } from "../api/settingsApi";
-import type { StatusResponse, SettingsUpdate, SettingsView, ThemeValue, ToastType } from "../types";
+import type {
+  RerankProfileView,
+  RerankStatus,
+  RerankTestResult,
+  StatusResponse,
+  SettingsUpdate,
+  SettingsView,
+  ThemeValue,
+  ToastType,
+} from "../types";
 import BrandMark from "./BrandMark";
 import ArchiveSettings from "./ArchiveSettings";
 import KnowledgeSettings from "./KnowledgeSettings";
@@ -12,10 +27,37 @@ const SETTINGS_PAGES = [
   { id: "archive", label: "归档对话", icon: "M3 7h18v12H3zM3 3h18v4H3zM9 12h6" },
   { id: "appearance", label: "外观与头像", icon: "M12 3a9 9 0 1 0 9 9c0-1.5-1-2-2.5-2H16a2 2 0 0 1-2-2V5.5C14 4 13.5 3 12 3ZM7 10h.01M8 15h.01M12 17h.01" },
   { id: "models", label: "模型服务", icon: "M5 5h14v14H5zM9 9h6v6H9zM9 2v3m6-3v3M9 19v3m6-3v3M2 9h3m-3 6h3m14-6h3m-3 6h3" },
+  { id: "rerank", label: "相关性筛选", icon: "M10 4h10M10 12h7M10 20h4M4 4l1.6 1.6L8.4 2.6M4 12l1.6 1.6L8.4 10.6" },
   { id: "search", label: "联网搜索", icon: "M3 12h18M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18Zm0 0c5 5 5 13 0 18-5-5-5-13 0-18Z" },
   { id: "answers", label: "回答偏好", icon: "M4 5h16v12H9l-5 4V5Zm4 4h8m-8 4h5" },
 ] as const;
 type SettingsPage = typeof SETTINGS_PAGES[number]["id"];
+
+/** 设置页状态文案（PRD §8.1）；不展示 RRF / tokenizer 等实现参数。 */
+const RERANK_STATUS_LABELS: Record<RerankStatus, string> = {
+  disabled: "未启用",
+  not_configured: "缺少配置",
+  profile_mismatch: "档案不匹配",
+  invalid: "配置无效",
+  error: "配置异常",
+  needs_validation: "可用（档案需复测）",
+  ready: "已就绪",
+};
+
+/** 校准档案状态文案：只有「已验证」才是生产可用档案（PRD §6.5）。 */
+const RERANK_PROFILE_STATUS_LABELS: Record<RerankProfileView["status"], string> = {
+  candidate: "候选（未验收）",
+  quality_passed: "质量通过（未验收）",
+  validated: "已验证",
+};
+
+/** 验证日期展示：只给日期，缺失即「未验证」（不猜、不补）。 */
+function formatValidationDate(value: string | null): string {
+  if (value === null || value === "") return "未验证";
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return parsed.toISOString().slice(0, 10);
+}
 
 function ThemePreview({ mode }: { mode: ThemeValue }) {
   return <span className={`theme-preview theme-preview-${mode}`} aria-hidden="true">
@@ -198,6 +240,53 @@ export default function SettingsModal({
     } finally { setTestingModel(null); }
   };
 
+  // 资料相关性筛选表单（PRD §8.1）：启停、服务地址、模型、密钥、连接测试、档案与状态
+  const [rerankEnabled, setRerankEnabled] = useState(false);
+  const [rerankEndpoint, setRerankEndpoint] = useState("");
+  const [rerankModel, setRerankModel] = useState("");
+  const [rerankKey, setRerankKey] = useState("");
+  const [rerankKeyCleared, setRerankKeyCleared] = useState(false);
+  const [rerankKeySet, setRerankKeySet] = useState(false);
+  const [rerankKeyHint, setRerankKeyHint] = useState<string | null>(null);
+  const [rerankProfileId, setRerankProfileId] = useState("");
+  const [rerankProfiles, setRerankProfiles] = useState<RerankProfileView[]>([]);
+  const [rerankStatus, setRerankStatus] = useState<RerankStatus | null>(null);
+  const [rerankAcceptanceEnv, setRerankAcceptanceEnv] = useState(false);
+  const [rerankTesting, setRerankTesting] = useState(false);
+  const [rerankTestResult, setRerankTestResult] = useState<RerankTestResult | null>(null);
+  const rerankDialog = useRef<HTMLDialogElement>(null);
+
+  /**
+   * 相关性筛选连接测试：用未保存的表单值提交（服务端不持久化测试密钥）。
+   *
+   * 结果只说明服务可达且协议匹配，`quality_checked` 恒为 false —— 绝不当成质量验收通过。
+   */
+  const testRerank = async (): Promise<void> => {
+    if (rerankTesting) return;
+    setRerankTesting(true);
+    setRerankTestResult(null);
+    rerankDialog.current?.showModal();
+    try {
+      const endpoint = rerankEndpoint.trim();
+      const model = rerankModel.trim();
+      const result = await testRerankConnection({
+        ...(endpoint !== "" ? { endpoint } : {}),
+        ...(model !== "" ? { model } : {}),
+        ...(rerankProfileId !== "" ? { profile_id: rerankProfileId } : {}),
+        ...(rerankKey !== "" && !rerankKeyCleared ? { api_key: rerankKey } : {}),
+      });
+      setRerankTestResult(result);
+    } catch (cause) {
+      setRerankTestResult({
+        success: false,
+        quality_checked: false,
+        message: cause instanceof Error ? cause.message : "无法连接本地服务",
+      });
+    } finally {
+      setRerankTesting(false);
+    }
+  };
+
   // 联网搜索表单（Tavily）
   const [searchEnabled, setSearchEnabled] = useState(false);
   const [searchProvider, setSearchProvider] = useState<"tavily" | "searxng">("tavily");
@@ -245,6 +334,9 @@ export default function SettingsModal({
     setVisionKeyCleared(false);
     setSearchKey("");
     setSearchKeyCleared(false);
+    setRerankKey("");
+    setRerankKeyCleared(false);
+    setRerankTestResult(null);
     setAvatarUser(null);
     setAvatarAgent(null);
     setAvatarUserFile(null);
@@ -275,6 +367,16 @@ export default function SettingsModal({
         setSearchKeyHint(view.search?.api_key_hint ?? null);
         setSearchBaseUrl(view.search?.base_url ?? "");
         setSearchMaxResults(view.search?.max_results ?? 5);
+        // 相关性筛选：旧后端 / 旧配置缺少该段时按未启用处理（不伪造已配置）。
+        setRerankEnabled(view.rerank?.enabled ?? false);
+        setRerankEndpoint(view.rerank?.endpoint ?? "");
+        setRerankModel(view.rerank?.model ?? "");
+        setRerankKeySet(view.rerank?.api_key_set ?? false);
+        setRerankKeyHint(view.rerank?.api_key_hint ?? null);
+        setRerankProfileId(view.rerank?.profile_id ?? "");
+        setRerankProfiles(view.rerank?.profiles ?? []);
+        setRerankStatus(view.rerank?.status ?? "disabled");
+        setRerankAcceptanceEnv(view.rerank?.acceptance_env ?? false);
         setAnswerLanguage(view.answer_preferences.language);
         setAnswerVerbosity(view.answer_preferences.verbosity);
         setAnswerTone(view.answer_preferences.tone);
@@ -312,6 +414,10 @@ export default function SettingsModal({
     (embedBaseUrl !== (originalEmbed.base_url ?? "") ||
       embedModel !== (originalEmbed.model ?? ""));
 
+  /** 当前选中的校准档案（展示状态与验证日期；PRD §8.1）。 */
+  const selectedProfile =
+    rerankProfiles.find((profile) => profile.profile_id === rerankProfileId) ?? null;
+
   const handleSave = async (): Promise<void> => {
     // 嵌入：仅在填写时才校验/发送；未配置不应阻塞头像、主题等其它项保存。
     const embedBase = embedBaseUrl.trim();
@@ -333,6 +439,17 @@ export default function SettingsModal({
     if (visionPartiallyFilled) {
       setActivePage("models");
       const message = "识图模型需同时提供 Base URL 与模型名";
+      setError(message);
+      onNotify("error", message);
+      return;
+    }
+    // 相关性筛选：启用前先在本地校验必填项（服务端仍会独立校验并返回 422）。
+    const rerankEndpointT = rerankEndpoint.trim();
+    const rerankModelT = rerankModel.trim();
+    const rerankHasKey = rerankKey.trim() !== "" || (rerankKeySet && !rerankKeyCleared);
+    if (rerankEnabled && (!rerankEndpointT || !rerankModelT || !rerankHasKey || !rerankProfileId)) {
+      setActivePage("rerank");
+      const message = "启用资料相关性筛选需要服务地址、模型、API Key 与校准档案齐备";
       setError(message);
       onNotify("error", message);
       return;
@@ -382,6 +499,17 @@ export default function SettingsModal({
         },
         theme,
       };
+      // 相关性筛选：局部更新语义（省略 = 保留原值；api_key 空串 = 清除）。
+      // 旧配置缺少该段时这里首次写入；启用校验由服务端独立执行（失败返回 422 且不落盘）。
+      update.rerank = {
+        enabled: rerankEnabled,
+        ...(rerankEndpointT !== "" ? { endpoint: rerankEndpointT } : {}),
+        ...(rerankModelT !== "" ? { model: rerankModelT } : {}),
+        profile_id: rerankProfileId,
+        ...(rerankKey !== "" || rerankKeyCleared
+          ? { api_key: rerankKeyCleared ? "" : rerankKey }
+          : {}),
+      };
       // 嵌入仅在完整配置时发送（避免云端嵌入的必填校验阻塞其它项保存）
       if (embedBase !== "" && embedModelT !== "") {
         update.embed = {
@@ -425,6 +553,17 @@ export default function SettingsModal({
       setSearchProvider(savedView.search?.provider_type ?? "tavily");
       setSearchBaseUrl(savedView.search?.base_url ?? "");
       setSearchMaxResults(savedView.search?.max_results ?? 5);
+      setRerankEnabled(savedView.rerank?.enabled ?? false);
+      setRerankEndpoint(savedView.rerank?.endpoint ?? "");
+      setRerankModel(savedView.rerank?.model ?? "");
+      setRerankKeySet(savedView.rerank?.api_key_set ?? false);
+      setRerankKeyHint(savedView.rerank?.api_key_hint ?? null);
+      setRerankProfileId(savedView.rerank?.profile_id ?? "");
+      setRerankProfiles(savedView.rerank?.profiles ?? []);
+      setRerankStatus(savedView.rerank?.status ?? "disabled");
+      setRerankAcceptanceEnv(savedView.rerank?.acceptance_env ?? false);
+      setRerankKey("");
+      setRerankKeyCleared(false);
       setSearchKeySet(savedView.search?.api_key_set ?? false);
       setSearchKeyHint(savedView.search?.api_key_hint ?? null);
       setAnswerLanguage(savedView.answer_preferences.language);
@@ -466,6 +605,33 @@ export default function SettingsModal({
           {(testingModel || !connectionResult?.success) && <p role="status">{testingModel ? "正在请求模型服务" : connectionResult?.message}</p>}
           {!testingModel && connectionResult?.success && <p>响应耗时 {connectionResult.latency_ms} 毫秒</p>}
           <div className="knowledge-confirm-actions"><button type="button" className="model-test-button" onClick={() => connectionDialog.current?.close()}>关闭</button></div>
+        </dialog>
+        {/* 相关性筛选连接测试结果：只说明服务可达（quality_checked=false），不代表质量验收。 */}
+        <dialog ref={rerankDialog} className="knowledge-confirm connection-result" aria-labelledby="rerank-result-title" onKeyDown={(event) => event.stopPropagation()}>
+          <h3 id="rerank-result-title">
+            {rerankTesting
+              ? "正在测试筛选服务…"
+              : rerankTestResult?.success === true
+                ? "筛选服务连接成功"
+                : "筛选服务连接失败"}
+          </h3>
+          {rerankTesting && <p role="status">正在用固定公开文本请求筛选服务</p>}
+          {!rerankTesting && rerankTestResult !== null && rerankTestResult.success !== true && (
+            <p role="status">{rerankTestResult.message ?? "请检查服务地址、模型与 API Key"}</p>
+          )}
+          {!rerankTesting && rerankTestResult?.success === true && (
+            <>
+              <p>
+                模型 {rerankTestResult.model ?? rerankModel} · 耗时 {rerankTestResult.latency_ms ?? "—"} 毫秒 ·
+                返回 {rerankTestResult.scored_count ?? 0} 条排序分数
+              </p>
+              <p className="settings-warning">
+                连通成功只代表服务可达且响应结构可用（quality_checked=false），<b>不代表质量验收通过</b>，
+                也不代表相关性判断一定准确。
+              </p>
+            </>
+          )}
+          <div className="knowledge-confirm-actions"><button type="button" className="model-test-button" onClick={() => rerankDialog.current?.close()}>关闭</button></div>
         </dialog>
         <div className="settings-header">
           <div className="settings-heading"><h2>设置</h2></div>
@@ -694,6 +860,122 @@ export default function SettingsModal({
                   )}
                   </div>
                 </div>
+              </section>
+
+              <section className="settings-section settings-rerank" hidden={activePage !== "rerank"}>
+                {/* 资料相关性筛选（PRD §8.1）：只暴露用户需要决定的参数，不展示 RRF/tokenizer 等实现细节。 */}
+                <div className="settings-section-heading">
+                  <h3>资料相关性筛选</h3>
+                  <button
+                    type="button"
+                    className="model-test-button"
+                    disabled={rerankTesting}
+                    onClick={() => void testRerank()}
+                    aria-label="测试相关性筛选连接"
+                  >
+                    测试连接
+                  </button>
+                </div>
+                <label className="settings-field settings-toggle">
+                  <span>启用资料相关性筛选</span>
+                  <input
+                    type="checkbox"
+                    checked={rerankEnabled}
+                    onChange={(e) => setRerankEnabled(e.target.checked)}
+                    aria-label="启用资料相关性筛选"
+                  />
+                </label>
+                <p className="settings-hint">
+                  启用后，每轮问答会把「本轮问题 + 候选资料片段」发送到下面的服务地址做相关性排序，
+                  只用于决定哪些资料进入本轮回答；完整原文不会外发，未收录的私人正文也不会发送。
+                </p>
+                <label className="settings-field">
+                  <span>服务地址</span>
+                  <input
+                    type="text"
+                    value={rerankEndpoint}
+                    onChange={(e) => setRerankEndpoint(e.target.value)}
+                    placeholder="https://api.siliconflow.cn/v1/rerank"
+                    aria-label="筛选服务地址"
+                  />
+                </label>
+                <label className="settings-field">
+                  <span>模型名</span>
+                  <input
+                    type="text"
+                    value={rerankModel}
+                    onChange={(e) => setRerankModel(e.target.value)}
+                    placeholder="BAAI/bge-reranker-v2-m3"
+                    aria-label="筛选模型名"
+                  />
+                </label>
+                <div className="settings-field">
+                  <span>API Key</span>
+                  <div className="settings-key-row">
+                    <input
+                      type="password"
+                      value={rerankKey}
+                      onChange={(e) => {
+                        setRerankKey(e.target.value);
+                        setRerankKeyCleared(false);
+                      }}
+                      placeholder={rerankKeySet && !rerankKeyCleared ? "已设置" : "筛选服务 API Key"}
+                      aria-label="筛选服务 API Key"
+                    />
+                    {rerankKeySet && !rerankKeyCleared && !rerankKey && rerankKeyHint !== null && (
+                      <span className="settings-key-hint">{rerankKeyHint}</span>
+                    )}
+                    {rerankKeySet && !rerankKeyCleared && (
+                      <button
+                        type="button"
+                        className="settings-clear-key"
+                        onClick={() => {
+                          setRerankKey("");
+                          setRerankKeyCleared(true);
+                        }}
+                      >
+                        清除 Key
+                      </button>
+                    )}
+                  </div>
+                </div>
+                <label className="settings-field">
+                  <span>校准档案</span>
+                  <SettingsSelect
+                    value={rerankProfileId}
+                    onChange={(e) => setRerankProfileId(e.target.value)}
+                    aria-label="校准档案"
+                  >
+                    {rerankProfiles.length === 0
+                      ? [<option key="none" value="">暂无可用档案</option>]
+                      : rerankProfiles.map((profile) => (
+                          <option key={profile.profile_id} value={profile.profile_id}>
+                            {`${profile.profile_id}（${RERANK_PROFILE_STATUS_LABELS[profile.status] ?? profile.status}）`}
+                          </option>
+                        ))}
+                  </SettingsSelect>
+                </label>
+                <p className="settings-hint">
+                  当前状态：
+                  {RERANK_STATUS_LABELS[rerankStatus ?? "disabled"] ?? "未启用"}
+                  {rerankAcceptanceEnv && <span className="settings-badge">验收环境</span>}
+                </p>
+                <p className="settings-hint">
+                  档案状态：{selectedProfile === null
+                    ? "未选择档案"
+                    : RERANK_PROFILE_STATUS_LABELS[selectedProfile.status] ?? selectedProfile.status}
+                  {" · "}验证日期：{formatValidationDate(selectedProfile?.validated_at ?? null)}
+                </p>
+                {selectedProfile?.needs_validation === true && (
+                  <p className="settings-warning" role="alert">
+                    资料或索引已变化，该档案需要重新验证后仍可继续使用。
+                  </p>
+                )}
+                {rerankStatus === "profile_mismatch" && (
+                  <p className="settings-warning" role="alert">
+                    当前模型或服务地址与验证档案不匹配，保存启用会被拒绝。
+                  </p>
+                )}
               </section>
 
               <section className="settings-section settings-search" hidden={activePage !== "search"}>

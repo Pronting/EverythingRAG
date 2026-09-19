@@ -1,4 +1,4 @@
-import type { AnswerBasis, QueryMode, Source, SSEFrame } from "../types";
+import type { AnswerBasis, QueryMode, RetrievalMeta, Source, SSEFrame } from "../types";
 
 /** streamChat 回调集：SSE 帧到达时按型分发。 */
 export interface StreamChatHandlers {
@@ -7,6 +7,8 @@ export interface StreamChatHandlers {
     answerBasis: AnswerBasis,
     policyVersion: string,
     queryMode: QueryMode,
+    /** 可选 meta.retrieval（PRD §8.2）：本轮筛选状态与计数；旧后端不下发为 null。 */
+    retrieval: RetrievalMeta | null,
   ) => void;
   onToken: (text: string) => void;
   /** 推理模型思维链增量（本地展示，默认折叠）。 */
@@ -124,6 +126,7 @@ function dispatchFrame(frameText: string, handlers: StreamChatHandlers): void {
           isAnswerBasis(frame.answer_basis) ? frame.answer_basis : "general",
           typeof frame.policy_version === "string" ? frame.policy_version : "unknown",
           isQueryMode(frame.query_mode) ? frame.query_mode : "CONTENT_QA",
+          isRetrievalMeta(frame.retrieval) ? frame.retrieval : null,
         );
       }
       break;
@@ -157,6 +160,18 @@ function isAnswerBasis(value: unknown): value is AnswerBasis {
 
 function isQueryMode(value: unknown): value is QueryMode {
   return ["PRODUCT_HELP", "KNOWLEDGE_OVERVIEW", "CONTENT_QA"].includes(String(value));
+}
+
+/**
+ * meta.retrieval 校验：只接受三种成功状态。
+ *
+ * `failed` / `cancelled` 不以 meta 下发（后端改用 error 帧结束本轮），出现即按缺失处理，
+ * 不把终止态伪装成「无相关资料」。
+ */
+function isRetrievalMeta(value: unknown): value is RetrievalMeta {
+  if (typeof value !== "object" || value === null) return false;
+  const status = (value as { status?: unknown }).status;
+  return status === "filtered" || status === "empty" || status === "disabled";
 }
 
 function isAbortError(error: unknown): boolean {

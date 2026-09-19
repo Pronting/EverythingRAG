@@ -3039,3 +3039,18 @@ body {
   opacity: 0.6;
   cursor: default;
 }
+
+/* 已筛选来源（PRD §8.3）：chip 高亮 + 详情面板的排序分数与组合成员。 */
+.source-chip-filtered { border-color: var(--accent); color: var(--text); }
+.citation-panel-relevance { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
+.citation-panel-badge { padding: 2px 9px; border: 1px solid var(--border-strong); border-radius: 999px; color: var(--text-secondary); font-size: 11px; }
+.citation-panel-score { font-size: 12px; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.citation-panel-composition { margin-top: 14px; }
+.citation-panel-composition-title { margin-bottom: 8px; font-size: 12px; color: var(--text-secondary); }
+.citation-panel-members { display: flex; flex-direction: column; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.citation-panel-member { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 12px; color: var(--text-tertiary); }
+.citation-panel-member-relation { color: var(--text-secondary); }
+.citation-panel-member-range { font-variant-numeric: tabular-nums; }
+.citation-panel-member-open { align-self: flex-start; margin-top: 12px; padding: 6px 10px; border: 1px solid var(--border-strong); border-radius: 8px; background: var(--surface); color: var(--text); font-size: 12px; cursor: pointer; }
+.citation-panel-member-open:hover { background: var(--hover); }
+.citation-panel-member .citation-panel-member-open { margin-top: 0; padding: 3px 8px; font-size: 11px; }

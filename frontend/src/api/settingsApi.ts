@@ -1,4 +1,4 @@
-import type { SettingsUpdate, SettingsView } from "../types";
+import type { RerankTestResult, SettingsUpdate, SettingsView } from "../types";
 
 /** 设置 API 客户端：GET/PUT /api/settings（key 脱敏视图）。 */
 
@@ -34,6 +34,40 @@ export async function updateSettings(update: SettingsUpdate): Promise<SettingsVi
     throw new Error(await readErrorDetail(response));
   }
   return (await response.json()) as SettingsView;
+}
+
+/** 相关性筛选（重排）连接测试的可提交字段：未保存的值随请求体提交，服务端不持久化。 */
+export interface RerankTestRequest {
+  endpoint?: string;
+  model?: string;
+  /** 省略 = 复用已保存密钥（换地址时不复用，由服务端判定）。 */
+  api_key?: string;
+  profile_id?: string;
+}
+
+/**
+ * POST /api/settings/rerank/test：真实服务连通性测试（PRD §8.1）。
+ *
+ * 服务端用固定公开文本、不读知识库；`quality_checked` 恒为 false ——
+ * 连通成功不代表质量验收通过。
+ */
+export async function testRerankConnection(
+  request: RerankTestRequest,
+): Promise<RerankTestResult> {
+  let response: Response;
+  try {
+    response = await fetch("/api/settings/rerank/test", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(request),
+    });
+  } catch {
+    throw new Error("无法连接本地服务，请确认后端已启动");
+  }
+  if (!response.ok) {
+    throw new Error(await readErrorDetail(response));
+  }
+  return (await response.json()) as RerankTestResult;
 }
 
 /** 头像类型：user=用户，agent=Agent 助手。 */

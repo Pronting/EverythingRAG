@@ -1,6 +1,6 @@
 import type { Source } from "../types";
 import { basename } from "../util/path";
-import { sourceMatchDescription } from "../util/source";
+import { sourceMatchDescription, vectorSimilarityLabel } from "../util/source";
 
 interface CitationTooltipProps {
   source: Source;
@@ -11,7 +11,7 @@ const TOOLTIP_WIDTH = 320;
 const GAP = 8;
 const ESTIMATED_HEIGHT = 200;
 
-/** 悬停引用序号的悬浮卡片：文件名 + 标题路径 + 相关度 + 截断摘要，锚定在序号附近。 */
+/** 悬停引用序号的悬浮卡片：文件名 + 标题路径 + 匹配说明 + 截断摘要，锚定在序号附近。 */
 export function CitationTooltip({ source, anchor }: CitationTooltipProps) {
   const viewportWidth = window.innerWidth;
   const viewportHeight = window.innerHeight;
@@ -26,6 +26,7 @@ export function CitationTooltip({ source, anchor }: CitationTooltipProps) {
   top = Math.max(8, top);
 
   const isWeb = source.source_type === "web";
+  const similarity = vectorSimilarityLabel(source);
 
   return (
     <div className="citation-tooltip" role="tooltip" style={{ left, top, width: TOOLTIP_WIDTH }}>
@@ -39,6 +40,10 @@ export function CitationTooltip({ source, anchor }: CitationTooltipProps) {
         <div className="citation-tooltip-url">{source.url}</div>
       )}
       {!isWeb && <div className="citation-tooltip-meta">{sourceMatchDescription(source)}</div>}
+      {/* 已筛选来源同时保留原始向量数值，并明确叫「向量相似度」（PRD §8.3）。 */}
+      {!isWeb && source.relevance_checked === true && similarity !== null && (
+        <div className="citation-tooltip-meta">{similarity}</div>
+      )}
       <p className="citation-tooltip-text">{source.text}</p>
     </div>
   );

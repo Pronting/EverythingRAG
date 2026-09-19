@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ChangeEvent, KeyboardEvent } from "react";
 import { streamChat } from "../api/sse";
-import type { AnswerBasis, ConversationMessage, Source } from "../types";import { MarkdownContent } from "./MarkdownContent";
+import type { AnswerBasis, ConversationMessage, RetrievalMeta, Source } from "../types";import { MarkdownContent } from "./MarkdownContent";
 import { CitationTooltip } from "./CitationTooltip";
 import { SourceFooter } from "./SourceFooter";
 import BrandMark from "./BrandMark";
@@ -14,6 +14,8 @@ interface ChatMessage {
   /** 推理模型思维链；空串表示本轮没有思维链（不渲染折叠块）。 */
   reasoning: string;
   sources: Source[] | null;
+  /** 本轮筛选状态（PRD §8.2 meta.retrieval）；历史记录不持久化该字段，读回为 null。 */
+  retrieval: RetrievalMeta | null;
   answerBasis: AnswerBasis | null;
   policyVersion: string | null;
   done: boolean;
@@ -96,6 +98,8 @@ function toChatMessages(messages: ConversationMessage[]): ChatMessage[] {
     reasoning: message.reasoning ?? "",
     // 归一化为 null：后端历史 / 伪造响应可能整个缺省 sources 键（undefined）
     sources: message.sources ?? null,
+    // 筛选状态不随会话持久化：历史记录按来源字段自行判定（见 SourceFooter）。
+    retrieval: null,
     answerBasis: message.answer_basis ?? null,
     policyVersion: message.policy_version ?? null,
     done: true,
@@ -341,6 +345,7 @@ export default function Chat({
       content: message,
       reasoning: "",
       sources: null,
+      retrieval: null,
       answerBasis: null,
       policyVersion: null,
       done: true,
@@ -353,6 +358,7 @@ export default function Chat({
       content: "",
       reasoning: "",
       sources: null,
+      retrieval: null,
       answerBasis: null,
       policyVersion: null,
       done: false,
@@ -385,7 +391,7 @@ export default function Chat({
         message,
         history,
         {
-          onMeta: (sources, answerBasis, policyVersion) => {
+          onMeta: (sources, answerBasis, policyVersion, _queryMode, retrieval) => {
             if (streamMessageIdRef.current !== assistantId) return;
             if (exchangeRef.current) {
               exchangeRef.current.sources = sources;
@@ -395,6 +401,7 @@ export default function Chat({
             updateMessage(assistantId, (m) => ({
               ...m,
               sources,
+              retrieval,
               answerBasis,
               policyVersion,
             }));
@@ -411,7 +418,14 @@ export default function Chat({
           },
           onTool: (tool, status) => {
             if (streamMessageIdRef.current !== assistantId) return;
-            setSearching(status === "running");
+            const running = status === "running";
+            if (tool === "rerank") {
+              // 相关性筛选（PRD §8.2）：评分期间不到任何 token，进度以 tool 帧先行上报。
+              setSearching(running);
+              setToolLabel("正在筛选资料…");
+              return;
+            }
+            setSearching(running);
             setToolLabel(tool === "image_verify" ? "正在核对图片…" : "正在联网搜索…");
           },
           onDone: () => {
@@ -703,6 +717,7 @@ export default function Chat({
                 {msg.role === "assistant" && (msg.sources?.length ?? 0) > 0 && (
                   <SourceFooter
                     sources={msg.sources ?? []}
+                    retrieval={msg.retrieval}
                     onSelect={(index) => {
                       if (msg.sources) onCitationSelect?.(msg.sources, index);
                     }}

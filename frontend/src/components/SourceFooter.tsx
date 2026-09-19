@@ -1,9 +1,11 @@
-import type { Source } from "../types";
+import type { RetrievalMeta, Source } from "../types";
 import { basename } from "../util/path";
-import { sourceMatchLabel } from "../util/source";
+import { sourceFooterLabel, sourceMatchLabel } from "../util/source";
 
 interface SourceFooterProps {
   sources: Source[];
+  /** 本轮筛选状态（PRD §8.2）；历史记录为 null，此时按来源字段自行判定。 */
+  retrieval?: RetrievalMeta | null;
   onSelect: (index: number) => void;
 }
 
@@ -27,15 +29,17 @@ function WebChip({ source }: { source: Source }) {
 }
 
 /** 极简来源脚注：一行文件名 chips（点击打开右侧详情），替代原来的 chunk 长文列表。 */
-export function SourceFooter({ sources, onSelect }: SourceFooterProps) {
+export function SourceFooter({ sources, retrieval, onSelect }: SourceFooterProps) {
+  // 本轮筛选成功时脚注标题用「已筛选资料」；历史记录靠来源自带的 relevance_checked 判定。
+  const label = retrieval?.status === "filtered" ? "已筛选资料" : sourceFooterLabel(sources);
   return (
     <div className="source-footer">
-      <span className="source-footer-label">来源</span>
+      <span className="source-footer-label">{label}</span>
       {sources.map((source, index) => (
         <button
           key={`${source.source_id ?? "legacy"}-${source.block_id}`}
           type="button"
-          className={`source-chip${source.source_type === "web" ? " source-chip-web" : ""}`}
+          className={`source-chip${source.source_type === "web" ? " source-chip-web" : ""}${source.relevance_checked ? " source-chip-filtered" : ""}`}
           title={source.source_type === "web" ? source.url ?? source.source_file : source.source_file}
           onClick={() => onSelect(index)}
         >

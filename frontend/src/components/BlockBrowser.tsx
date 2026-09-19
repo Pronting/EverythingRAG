@@ -28,7 +28,20 @@ function summary(text: string, max = 120): string {
 }
 
 /** 语义块浏览弹窗：分类（文本/图片）+ 搜索（标题/目录/关键词）+ 分页。 */
-export default function BlockBrowser({ open, onClose }: { open: boolean; onClose: () => void }) {
+export default function BlockBrowser({
+  open,
+  onClose,
+  focusBlockId = null,
+}: {
+  open: boolean;
+  onClose: () => void;
+  /**
+   * 打开后直接定位到的块 id（来源面板「读取完整原文」用）。
+   *
+   * 定位只影响展示：完整原文不会因此加入本轮生成上下文（PRD §8.3）。
+   */
+  focusBlockId?: string | null;
+}) {
   const [blocks, setBlocks] = useState<BlockInfo[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -48,9 +61,15 @@ export default function BlockBrowser({ open, onClose }: { open: boolean; onClose
     setSearch("");
     setCategory("all");
     setPage(1);
+    setSelected(null);
     listBlocks()
       .then((resp) => {
-        if (!cancelled) setBlocks(resp.blocks);
+        if (cancelled) return;
+        setBlocks(resp.blocks);
+        if (focusBlockId !== null) {
+          const target = resp.blocks.find((block) => block.block_id === focusBlockId);
+          if (target !== undefined) setSelected(target);
+        }
       })
       .catch((e: unknown) => {
         if (!cancelled) setError(e instanceof Error ? e.message : String(e));
@@ -61,7 +80,7 @@ export default function BlockBrowser({ open, onClose }: { open: boolean; onClose
     return () => {
       cancelled = true;
     };
-  }, [open]);
+  }, [open, focusBlockId]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();

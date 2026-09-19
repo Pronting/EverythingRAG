@@ -21,6 +21,7 @@ import {
   setWorkspacePinned,
 } from "./api/workspaceApi";
 import Chat from "./components/Chat";
+import BlockBrowser from "./components/BlockBrowser";
 import { CitationPanel } from "./components/CitationPanel";
 import ConfirmDialog from "./components/ConfirmDialog";
 import ConversationMenu from "./components/ConversationMenu";
@@ -68,6 +69,12 @@ export default function App() {
   const [citationPanel, setCitationPanel] = useState<{ sources: Source[]; index: number } | null>(
     null,
   );
+  /**
+   * 来源面板「读取完整原文」打开的块 id。
+   *
+   * 复用既有「语义块浏览」入口读全文；完整原文不进入本轮生成上下文（PRD §8.3）。
+   */
+  const [fullTextBlockId, setFullTextBlockId] = useState<string | null>(null);
   // 对话分区（工作区）：列表 + 当前分区（侧边栏会话列表只显示当前分区）
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(null);
@@ -627,11 +634,17 @@ export default function App() {
           sources={citationPanel.sources}
           index={citationPanel.index}
           onClose={() => setCitationPanel(null)}
+          onOpenFullText={(blockId) => setFullTextBlockId(blockId)}
           onSelect={(index) =>
             setCitationPanel((prev) => (prev === null ? prev : { ...prev, index }))
           }
         />
       )}
+      <BlockBrowser
+        open={fullTextBlockId !== null}
+        focusBlockId={fullTextBlockId}
+        onClose={() => setFullTextBlockId(null)}
+      />
       <SettingsModal
         status={status}
         onKnowledgeChanged={loadStatus}
