@@ -16,8 +16,11 @@ from pathlib import Path
 
 sys.stdout.reconfigure(encoding="utf-8")
 sys.path.insert(0, r"C:/Users/22331/Desktop/everything-rag/backend")
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 socket.setdefaulttimeout(120)
+
+import cases_loader
 
 from app.core.config import get_settings
 from app.core.settings_store import get_settings_store
@@ -45,8 +48,8 @@ def norm(s: str) -> str:
     return "".join(s.split()).lower()
 
 
-cases = json.loads((BASE / "benchmark/cases.json").read_text(encoding="utf-8"))["cases"]
-samples = {s["n"]: s for s in json.loads((BASE / ".tmp_probe/sample_chunks.json").read_text(encoding="utf-8"))}
+cases = cases_loader.load_cases(BASE / "benchmark/cases.json")
+samples = {s["n"]: s for s in cases_loader.load_sample_chunks()}
 
 app_settings = get_settings_store().load()
 embedder = create_embedder_from_config(app_settings.embed)

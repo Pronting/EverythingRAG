@@ -20,7 +20,7 @@ class CatalogStore(FakeVectorStore):
                 "b1",
                 "购物车交互方案",
                 {
-                    "source_file": r"C:\Users\someone\Documents\vault\数据库\购物车分表.md",
+                    "source_file": r"C:\Users\someone\Documents\vault\数据库\示例分表.md",
                     "chunk_type": "text",
                     "source_type": "document",
                     "platform": "local",
@@ -30,7 +30,7 @@ class CatalogStore(FakeVectorStore):
                 "b2",
                 "厂商方案对比",
                 {
-                    "source_file": r"C:\Users\someone\Documents\vault\数据库\购物车分表.md",
+                    "source_file": r"C:\Users\someone\Documents\vault\数据库\示例分表.md",
                     "chunk_type": "table",
                     "source_type": "document",
                     "platform": "local",
@@ -60,7 +60,7 @@ def test_catalog_counts_topics_and_representative_documents() -> None:
     assert overview.image_chunk_count == 1
     assert overview.chunk_types == {"image_description": 1, "table": 1, "text": 1}
     assert overview.topics[0].name == "数据库"
-    assert overview.representative_documents[0].name == "购物车分表.md"
+    assert overview.representative_documents[0].name == "示例分表.md"
 
 
 def test_overview_api_never_exposes_absolute_paths() -> None:
@@ -69,7 +69,7 @@ def test_overview_api_never_exposes_absolute_paths() -> None:
     assert response.status_code == 200
     data = response.json()
     assert data["file_count"] == 2
-    assert data["representative_documents"][0]["name"] == "购物车分表.md"
+    assert data["representative_documents"][0]["name"] == "示例分表.md"
     assert "C:\\Users" not in response.text
     assert "Documents" not in response.text
 

@@ -172,12 +172,12 @@ def test_exact_duplicate_files_only_create_one_active_document(
 
     service, _embedder, store, state = harness
     root = harness_root(harness)
-    content = "# 分表对比\n\n京东与淘宝的购物车分表方案。\n"
+    content = "# 分表对比\n\n京东与淘宝的示例分表方案。\n"
     _upload(
         root,
         {
-            "doc/购物车分表.md": content,
-            "208c0ca74fd44a12af218fb34b57e91f/doc/购物车分表.md": content,
+            "doc/示例分表.md": content,
+            "fedcba9876543210fedcba9876543210/doc/示例分表.md": content,
         },
     )
 
@@ -188,8 +188,8 @@ def test_exact_duplicate_files_only_create_one_active_document(
     assert report.files_unchanged == 1
     assert len(state.load_all()) == 1
     (active_path,) = state.load_all()
-    assert active_path.endswith("doc\\购物车分表.md")
-    assert "208c0ca74fd44a12af218fb34b57e91f" not in active_path
+    assert active_path.endswith("doc\\示例分表.md")
+    assert "fedcba9876543210fedcba9876543210" not in active_path
     assert store.count() == 1
 
 
@@ -200,14 +200,14 @@ def test_stable_path_replaces_existing_legacy_alias_without_count_growth(
 
     service, _embedder, store, state = harness
     root = harness_root(harness)
-    content = "# 公司介绍\n\n这是同一份公司介绍。\n"
-    legacy_rel = "64264793bc744da48c72fc5730ac575f/doc/公司介绍.md"
+    content = "# 示例介绍\n\n这是同一份示例介绍。\n"
+    legacy_rel = "0123456789abcdef0123456789abcdef/doc/示例介绍.md"
     _upload(root, {legacy_rel: content})
     first = service.ingest(root)
     assert first.files_added == 1
     assert store.count() == 1
 
-    _upload(root, {"doc/公司介绍.md": content})
+    _upload(root, {"doc/示例介绍.md": content})
     migrated = service.ingest(root)
 
     assert migrated.files_added == 1
@@ -215,7 +215,7 @@ def test_stable_path_replaces_existing_legacy_alias_without_count_growth(
     assert store.count() == 1
     assert len(state.load_all()) == 1
     (active_path,) = state.load_all()
-    assert active_path.endswith("doc\\公司介绍.md")
+    assert active_path.endswith("doc\\示例介绍.md")
 
     steady = service.ingest(root)
     assert steady.files_added == steady.files_updated == steady.files_deleted == 0

@@ -3,6 +3,16 @@
 > 测试日期：2026-09-04 ｜ 环境：Windows，云端嵌入 Qwen/Qwen3-Embedding-8B（4096 维），对话 deepseek-v4-flash
 > 数据目录：`C:\Users\22331\.everything-rag`（当前线上 v5：4616 块 / 291 源文件；磁盘 1750 个 md，生产扫描可见 1354 个，内容去重后 298 篇）
 > 方法：**Agent 逐条阅读真实索引块原文后人工构造有据可依的评测集**（非 LLM 生成、非题库套用），全部检索与生成都走生产代码路径（`HybridRetriever` + `ChatService`），未做任何 mock。
+>
+> **脱敏与产物口径（PRD §7.2，T22）**：本目录只保留**生成脚本 + 聚合结果**。
+> - 数据产物（`sample_chunks.json`、`*_results*.json`、`*_coverage*.json`、`reindexed_quality_*.json`）
+>   逐字含真实分块正文、来源文件名、标题、人名与可识别时间戳 → 只在本机生成与保存，
+>   `.gitignore` 忽略 `benchmark/*.json`；本地副本在 `.tmp_probe/rag-relevance/benchmark-private/`。
+> - 仓库内的 `cases.json` 是**脱敏结构**（`id/cat/diff/gold` 块序号 + 私文内容的 SHA-256 + 计数）；
+>   真实问题与证据串由 `benchmark/cases_loader.py` 从本地私文组装（消费者已改造）。
+> - 报告与文档里的文档名用 `doc-noise-NN.md` 占位，**数值保持原样**。
+> - 发布阻断项：黄金集 `scripts/rag_eval_cases.json` 仍含真实来源名与标题，按用户决定留待校准批次处理。
+> - 防回归自检：`python scripts/relevance_cases/private_guard.py --repo`。
 
 ---
 
@@ -97,7 +107,7 @@ Hit@8 从 93.3% 提升至 94.7%，纯负样本拒答率从 88.9% 提升至 100%�
 | 检索路径对比 | hybrid（生产）/ dense-only / BM25-only |
 | 消融 | min_similarity ∈ {none, 0.50, 0.55, 0.60, 0.65, 0.70}；分块参数 5 组 |
 | 端到端 | 真实 `ChatService.stream_answer` 全链路（含门控、提示词、引用校验） |
-| 脚本与数据 | `benchmark/`（cases.json / retrieval_results.json / chunking_results.json / index_coverage.json / coverage_attribution.json / answer_results.json / aggregate.json） |
+| 脚本与数据 | 仓库内：`benchmark/` 的生成脚本 + 聚合结果（`aggregate*.json` / `answer_aggregate.json`）+ 脱敏用例结构 `cases.json`；本机私文（`cases-private.json` / `sample_chunks.json` / `*_results*.json` 等）在 `.tmp_probe/rag-relevance/benchmark-private/` |
 
 ---
 
@@ -214,10 +224,10 @@ Hit@8 从 93.3% 提升至 94.7%，纯负样本拒答率从 88.9% 提升至 100%�
 | 已入库源文件 | 291（**16.6%**） |
 | └ UUID 上传目录重复副本（内容已在库） | 1046 |
 | └ **UUID 目录独有内容（真正丢失）** | **402** 🔴 |
-| └ 规范目录独有内容丢失 | 11（仅 2 个为真实业务文档：`ERP_oncall一些问题.md`、`灰度环境.md`，其余为 .spec-workflow 模板与 5 字节空文件） |
+| └ 规范目录独有内容丢失 | 11（仅 2 个为真实业务文档：`doc-noise-01.md`、`doc-noise-02.md`，其余为 .spec-workflow 模板与 5 字节空文件） |
 | 索引新鲜度 | ✅ 对同批 291 文件重切，块长分布与索引实况几乎一致（中位 131 vs 133）→ **索引不是旧版切块建的** |
 | 索引内跨路径重复块 | 逻辑去重仅合并 11 块（4616→4605）；文本完全相同的重复组 138 组 / 361 块 |
-| 单文档倾斜 | `cider-基建2023.md` 单文件 706 块（占索引 15.3%） |
+| 单文档倾斜 | `doc-noise-03.md` 单文件 706 块（占索引 15.3%） |
 
 ### 2.9 性能
 
@@ -262,7 +272,7 @@ N11（Redis 大 key）在 dense 相似度仅 0.377 时仍召回 8 块。`_is_lex
 检索证据覆盖 95.5%，但答案证据串命中只有 52.3%——模型拿到素材后概括过粗，关键数字/结论偶有丢失。
 
 ### 🟡 P2-3 单文档过度倾斜
-`cider-基建2023.md` 占索引 15.3%，任何与其词汇重叠的查询都会被它的块填满候选窗口。
+`doc-noise-03.md` 占索引 15.3%，任何与其词汇重叠的查询都会被它的块填满候选窗口。
 
 ---
 
@@ -299,7 +309,7 @@ N11（Redis 大 key）在 dense 相似度仅 0.377 时仍召回 8 块。`_is_lex
    在系统提示词中加入一条："引用的具体数字、版本号、阈值必须与来源一致，不得四舍五入或省略单位"。并考虑对 numeric 类问题把 context_top_k 临时放宽到 10。
 
 9. **语料卫生分级**
-   导入时按"内容密度"打标：块均长度、HTML 残留率、重复块比例。对 `cider-基建2023.md` 这类 700+ 块的超大文档做章节级拆分或在检索时限制单文档 top-K 占比 ≤3。
+   导入时按"内容密度"打标：块均长度、HTML 残留率、重复块比例。对 `doc-noise-03.md` 这类 700+ 块的超大文档做章节级拆分或在检索时限制单文档 top-K 占比 ≤3。
 
 ### P2（长期健康度）
 
@@ -326,6 +336,8 @@ N11（Redis 大 key）在 dense 相似度仅 0.377 时仍召回 8 块。`_is_lex
 ## 附：复现方式
 
 ```powershell
+# 0) 先确认本地私文（用例问题/证据串、块样本）在位；缺失会明确报错，不会跑空集
+backend/.venv/Scripts/python.exe benchmark/cases_loader.py
 # 1) 校验评测集证据串
 backend/.venv/Scripts/python.exe benchmark/validate_cases.py
 # 2) 检索基准（约 8 分钟，含 6 组阈值消融）
@@ -345,3 +357,8 @@ backend/.venv/Scripts/python.exe -u benchmark/run_answer_bench.py
 backend/.venv/Scripts/python.exe benchmark/summarize.py
 backend/.venv/Scripts/python.exe benchmark/summarize_answers.py
 ```
+
+> 以上命令产出的 `*_results*.json` / `*_coverage*.json` / `reindexed_quality_*.json` 都含真实分块正文
+> 与来源名，**只在本机保存**（`.gitignore` 已忽略 `benchmark/*.json`；也可用
+> `EVERYTHING_RAG_BENCH_PRIVATE_DIR` 指向 `.tmp_probe/rag-relevance/benchmark-private/`）。
+> 想换机器重跑，需要把该私文目录（`cases-private.json`、`sample_chunks.json` 等）一并带过去。

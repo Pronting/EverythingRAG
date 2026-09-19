@@ -10,11 +10,15 @@ from pathlib import Path
 
 sys.stdout.reconfigure(encoding="utf-8")
 BASE = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(BASE / "benchmark"))
+
+import cases_loader
+
 parser = argparse.ArgumentParser(description="汇总 Everything RAG 检索基准")
 parser.add_argument(
     "--input",
     type=Path,
-    default=BASE / "benchmark/retrieval_results.json",
+    default=cases_loader.artifact_path("retrieval_results.json"),
 )
 parser.add_argument(
     "--output",

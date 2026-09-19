@@ -71,8 +71,8 @@ def test_bm25_top_k_bounds() -> None:
 def test_repeated_term_does_not_corrupt_document_frequency() -> None:
     """同词在标题/正文重复不能令 df>文档数、IDF 变负并吞掉真实命中。"""
 
-    index = BM25Index(["实时风控方案 实时风控方案 限流", "缓存设计 普通说明"])
-    hits = index.search("实时风控方案 限流", top_k=2)
+    index = BM25Index(["示例风控方案 示例风控方案 限流", "缓存设计 普通说明"])
+    hits = index.search("示例风控方案 限流", top_k=2)
     assert hits
     assert hits[0][0] == 0
     assert hits[0][1] > 0

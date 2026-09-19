@@ -28,7 +28,7 @@ def test_usage_query_keeps_original_and_specific_qualifiers():
 @pytest.mark.parametrize("score,expected", [(0.42, True), (0.1, False)])
 def test_exact_metric_prose_rescued_but_dense_contradictions_rejected(score, expected):
     text = "userId、deviceId、ip 三个维度；时间窗口为一分钟、一小时、一天。频次根据用户访问统计数据的99%分位来制定，重点接口包含商详、collection、评论。"
-    blocks = [_block("target", text, "实时风控方案.md")]
+    blocks = [_block("target", text, "示例风控方案.md")]
     blocks += [_block(str(i), "无关的商品推荐文档内容", f"{i}.md") for i in range(30)]
     retriever = HybridRetriever(FakeVectorStore(blocks, [_hit("target", score)]), min_similarity=.6)
     result = retriever.retrieve(QUERY, [1.0])

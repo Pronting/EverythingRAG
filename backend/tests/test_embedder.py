@@ -113,14 +113,14 @@ def test_qwen3_query_gets_official_instruction_documents_stay_raw(
         base_url="http://e.test/v1", model="Qwen/Qwen3-Embedding-8B"
     )
 
-    emb.embed_documents(["购物车分表方案"])
+    emb.embed_documents(["示例分表方案"])
     emb.embed_query("京东和淘宝的分表对比")
 
     expected_query = (
         "Instruct: Given a user query, retrieve relevant passages that answer the query\n"
         "Query:京东和淘宝的分表对比"
     )
-    assert fake.calls[0] == ("Qwen/Qwen3-Embedding-8B", ["购物车分表方案"])
+    assert fake.calls[0] == ("Qwen/Qwen3-Embedding-8B", ["示例分表方案"])
     assert fake.calls[1] == (
         "Qwen/Qwen3-Embedding-8B",
         [expected_query],

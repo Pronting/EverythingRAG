@@ -9,8 +9,13 @@ from pathlib import Path
 
 sys.stdout.reconfigure(encoding="utf-8")
 BASE = Path(r"C:\Users\22331\Desktop\everything-rag")
-rows = json.loads((BASE / "benchmark/answer_results.json").read_text(encoding="utf-8"))
-cases = {c["id"]: c for c in json.loads((BASE / "benchmark/cases.json").read_text(encoding="utf-8"))["cases"]}
+HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE))
+
+import cases_loader
+
+rows = json.loads(cases_loader.artifact_path("answer_results.json").read_text(encoding="utf-8"))
+cases = {c["id"]: c for c in cases_loader.load_cases(HERE / "cases.json")}
 
 pos = [r for r in rows if cases[r["id"]]["gold"]]
 neg = [r for r in rows if not cases[r["id"]]["gold"]]
@@ -52,14 +57,14 @@ for cat, sub in sorted(by_cat.items()):
 print("\n=== C. 负样本行为 ===")
 print(f"{'id':<5}{'basis':<14}{'来源数':>6}  问题")
 for r in neg:
-    print(f"{r['id']:<5}{str(r['basis']):<14}{r['n_sources']:>6}  {r['query'][:38]}")
+    print(f"{r['id']:<5}{r['basis']!s:<14}{r['n_sources']:>6}  {r['query'][:38]}")
 general = sum(1 for r in pure_neg if r["basis"] == "general")
 insuff = sum(1 for r in pure_neg if r["basis"] == "insufficient")
 print(f"\n纯负样本 {len(pure_neg)} 条: basis=general {general}, basis=insufficient {insuff}, 其他 {len(pure_neg)-general-insuff}")
 
 print("\n--- 对抗性负样本（库内有相关内容）---")
 for r in adv_neg:
-    print(f"{r['id']:<5} basis={str(r['basis']):<14} src={r['n_sources']}  {r['query'][:40]}")
+    print(f"{r['id']:<5} basis={r['basis']!s:<14} src={r['n_sources']}  {r['query'][:40]}")
 
 print("\n=== D. basis 分布（全部 87 条）===")
 print(dict(Counter(r["basis"] for r in rows)))

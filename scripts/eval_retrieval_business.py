@@ -12,37 +12,14 @@ from pathlib import Path
 sys.stdout.reconfigure(encoding="utf-8")
 sys.path.insert(0, r"C:/Users/22331/Desktop/everything-rag/backend")
 
+from local_eval_cases import load_case_tables
+
 from app.core.config import get_settings
 from app.core.settings_store import get_settings_store
 from app.vectorstore.chroma_store import create_vector_store
 from app.vectorstore.embedder import create_embedder_from_config
 
-POSITIVE = [
-    ("同步 DDL 表结构变更时，Canal 和阿里云 DTS 这类工具有什么局限？", "8000万数据表"),
-    ("自建 RocketMQ 时，nameserver 应该部署几台、如何分布在可用区？", "RocketMQ 迁移"),
-    ("2024-09-05 推荐接口超时问题的最终根因是什么？", "推荐接口超时"),
-    ("MySQL 的 MVCC 是用什么机制实现的？", "PostgreSQL 与 MySQL 差异"),
-    ("PG 数据库的一个连接对应什么？", "PostgreSQL 与 MySQL 差异"),
-    ("实时风控方案支持哪些维度的限流策略？", "实时风控方案"),
-    ("商品订单创建事件里，list_id 参数在非 collection 场景下传什么值？", "商品订单创建事件"),
-    ("埋点公共参数里，platform 参数支持哪些取值？", "Cider_埋点公共参数"),
-    ("墨西哥礼品卡支付金额错误这个事故记录在哪份文档？", "墨西哥礼品卡支付金额错误"),
-    ("验证码邮件重复发送的事故复盘文档是哪个？", "验证码邮件重复发送"),
-    ("搜索无结果的技术方案是怎么做的？", "搜索无结果"),
-    ("AB 实验的观察指标和分流规则是什么？", "AB实验 观察指标"),
-    ("如何评估 RAG 效果？指标是什么？", "AI 八股文"),
-    ("埋点平台如何管理埋点的生命周期？", "SPM"),
-    ("ApiSix 网关的作用是什么？", "ApiSix 网关"),
-    ("阿里云 RocketMQ 迁移时 Broker 机器怎么配置？", "RocketMQ 迁移"),
-    ("埋点2.0设计文档里埋点管理后台的地址是什么？", "埋点2.0设计文档"),
-    ("线上死循环导致 MQ 消息堆积问题怎么排查？", "死循环导致MQ消息堆积"),
-]
-
-NEGATIVE = [
-    "量子纠缠在量子计算退相干控制中的应用",
-    "火星殖民地生态系统如何实现自维持",
-    "巴赫平均律中的对位法与和声分析",
-]
+POSITIVE, NEGATIVE = load_case_tables("eval_retrieval_business")
 
 
 def main() -> None:

@@ -19,38 +19,14 @@ from pathlib import Path
 sys.stdout.reconfigure(encoding="utf-8")
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "backend"))
 
+from local_eval_cases import load_case_tables
+
 from app.core.config import get_settings
 from app.core.settings_store import get_settings_store
 from app.vectorstore.chroma_store import create_vector_store
 from app.vectorstore.embedder import create_embedder_from_config
 
-POSITIVE = [
-    ("「兵者，诡道也。故能而示之不能，用而示之不用」这句话出自哪部书？", "孙子兵法"),
-    ("「上兵伐谋，其次伐交，其次伐兵，其下攻城」出自哪里？", "孙子兵法"),
-    ("「不战而屈人之兵，善之善者也」这句话的出处？", "孙子兵法"),
-    ("「春风得意马蹄疾，一日看尽长安花」是哪位诗人的名句？", "诗句收集"),
-    ("罗曼罗兰说，世界上只有一种英雄主义，是什么？", "诗句收集"),
-    ("中国的行政区划为什么按需求相似的人划分成区域？", "中国行政区域划分标准"),
-    ("投递时 recruitment@ratingdog.cn 要求邮件标题格式是什么？", "春招邮箱"),
-    ("中国政府官僚体系运转的两根传动轴是什么？", "中国政府的官僚体系详解"),
-    ("为什么说谁离信息最近，谁就拥有决策优势？", "中国政府的官僚体系详解"),
-    ("「富在术数，不在劳身，利在势居，不在力耕」出自哪部书？", "毛选"),
-    ("Canal 和阿里云 DTS 这类工具在同步 DDL 表结构变更时有什么局限？", "8000万数据表"),
-    ("自建 RocketMQ 时 nameserver 应该部署几台、如何分布在可用区？", "RocketMQ 迁移"),
-    ("2024-09-05 推荐接口超时问题的最终根因是什么？", "推荐接口超时"),
-    ("MySQL 的 MVCC 是用什么机制实现的？", "PostgreSQL 与 MySQL 差异"),
-    ("PG 数据库的一个连接对应什么？", "PostgreSQL 与 MySQL 差异"),
-    ("实时风控方案支持哪些维度的限流策略？", "实时风控方案"),
-    ("商品订单创建事件里，list_id 参数在非 collection 场景下传什么值？", "商品订单创建事件"),
-    ("墨西哥礼品卡支付金额错误这个事故记录在哪？", "墨西哥礼品卡支付金额错误"),
-]
-
-NEGATIVE = [
-    "量子纠缠在量子计算退相干控制中的应用",
-    "火星殖民地生态系统如何实现自维持",
-    "巴赫平均律中的对位法与和声分析",
-    "线粒体 DNA 在细胞衰老中的作用机制",
-]
+POSITIVE, NEGATIVE = load_case_tables("eval_retrieval_hybrid")
 
 
 def tokenize(text: str) -> list[str]:

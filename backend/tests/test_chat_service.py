@@ -288,7 +288,7 @@ async def test_knowledge_overview_skips_retrieval_and_injects_catalog() -> None:
         image_chunk_count=1,
         topics=[KnowledgeTopic(name="数据库", file_count=2, chunk_count=9)],
         representative_documents=[
-            RepresentativeDocument(name="购物车分表.md", topic="数据库", chunk_count=6)
+            RepresentativeDocument(name="示例分表.md", topic="数据库", chunk_count=6)
         ],
     )
     service = ChatService(
@@ -305,7 +305,7 @@ async def test_knowledge_overview_skips_retrieval_and_injects_catalog() -> None:
     assert frames[0]["query_mode"] == "KNOWLEDGE_OVERVIEW"
     prompt = chat.calls[0][-1]["content"]
     assert '"file_count":2' in prompt
-    assert "购物车分表.md" in prompt
+    assert "示例分表.md" in prompt
 
 
 async def test_knowledge_catalog_is_lazy_for_normal_questions() -> None:

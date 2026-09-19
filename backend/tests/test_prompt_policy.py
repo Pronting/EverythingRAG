@@ -74,7 +74,7 @@ def test_all_six_answer_bases(
         ("everything rag 到底是干嘛的？", QueryMode.PRODUCT_HELP),
         ("介绍一下当前项目的整体情况", QueryMode.PRODUCT_HELP),
         ("购物车为什么需要分表？", QueryMode.CONTENT_QA),
-        ("总结《行为风控数据分析》", QueryMode.CONTENT_QA),
+        ("总结《示例风控数据分析》", QueryMode.CONTENT_QA),
     ],
 )
 def test_query_modes(question: str, expected: QueryMode) -> None:

@@ -39,9 +39,9 @@ def test_identifiers_survive_normalisation_and_original_is_always_kept() -> None
 
 
 def test_already_concise_query_has_no_duplicate_variant() -> None:
-    variants = build_query_variants("购物车分表方案对比")
+    variants = build_query_variants("示例分表方案对比")
     assert [(variant.kind, variant.text) for variant in variants] == [
-        ("original", "购物车分表方案对比")
+        ("original", "示例分表方案对比")
     ]
 
 
@@ -55,7 +55,7 @@ def test_punctuation_only_normalisation_does_not_create_duplicate_route() -> Non
 def test_extracts_only_narrow_identifier_definition_questions() -> None:
     assert extract_identifier_definition_subjects("什么是adb") == ("adb",)
     assert extract_identifier_definition_subjects("Warebase 是什么？") == ("Warebase",)
-    assert extract_identifier_definition_subjects("请问一下 AAB 是什么？") == ("AAB",)
+    assert extract_identifier_definition_subjects("请问一下 XYZ 是什么？") == ("XYZ",)
     assert extract_identifier_definition_subjects("什么是首次触点归因") == ()
     assert (
         extract_identifier_definition_subjects("简单介绍Warebase，再说说它出现过什么事故")

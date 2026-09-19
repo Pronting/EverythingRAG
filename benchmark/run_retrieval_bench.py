@@ -20,8 +20,11 @@ from pathlib import Path
 sys.stdout.reconfigure(encoding="utf-8")
 BASE = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(BASE / "backend"))
+sys.path.insert(0, str(BASE / "benchmark"))
 
 socket.setdefaulttimeout(60)
+
+import cases_loader
 
 from app.core.config import get_settings
 from app.core.settings_store import get_settings_store
@@ -83,11 +86,8 @@ def norm(s: str) -> str:
 
 
 # ---------------------------------------------------------------- 装载
-cases = json.loads((OUT / "cases.json").read_text(encoding="utf-8"))["cases"]
-samples = {
-    sample["n"]: sample
-    for sample in json.loads((OUT / "sample_chunks.json").read_text(encoding="utf-8"))
-}
+cases = cases_loader.load_cases(OUT / "cases.json")
+samples = {sample["n"]: sample for sample in cases_loader.load_sample_chunks()}
 if ARGS.case_ids:
     requested = set(ARGS.case_ids)
     known = {case["id"] for case in cases}

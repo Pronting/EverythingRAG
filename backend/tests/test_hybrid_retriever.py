@@ -1,6 +1,6 @@
 """HybridRetriever 混合检索测试：dense + BM25（标题注入）+ RRF 融合。
 
-核心验收：标题关键词（实时风控方案 / ApiSix 网关）只在文件名、不在块文本时，
+核心验收：标题关键词（示例风控方案 / 示例网关）只在文件名、不在块文本时，
 BM25 标题注入能把它救回 top-5；近似文档对由 RRF 融合排序。
 全部 fake 依赖，零出网。
 """
@@ -86,18 +86,18 @@ def _hit(block_id: str, similarity: float, source_file: str = "a.md") -> dict[st
     }
 
 
-# 标题注入救回场景：目标文档「实时风控方案」的关键词只在文件名，块文本不含
+# 标题注入救回场景：目标文档「示例风控方案」的关键词只在文件名，块文本不含
 _TITLE_BLOCKS = [
-    _block("b1", "关于订单履约全链路的设计与流转", "订单履约全链路.md", "履约"),
-    _block("b2", "统一缓存 sdk 的设计说明", "cider-基建2023.md", "基建"),
-    _block("b3", "风控事件和拦截操作页面化，支持 userId 维度", "实时风控方案.md", "支持的策略"),
+    _block("b1", "关于示例履约链路的设计与流转", "示例履约链路.md", "履约"),
+    _block("b2", "统一缓存 sdk 的设计说明", "示例基建2023.md", "基建"),
+    _block("b3", "风控事件和拦截操作页面化，支持 userId 维度", "示例风控方案.md", "支持的策略"),
     _block("b4", "reCAPTCHA 功能调研", "Google调研.md"),
 ]
 _TITLE_DENSE = [
-    _hit("b1", 0.70, "订单履约全链路.md"),
+    _hit("b1", 0.70, "示例履约链路.md"),
     _hit("b4", 0.68, "Google调研.md"),
-    _hit("b2", 0.65, "cider-基建2023.md"),
-    _hit("b3", 0.55, "实时风控方案.md"),
+    _hit("b2", 0.65, "示例基建2023.md"),
+    _hit("b3", 0.55, "示例风控方案.md"),
 ]
 
 
@@ -117,10 +117,10 @@ def test_title_injection_rescues_keyword_in_filename() -> None:
     """关键词只在文件名 -> BM25 标题注入把它带进 top-5（纯向量会排后面）。"""
     store = FakeVectorStore(blocks=_TITLE_BLOCKS, query_result=_TITLE_DENSE)
     retriever = _retriever(store)
-    chunks = retriever.retrieve("实时风控方案支持哪些维度的限流策略", [1.0, 0.0, 0.0])
+    chunks = retriever.retrieve("示例风控方案支持哪些维度的限流策略", [1.0, 0.0, 0.0])
 
     ids = [c.block_id for c in chunks]
-    assert "b3" in ids  # 实时风控方案.md 被救回
+    assert "b3" in ids  # 示例风控方案.md 被救回
     assert ids[0] == "b3"  # RRF 融合后置顶
 
 
@@ -162,11 +162,11 @@ def test_rrf_ranks_present_in_both_higher() -> None:
 def test_strong_lexical_evidence_lowers_dense_rescue_floor() -> None:
     """强词法证据可把 dense 门槛放宽到 lexical_floor。"""
     store = FakeVectorStore(
-        blocks=[_block("keep", "实时风控方案 限流维度", "实时风控方案.md")],
-        query_result=[_hit("keep", 0.52, "实时风控方案.md")],
+        blocks=[_block("keep", "示例风控方案 限流维度", "示例风控方案.md")],
+        query_result=[_hit("keep", 0.52, "示例风控方案.md")],
     )
     retriever = _retriever(store, min_similarity=0.55)
-    chunks = retriever.retrieve("实时风控方案 限流", [1.0, 0.0, 0.0])
+    chunks = retriever.retrieve("示例风控方案 限流", [1.0, 0.0, 0.0])
     assert [chunk.block_id for chunk in chunks] == ["keep"]
 
 
@@ -174,13 +174,13 @@ def test_bm25_rescue_kept_when_dense_sim_above_threshold() -> None:
     """BM25 把标题关键词块带进 top-5，且其 dense sim ≥ 阈值 -> 通过门禁保留。"""
     store = FakeVectorStore(
         blocks=[
-            _block("rel", "实时风控方案 限流维度", "实时风控方案.md"),
-            _block("noise", "缓存 设计 说明", "cider-基建.md"),
+            _block("rel", "示例风控方案 限流维度", "示例风控方案.md"),
+            _block("noise", "缓存 设计 说明", "示例基建.md"),
         ],
-        query_result=[_hit("noise", 0.90, "cider-基建.md"), _hit("rel", 0.57, "实时风控方案.md")],
+        query_result=[_hit("noise", 0.90, "示例基建.md"), _hit("rel", 0.57, "示例风控方案.md")],
     )
     retriever = _retriever(store, min_similarity=0.55)
-    chunks = retriever.retrieve("实时风控方案 限流", [1.0, 0.0, 0.0])
+    chunks = retriever.retrieve("示例风控方案 限流", [1.0, 0.0, 0.0])
     assert "rel" in [chunk.block_id for chunk in chunks]
 
 
@@ -192,7 +192,7 @@ def test_production_gate_accepts_strong_bm25_only_candidate() -> None:
             _block(
                 "target",
                 "交互方案对比：京东购物车按用户分表，淘宝按店铺与用户组合分表",
-                "购物车分表.md",
+                "示例分表.md",
                 "交互",
             ),
             _block("noise", "缓存设计普通说明", "cache.md"),
@@ -215,11 +215,11 @@ def test_production_gate_accepts_strong_bm25_only_candidate() -> None:
 def test_duplicate_logical_blocks_from_legacy_paths_are_returned_once() -> None:
     """相同 doc/chunk 即使来自历史任务目录，也只能占一个 Top-K 席位。"""
 
-    stable = _block("stable", "京东与淘宝的购物车分表方案", "documents/doc/购物车分表.md", "交互")
+    stable = _block("stable", "京东与淘宝的示例分表方案", "documents/doc/示例分表.md", "交互")
     legacy = _block(
         "legacy",
-        "京东与淘宝的购物车分表方案",
-        "documents/208c0ca74fd44a12af218fb34b57e91f/doc/购物车分表.md",
+        "京东与淘宝的示例分表方案",
+        "documents/fedcba9876543210fedcba9876543210/doc/示例分表.md",
         "交互",
     )
     # 历史索引的 doc_id 曾按路径生成；内容哈希去重不能依赖两个 doc_id 恰好相同。
@@ -273,7 +273,7 @@ def test_real_cart_comparison_wording_rescues_three_rare_terms() -> None:
                     "未登录可以加购，数据存在服务端。app：京东、cider；"
                     "未登录不让加购：淘宝、拼多多、eBay。优势与劣势说明。"
                 ),
-                "购物车分表.md",
+                "示例分表.md",
                 "交互",
             ),
             _block("noise", "普通缓存设计与用户体验说明", "cache.md"),
@@ -305,14 +305,14 @@ def test_three_rare_terms_can_override_low_but_noncontradictory_dense_score() ->
     target = _block(
         "cart-interaction",
         "未登录服务端加购：京东；禁止加购：淘宝；购物车方案对比",
-        "购物车分表.md",
+        "示例分表.md",
         "交互",
     )
     store = FakeVectorStore(
         blocks=[target, _block("noise", "公司对比的一般详情", "其他.md")],
         query_result=[
             _hit("noise", 0.55, "其他.md"),
-            _hit("cart-interaction", 0.41, "购物车分表.md"),
+            _hit("cart-interaction", 0.41, "示例分表.md"),
         ],
     )
     query = (
@@ -337,12 +337,12 @@ def test_long_conversational_original_does_not_rescue_generic_overlap() -> None:
             _block(
                 "target",
                 "京东购物车按用户分表，淘宝按店铺和用户组合分表",
-                "购物车分表.md",
+                "示例分表.md",
             ),
             _block(
                 "noise",
                 "公司产品详情与行业方案对比，介绍业务背景和用户体验",
-                "公司介绍.md",
+                "示例介绍.md",
             ),
         ],
         query_result=[],
@@ -362,11 +362,11 @@ def test_moderately_low_dense_signal_keeps_qualified_lexical_rescue() -> None:
     """购物车实测区间的弱 dense 信号仍保留合格词法候选。"""
 
     target = _block(
-        "target", "京东 淘宝 厂商 分表 方案 对比", "购物车分表.md", "交互"
+        "target", "京东 淘宝 厂商 分表 方案 对比", "示例分表.md", "交互"
     )
     lexical_only_store = FakeVectorStore(blocks=[target], query_result=[])
     low_dense_store = FakeVectorStore(
-        blocks=[target], query_result=[_hit("target", 0.42, "购物车分表.md")]
+        blocks=[target], query_result=[_hit("target", 0.42, "示例分表.md")]
     )
     query = "京东 淘宝 分表 对比"
 
@@ -423,10 +423,10 @@ def test_weak_one_bigram_bm25_only_candidate_is_rejected() -> None:
 @pytest.mark.parametrize(
     ("query", "false_context"),
     [
-        ("量子纠缠在量子计算退相干控制中的应用", "Data Warehouse 中的应用与计算"),
-        ("火星殖民地生态系统如何实现自维持", "殖民地系统"),
-        ("巴赫平均律中的对位法与和声分析", "业务中的平均数据分析"),
-        ("线粒体 DNA 在细胞衰老中的作用机制", "系统中的作用机制"),
+        ("示例粒子在示例计算中的应用", "Data Warehouse 中的应用与计算"),
+        ("示例行星定居系统如何实现自维持", "殖民地系统"),
+        ("示例统计中的均值化与分组分析", "业务中的平均数据分析"),
+        ("示例细胞在衰老中的作用机制", "系统中的作用机制"),
     ],
 )
 def test_low_information_bigrams_cannot_authorize_lexical_only_rescue(
@@ -454,11 +454,11 @@ def test_conversational_variant_adds_second_dense_route_and_keeps_original() -> 
             self.query_calls.append((vector, top_k, where))
             if vector == [1.0, 0.0]:
                 return [_hit("noise", 0.70, "noise.md")]
-            return [_hit("target", 0.72, "购物车分表.md")]
+            return [_hit("target", 0.72, "示例分表.md")]
 
     store = PerVectorStore(
         blocks=[
-            _block("target", "京东 淘宝 厂商 分表 方案 对比 详情", "购物车分表.md", "交互"),
+            _block("target", "京东 淘宝 厂商 分表 方案 对比 详情", "示例分表.md", "交互"),
             _block("noise", "普通业务说明", "noise.md"),
         ]
     )
@@ -854,7 +854,7 @@ def test_two_term_lexical_overlap_below_refinement_floor_is_not_used_as_fill() -
     )
 
     result = _retriever(store, min_similarity=0.60).retrieve_with_trace(
-        "Redis 大 key 热 key 问题要怎么解决？", [1.0]
+        "Redis 热 key 问题要怎么解决？", [1.0]
     )
 
     assert result.chunks == ()
@@ -873,7 +873,7 @@ def test_expansion_does_not_reintroduce_a_hard_vetoed_candidate() -> None:
     )
 
     result = _retriever(store, min_similarity=0.60).retrieve_with_trace(
-        "Redis 大 key 热 key 问题要怎么解决？", [1.0]
+        "Redis 热 key 问题要怎么解决？", [1.0]
     )
 
     assert [chunk.block_id for chunk in result.chunks] == ["strong"]
@@ -926,11 +926,11 @@ def test_identifier_definition_query_accepts_explicit_definition() -> None:
 
 def test_identifier_definition_query_accepts_bracketed_expansion() -> None:
     store = FakeVectorStore(
-        blocks=[_block("definition", "AAB【Android APP Bundle】是一种发布格式。", "AAB.md")],
-        query_result=[_hit("definition", 0.36, "AAB.md")],
+        blocks=[_block("definition", "XYZ【Example Bundle Format】是一种发布格式。", "XYZ.md")],
+        query_result=[_hit("definition", 0.36, "XYZ.md")],
     )
 
-    chunks = _retriever(store, min_similarity=0.60).retrieve("请问一下 AAB 是什么？", [1.0])
+    chunks = _retriever(store, min_similarity=0.60).retrieve("请问一下 XYZ 是什么？", [1.0])
 
     assert [chunk.block_id for chunk in chunks] == ["definition"]
 
@@ -941,7 +941,7 @@ def test_identifier_only_overlap_cannot_rescue_wrong_compound_intent() -> None:
             _block(
                 "troubleshooting",
                 "登录 K8S 机器查看日志，然后把 GET 改成 POST。",
-                "排查bug的真实案例.md",
+                "示例排查案例.md",
                 "RPC 400 排查",
             ),
             _block(
@@ -995,13 +995,13 @@ def test_exact_heading_image_context_is_attached_without_consuming_another_slot(
         "risk-text",
         "新加坡接口阈值调整后，CTR 从 358% 降到 30+%；同时降低商品详情、分页和"
         "收藏接口阈值，并结合误封率持续观察。",
-        "行为风控数据分析.md",
+        "示例风控数据分析.md",
         "2024-04-18 > 新加坡爬虫",
     )
     image_block = _block(
         "risk-image",
         "【图片描述】阈值调整前后 CTR 曲线及请求量对比。",
-        "行为风控数据分析.md",
+        "示例风控数据分析.md",
         "2024-04-18 > 新加坡爬虫",
     )
     image_block[2]["chunk_type"] = "image_description"
@@ -1009,7 +1009,7 @@ def test_exact_heading_image_context_is_attached_without_consuming_another_slot(
     unrelated_image = _block(
         "other-image",
         "【图片描述】另一个日期的图。",
-        "行为风控数据分析.md",
+        "示例风控数据分析.md",
         "2024-05-01 > 其他事项",
     )
     unrelated_image[2]["chunk_type"] = "image_description"
@@ -1017,9 +1017,9 @@ def test_exact_heading_image_context_is_attached_without_consuming_another_slot(
     store = FakeVectorStore(
         blocks=[text_block, image_block, unrelated_image],
         query_result=[
-            _hit("risk-text", 0.76, "行为风控数据分析.md"),
-            _hit("risk-image", 0.30, "行为风控数据分析.md"),
-            _hit("other-image", 0.29, "行为风控数据分析.md"),
+            _hit("risk-text", 0.76, "示例风控数据分析.md"),
+            _hit("risk-image", 0.30, "示例风控数据分析.md"),
+            _hit("other-image", 0.29, "示例风控数据分析.md"),
         ],
     )
 
@@ -1043,5 +1043,5 @@ def test_zero_outbound_full_flow(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(socket.socket, "connect", deny)
     store = FakeVectorStore(blocks=_TITLE_BLOCKS, query_result=_TITLE_DENSE)
     retriever = _retriever(store)
-    chunks = retriever.retrieve("实时风控方案", [1.0, 0.0, 0.0])
+    chunks = retriever.retrieve("示例风控方案", [1.0, 0.0, 0.0])
     assert chunks

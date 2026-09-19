@@ -48,6 +48,17 @@ config.local.*
 .playwright/
 .tmp_probe/
 
+# ---- benchmark 数据产物（PRD §7.2 / T22）----
+# 这些 JSON 是对私人语料跑出来的实验产物，逐字含真实分块正文、来源文件名、标题、
+# 人名与可识别时间戳，只在本机生成与保存（默认落在 benchmark/，也见
+# .tmp_probe/rag-relevance/benchmark-private/）。仓库只留生成脚本、聚合结果与
+# 脱敏后的用例结构；详见 benchmark/BENCHMARK_REPORT.md 与 benchmark/cases_loader.py。
+benchmark/*.json
+!benchmark/cases.json
+!benchmark/aggregate.json
+!benchmark/aggregate_optimized.json
+!benchmark/answer_aggregate.json
+
 # ---- IDE / OS ----
 .vscode/
 .idea/

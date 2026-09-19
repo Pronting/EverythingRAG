@@ -1,93 +1,1327 @@
 {
-  "schema_version": 1,
-  "note": "每条用例的 gold 指向 .tmp_probe/sample_chunks.json 中对应 n 的真实块；evidence 为该块原文中必须出现的证据串。",
-  "cases": [
-    {"id": "C01", "cat": "semantic", "diff": "medium", "gold": [1], "query": "上新进度管控里，二级风格线和产品标签之间的映射是怎么建立的？", "evidence": ["二级风格线对产品标签的映射", "product_attr"]},
-    {"id": "C02", "cat": "fact_lookup", "diff": "easy", "gold": [2], "query": "验证码邮件为什么会重复发送给用户？", "evidence": ["int 值来处理自增 ID", "2,147,483,647", "MyBatisSystemException"]},
-    {"id": "C03", "cat": "fact_lookup", "diff": "easy", "gold": [3], "query": "以图搜图功能消耗 token 过多这个问题是怎么被发现和处理的？", "evidence": ["以图搜图", "@刘江涛", "注释"]},
-    {"id": "C04", "cat": "semantic", "diff": "medium", "gold": [4], "query": "黑五期间用户侧的业务监控都覆盖了哪些模块？", "evidence": ["用户礼品卡", "用户心愿单", "用户通知"]},
-    {"id": "C05", "cat": "numeric", "diff": "easy", "gold": [5], "query": "第一次黑五两封营销邮件的转化率和带来的 GMV 分别是多少？", "evidence": ["0.19%", "$2604"]},
-    {"id": "C06", "cat": "identifier", "diff": "easy", "gold": [6], "query": "为什么 CI 自动生成接口文档时禁止用 Map 或 JSONObject 作为接口返回值？", "evidence": ["map 的键值无法分析", "JSONObject"]},
-    {"id": "C07", "cat": "identifier", "diff": "easy", "gold": [7], "query": "接入 yapidoc-maven-plugin 时 yapiUrl 要配置成什么地址？", "evidence": ["yapidoc-maven-plugin", "http://yapi.shopcider.cn/"]},
-    {"id": "C08", "cat": "identifier", "diff": "easy", "gold": [8], "query": "RocketMQ 批量消费消息时，一次最多消费多少条是怎么设置的？", "evidence": ["setConsumeMessageBatchMaxSize(32)", "MessageListenerConcurrently"]},
-    {"id": "C09", "cat": "numeric", "diff": "medium", "gold": [9], "query": "TikTokShop 商详自动填充功能上线后，累计给运营省了多少时间？", "evidence": ["1500+ SPU", "250 小时"]},
-    {"id": "C10", "cat": "fact_lookup", "diff": "medium", "gold": [10], "query": "对接 Amazon 时为什么最后改用 CSV 传品而不用 API？", "evidence": ["edge case", "csv"]},
-    {"id": "C11", "cat": "identifier", "diff": "easy", "gold": [11], "query": "chatbot 用户提问分析里，msg_analysis 类型返回的 json 包含哪些字段？", "evidence": ["category_name", "mood_point"]},
-    {"id": "C12", "cat": "fact_lookup", "diff": "easy", "gold": [12], "query": "客服助手项目的前端仓库地址和开发分支名是什么？", "evidence": ["phoebe-web", "vain/feat_客服助手"]},
-    {"id": "C13", "cat": "fact_lookup", "diff": "medium", "gold": [13], "query": "obsidian-article skill 的验收标准里，成稿归档到哪个目录？", "evidence": ["/article/{主题}/", "素材不足时正确拒绝"]},
-    {"id": "C14", "cat": "semantic", "diff": "medium", "gold": [14], "query": "obsidian-article skill 里哪些路径可以由用户配置、哪些是固定写死的？", "evidence": ["article.config.yaml", "输出目录固定为 /article"]},
-    {"id": "C15", "cat": "numeric", "diff": "easy", "gold": [15], "query": "Agent-Sentinel 的根因定位准确率是多少？为什么能做到这么高？", "evidence": ["90%", "上下文足够丰富", "提示词工程"]},
-    {"id": "C16", "cat": "fact_lookup", "diff": "easy", "gold": [16], "query": "Agent-Sentinel 未来计划接入哪些办公软件和云厂商？", "evidence": ["企微、钉钉、Slack", "AWS、Azure"]},
-    {"id": "C17", "cat": "semantic", "diff": "medium", "gold": [17], "query": "芒格说如果在赌桌上你不知道谁是傻瓜，这句话是什么意思？", "evidence": ["不知道谁是傻瓜，那么你就是"]},
-    {"id": "C18", "cat": "semantic", "diff": "medium", "gold": [18], "query": "手里拿着铁锤的人看来世界就像一颗钉子，这句话在讲什么思维误区？", "evidence": ["只使用学过的一个学科的思维模型", "分科越细，思维越窄"]},
-    {"id": "C19", "cat": "identifier", "diff": "easy", "gold": [19], "query": "广告策略引擎误操作事故中，bi_warehouse_dw_us_w2p_product_app_hourly 这张表出了什么问题？", "evidence": ["bi_warehouse_dw_us_w2p_product_app_hourly", "9号之后数据没了"]},
-    {"id": "C20", "cat": "fact_lookup", "diff": "easy", "gold": [20], "query": "广告策略引擎事故复盘后，apollo 配置发布流程加了什么约束？", "evidence": ["给apollo里的每个配置加上注释", "@赵凯 Kai approve"]},
-    {"id": "C21", "cat": "definition", "diff": "medium", "gold": [21], "query": "一般性转移支付和专项转移支付的区别是什么？", "evidence": ["均衡性转移支付", "专款专用", "四成"]},
-    {"id": "C22", "cat": "semantic", "diff": "medium", "gold": [22], "query": "1994 年分税制改革的背景是什么，文章说的鞭打快牛核心矛盾指什么？", "evidence": ["1994 年分税制改革", "鞭打快牛", "惩罚优秀，纵容平庸"]},
-    {"id": "C23", "cat": "semantic", "diff": "hard", "gold": [23], "query": "弗洛伊德理论中，压抑、未被压抑和升华这三种情况分别导向什么心理结果？", "evidence": ["神经官能症", "性变态", "正常"]},
-    {"id": "C24", "cat": "definition", "diff": "medium", "gold": [24], "query": "弗洛伊德说的夸大（exaggeration）在性心理发展里具体指什么？", "evidence": ["过度的力比多投注", "hypercathexis"]},
-    {"id": "C25", "cat": "definition", "diff": "medium", "gold": [25], "query": "城投公司是什么，地方政府为什么要靠它来借钱？", "evidence": ["城市建设投资公司", "科斯", "15 万亿"]},
-    {"id": "C26", "cat": "semantic", "diff": "medium", "gold": [26], "query": "土地财政是怎么形成的，地方政府为什么没有动力压低地价？", "evidence": ["压低工业用地价格招商", "收紧商住用地指标", "土地出让金"]},
-    {"id": "C27", "cat": "numeric", "diff": "easy", "gold": [27], "query": "首单加深项目里 1.7 亿行的订单表造成了什么问题，优化后接口耗时降到多少？", "evidence": ["1.7 亿行", "物化视图"]},
-    {"id": "C28", "cat": "semantic", "diff": "hard", "gold": [28], "query": "作者说先立口径基线再谈优化，这句话是什么意思？", "evidence": ["先立口径基线，再谈优化", "任何优化都在改变数据的投影方式"]},
-    {"id": "C29", "cat": "fact_lookup", "diff": "medium", "gold": [29], "query": "OMS 切面偶发失效的问题，当时的临时解决办法是什么？", "evidence": ["把两个缓存都清除重跑", "CHashMAP"]},
-    {"id": "C30", "cat": "identifier", "diff": "easy", "gold": [30], "query": "OMS 切面问题最终拿到堆栈后，报的是什么异常，涉及哪两个方法？", "evidence": ["空指针", "getDeclaredMethods", "parameterizedWith"]},
-    {"id": "C31", "cat": "numeric", "diff": "easy", "gold": [31], "query": "使用 R8 混淆后 APK 体积从多少降到多少，有什么副作用？", "evidence": ["70.1MB --> 63MB", "Flutter相关的部份功能存在不可用", "Firebase"]},
-    {"id": "C32", "cat": "definition", "diff": "easy", "gold": [32], "query": "AAB（Android App Bundle）是什么，它怎么解决不同 ab 架构的包体积问题？", "evidence": ["Android APP Bundle", ".aab", "Google Play会按照用户机型的ab架构"]},
-    {"id": "C33", "cat": "fact_lookup", "diff": "medium", "gold": [33], "query": "星链系统是给哪个客户做的供应链项目，MPS 模块投入了多少人力？", "evidence": ["百威", "星链系统", "4 个实习生"]},
-    {"id": "C34", "cat": "semantic", "diff": "medium", "gold": [34], "query": "面试结尾反问环节，文档建议向面试官提哪些问题？", "evidence": ["这个岗位需要招聘一个什么样的人", "CTO 或者技术主管"]},
-    {"id": "C35", "cat": "semantic", "diff": "hard", "gold": [35], "query": "文档里说的遗留代码重构中的鸡生蛋蛋生鸡问题指的是什么？", "evidence": ["重构的时候，发现没有测试", "代码不可测"]},
-    {"id": "C36", "cat": "identifier", "diff": "easy", "gold": [36], "query": "SPM 的拼接规则是什么，举例说明 8.1005482.10003.2 各段代表什么？", "evidence": ["${siteId}.${pageId}.${sectionId}.${clickPosition}", "10003", "第二个点位"]},
-    {"id": "C37", "cat": "identifier", "diff": "easy", "gold": [37], "query": "埋点后台创建事件时，事件需要定义哪些字段？", "evidence": ["eventType", "eventName", "triggerTime", "reportingRule"]},
-    {"id": "C38", "cat": "identifier", "diff": "easy", "gold": [38], "query": "PC 搜索异常事故中，key_word_type 参数上报存在什么问题？", "evidence": ["key_word_type", "上报存在多份", "回滚"]},
-    {"id": "C39", "cat": "semantic", "diff": "medium", "gold": [39], "query": "置身事内这本书里，中央和地方各自掌握哪些权力和优势？", "evidence": ["任命权", "信息优势", "委托—代理问题"]},
-    {"id": "C40", "cat": "semantic", "diff": "medium", "gold": [40], "query": "cider 仓库的 CLAUDE.md 里提到自研系统包含哪些？", "evidence": ["LiveChat platform replacing Twilio", "custom recommendation engines"]},
-    {"id": "C41", "cat": "numeric", "diff": "medium", "gold": [41], "query": "购物车分表分了多少张表，用的是什么哈希算法？", "evidence": ["32 tables", "MurmurHash"]},
-    {"id": "C42", "cat": "semantic", "diff": "medium", "gold": [42], "query": "WMS 后段入库拆分二期独立部署上线时，是怎么控制上线风险的？", "evidence": ["先把 在库稽查 独立上线", "权限网关", "10分钟内的回滚"]},
-    {"id": "C43", "cat": "definition", "diff": "medium", "gold": [43], "query": "影响力这本书里讲的拒绝后撤策略是什么？", "evidence": ["拒绝回撤策略", "提一个大些的要求", "退而其次的较小要求"]},
-    {"id": "C44", "cat": "semantic", "diff": "hard", "gold": [44], "query": "影响力里提到的认知吝啬、锚定效应，还列举了哪些思维惯式？", "evidence": ["贵就是好", "拆屋效应", "社会认同原则"]},
-    {"id": "C45", "cat": "numeric", "diff": "easy", "gold": [45], "query": "针对新加坡爬虫调小接口阈值后，ctr 和 session 分别降到多少？", "evidence": ["358%", "30+%", "2k+", "22"]},
-    {"id": "C46", "cat": "identifier", "diff": "easy", "gold": [46], "query": "人机识别 v3 给出风险分 0.7 但没有被拉黑的用户，用的是什么机型？", "evidence": ["vivo 1920", "Android 11", "CiderAPP(Android/2.26.1)"]},
-    {"id": "C47", "cat": "semantic", "diff": "medium", "gold": [47], "query": "客服 Agent 的会话工作空间隔离是怎么实现的？", "evidence": ["/workspace/session_123/", "chat_history:session_123"]},
-    {"id": "C48", "cat": "semantic", "diff": "medium", "gold": [48], "query": "客服 Agent 怎么防止用户查到别人的订单信息？", "evidence": ["订单查询工具会自动验证订单所有权", "用户 A 不能查用户 B 的订单"]},
-    {"id": "C49", "cat": "semantic", "diff": "hard", "gold": [49], "query": "SKU 上架时间在五年前甚至十年前，首 30 天总销量统计不到该怎么处理？", "evidence": ["shelf_date", "兜底：基表计算", "mv_sku_daily_sales"]},
-    {"id": "C50", "cat": "semantic", "diff": "hard", "gold": [50], "query": "物化视图跑出来的结果和原 SQL 有细微数据差异，可能是什么原因？", "evidence": ["inner join 造成丢单", "时区问题", "asia/shanghai"]},
-    {"id": "C51", "cat": "identifier", "diff": "easy", "gold": [51], "query": "Windows 上配置 claude 使用国产大模型，请求地址和主模型要填什么？", "evidence": ["cc-switch", "https://api.deepseek.com/anthropic", "deepseek-v4-pro[1M]"]},
-    {"id": "C52", "cat": "semantic", "diff": "medium", "gold": [52], "query": "电商为什么要用坑位归因，而不是靠单因素 AB 测试来评估改版效果？", "evidence": ["单因素变量控制并不容易做到完全可控", "评估 20 个坑位内容改变就需要 40 天"]},
-    {"id": "C53", "cat": "semantic", "diff": "hard", "gold": [53], "query": "只根据坑位归因的转化价值来评判坑位会有什么问题？", "evidence": ["短期偏见", "产品价值定位"]},
-    {"id": "C54", "cat": "identifier", "diff": "easy", "gold": [54], "query": "PageHelper 为什么会带来数据安全问题，怎么避免？", "evidence": ["ThreadLocal", "finally代码段中自动清除", "紧跟MyBatis查询方法"]},
-    {"id": "C55", "cat": "fact_lookup", "diff": "easy", "gold": [55], "query": "K8S 路由异常导致商品服务 503 的最终根因是什么？", "evidence": ["pod 的label丢失", "k8s的生产标签丢失", "17:34"]},
-    {"id": "C56", "cat": "fact_lookup", "diff": "medium", "gold": [56], "query": "星链系统里手动完成节点任务时，后端需要更新哪些字段？", "evidence": ["实际完成人", "任务状态", "耗时", "后继节点"]},
-    {"id": "C57", "cat": "semantic", "diff": "medium", "gold": [57], "query": "青浦工厂原料排产时，原料和待包品混排的优先级是怎么定的？", "evidence": ["优先满足各个月的待包品", "青浦复合物", "SRM"]},
-    {"id": "C58", "cat": "fact_lookup", "diff": "easy", "gold": [58], "query": "黑五期间 Redis reco 集群 0007 分片异常的原因是什么？", "evidence": ["0007分片", "网络带宽被打满", "纵向扩容"]},
-    {"id": "C59", "cat": "definition", "diff": "medium", "gold": [59], "query": "弗洛伊德说的自恋式地选择对象是什么意思？", "evidence": ["人会爱上与自己有关的东西", "理想中的自己", "自我价值崩塌"]},
-    {"id": "C60", "cat": "identifier", "diff": "easy", "gold": [60], "query": "chatbot 接入 Livechat 需要调用哪些第三方接口？", "evidence": ["/ms/oms/front/order-list/search", "/ms/hades/logistics/v1/tracking/list", "robot/transfer"]},
-    {"id": "M01", "cat": "multi_hop", "diff": "hard", "gold": [29, 30], "query": "OMS 切面偶发失效问题从 5 月 26 日排查到 5 月 29 日拿到堆栈，整个过程是怎样的？", "evidence": ["CHashMAP", "空指针", "getDeclaredMethods"]},
-    {"id": "M02", "cat": "multi_hop", "diff": "hard", "gold": [52, 53], "query": "电商坑位归因方案的目的是什么，它又有什么局限性？", "evidence": ["坑位", "短期偏见"]},
-    {"id": "M03", "cat": "multi_hop", "diff": "hard", "gold": [31, 32], "query": "Cider Android 包体积优化针对资源和处理架构分别采取了什么手段？", "evidence": ["R8混淆技术", "AAB"]},
-    {"id": "M04", "cat": "multi_hop", "diff": "hard", "gold": [25, 26], "query": "土地财政和城投平台分别是怎样把地方政府债务滚起来的？", "evidence": ["土地出让金", "城投公司"]},
-    {"id": "M05", "cat": "multi_hop", "diff": "hard", "gold": [15, 16], "query": "Agent-Sentinel 的准确率、可观测监控项以及未来演进方向分别是什么？", "evidence": ["90%", "LangGraph", "根因知识库"]},
-    {"id": "M06", "cat": "multi_hop", "diff": "hard", "gold": [4, 5], "query": "黑五期间用户侧监控完善到了什么程度，第一次做黑五又暴露了哪些不足？", "evidence": ["用户心愿单", "0.19%"]},
-    {"id": "M07", "cat": "multi_hop", "diff": "hard", "gold": [62, 63], "query": "PG 数据库加字段导致锁表的排查过程中，隔离级别和表级锁分别查到了什么结论？", "evidence": ["读已提交", "表级锁共有八种模式", "pg_locks"]},
-    {"id": "M08", "cat": "multi_hop", "diff": "hard", "gold": [24, 59], "query": "弗洛伊德理论里，子本能被夸大但未被压抑，和自恋式地选择对象，分别解释了什么现象？", "evidence": ["hypercathexis", "自我价值崩塌"]},
-    {"id": "M09", "cat": "multi_hop", "diff": "hard", "gold": [43, 44], "query": "影响力这本书里，互惠原则和影响力的武器分别列举了哪些说服心理机制？", "evidence": ["拒绝回撤策略", "锚定效应", "社会认同原则"]},
-    {"id": "M10", "cat": "multi_hop", "diff": "hard", "gold": [27, 50], "query": "首单加深项目里，销量数据对不上的根因有哪些，时区问题具体是怎么统一解决的？", "evidence": ["1.7 亿行", "asia/shanghai"]},
-    {"id": "Q01", "cat": "colloquial", "diff": "medium", "gold": [2], "query": "我想问一下哈，就那个验证码邮件重复发的问题，到底是啥原因来着？", "evidence": ["int 值来处理自增 ID", "MyBatisSystemException"]},
-    {"id": "Q02", "cat": "definition", "diff": "medium", "gold": [32], "query": "请问一下 AAB 是什么？", "evidence": ["Android APP Bundle"]},
-    {"id": "Q03", "cat": "definition", "diff": "hard", "gold": [62], "query": "什么是 MVCC？", "evidence": ["多版本并发控制"]},
-    {"id": "Q04", "cat": "colloquial", "diff": "hard", "gold": [55], "query": "我记得好像有个商品服务 503 的事故，是不是 k8s 的问题来着，最后怎么定位的？", "evidence": ["pod 的label丢失", "灰度"]},
-    {"id": "Q05", "cat": "definition", "diff": "medium", "gold": [54], "query": "PageHelper 是什么，它的原理是什么？", "evidence": ["ThreadLocal", "分页参数"]},
-    {"id": "N01", "cat": "negative", "diff": "easy", "gold": [], "query": "量子计算中表面码纠错的物理实现原理是什么？", "evidence": []},
-    {"id": "N02", "cat": "negative", "diff": "easy", "gold": [], "query": "如何酿造比利时修道院风格的三料啤酒？", "evidence": []},
-    {"id": "N03", "cat": "negative", "diff": "easy", "gold": [], "query": "2026 年世界杯的赛程和分组抽签结果是什么？", "evidence": []},
-    {"id": "N04", "cat": "negative", "diff": "easy", "gold": [], "query": "在瑞士租房签订的合同需要注意哪些法律条款？", "evidence": []},
-    {"id": "N05", "cat": "negative", "diff": "easy", "gold": [], "query": "火星土壤原位资源利用（ISRU）有哪些技术方案？", "evidence": []},
-    {"id": "N06", "cat": "negative", "diff": "easy", "gold": [], "query": "贝多芬第九交响曲首演的具体时间和地点是哪里？", "evidence": []},
-    {"id": "N07", "cat": "negative", "diff": "easy", "gold": [], "query": "如何申请日本经营管理签证，需要准备哪些材料？", "evidence": []},
-    {"id": "N08", "cat": "negative_adversarial", "diff": "hard", "gold": [], "query": "Kubernetes 最新版本有哪些新特性和废弃 API？", "evidence": []},
-    {"id": "N09", "cat": "negative", "diff": "easy", "gold": [], "query": "怎么给三个月大的幼犬做定点如厕训练？", "evidence": []},
-    {"id": "N10", "cat": "negative_adversarial", "diff": "hard", "gold": [], "query": "数据库慢查询一般要怎么排查，有什么通用方法？", "evidence": []},
-    {"id": "N11", "cat": "negative_adversarial", "diff": "hard", "gold": [], "query": "Redis 大 key 热 key 问题要怎么解决？", "evidence": []},
-    {"id": "N12", "cat": "negative", "diff": "easy", "gold": [], "query": "拜占庭帝国灭亡的经济原因有哪些？", "evidence": []}
-  ]
+ "schema_version": 1,
+ "redaction": {
+  "policy": "PRD RAG-REL-001 §7.2",
+  "private_fields": [
+   "cases[].query",
+   "cases[].evidence"
+  ],
+  "kept_in_repo": "id/cat/diff/gold（gold 是 sample_chunks 的块序号，无来源名）+ 私文内容的 SHA-256 + 计数",
+  "private_dataset": ".tmp_probe/rag-relevance/benchmark-private/cases-private.json",
+  "loader": "benchmark/cases_loader.py"
+ },
+ "note": "每条用例的 gold 指向本地 sidecar 里的真实块（块序号，不含来源名）；query/evidence 属私人正文，只保存在 Git 忽略的本地文件，由 cases_loader 组装。",
+ "counts": {
+  "cases": 87,
+  "by_cat": {
+   "colloquial": 2,
+   "definition": 9,
+   "fact_lookup": 12,
+   "identifier": 13,
+   "multi_hop": 10,
+   "negative": 9,
+   "negative_adversarial": 3,
+   "numeric": 7,
+   "semantic": 22
+  },
+  "by_diff": {
+   "easy": 35,
+   "hard": 22,
+   "medium": 30
+  },
+  "evidence_items": 186
+ },
+ "cases": [
+  {
+   "id": "C01",
+   "cat": "semantic",
+   "diff": "medium",
+   "gold": [
+    1
+   ],
+   "n_evidence": 2,
+   "query_sha256": "2c2333e8523cbea9c64e836e40d4b905a2dff23e0de2b84b7bc6d7a5cdc301e5",
+   "evidence_sha256": [
+    "fa50814bae2fe47062124374a151d71f27d322edc6d53e74a6765a45ff13db8d",
+    "3962dbc2368d72c372da21f7468e69626811893312bc0afe81609368383e872d"
+   ],
+   "case_sha256": "c3612f0581ffc1106b4c273f0bdb3c873ee65bf56168256aa028f7b5bdd1e298"
+  },
+  {
+   "id": "C02",
+   "cat": "fact_lookup",
+   "diff": "easy",
+   "gold": [
+    2
+   ],
+   "n_evidence": 3,
+   "query_sha256": "f59281b1c5414f794c839594a1fc4fdc10145d59268f09ecb01fb3e6035e4b2e",
+   "evidence_sha256": [
+    "069585d96fd37f70bdae5e2cfb19c7dc51685d8ba0b1a91f01135ccbf01bb599",
+    "5433ac1311d03d7c6c1d8df8ea18d0f7bb81bb75a8b7cd34dc9e7ce6fce5d5be",
+    "56a315e2431c3fbab60522a0562ac071eda6d797d5c5b5e2295e34fc23c7c2a3"
+   ],
+   "case_sha256": "0550036128ce2699db3d6db3250bcc1e0f875b9c01f3989cd426103c1a90252c"
+  },
+  {
+   "id": "C03",
+   "cat": "fact_lookup",
+   "diff": "easy",
+   "gold": [
+    3
+   ],
+   "n_evidence": 3,
+   "query_sha256": "17c99c177e13a22ad762d955594020fbe3379b690ba589467a97b758a3775605",
+   "evidence_sha256": [
+    "7a2d5d8669b7aa496b98c8b415a81e455dacf144e9e873ae8fe2d042f0cd5116",
+    "33c5df5b2dad9c6dc268e19723810e9c735aecbb58eaa60dbd4f66d45a2d36c9",
+    "508bf3307053298f697c510b8a115c02ad1bc6d0860c4aa7dafc2d877df0e610"
+   ],
+   "case_sha256": "2f7fb6cfdf4bd506877399dbd2e9b61d1c5c2d291f1c7a1c4334fbd69d8f271d"
+  },
+  {
+   "id": "C04",
+   "cat": "semantic",
+   "diff": "medium",
+   "gold": [
+    4
+   ],
+   "n_evidence": 3,
+   "query_sha256": "ae0b98703acf70559a9f63f958d1845f3df5cc65cc36e4402f9af3462c68aee1",
+   "evidence_sha256": [
+    "aaf16b80c0366c0c74526d6908f34adc949019ba190017607cde41d39bf378e8",
+    "4f61a1c31cb6b90a69ce1fa15a770039b008efa85bad59b69364c39404b8d9e2",
+    "7d70454f5c77477462d5250e1c78dad5a472591f77f307d476576b510a5db780"
+   ],
+   "case_sha256": "3bfb3f1e7468ef9c433ce4ad7089d5d5b53cb499b5e729e6e3d6aa37cb278a44"
+  },
+  {
+   "id": "C05",
+   "cat": "numeric",
+   "diff": "easy",
+   "gold": [
+    5
+   ],
+   "n_evidence": 2,
+   "query_sha256": "baf5e4f59ced7ba93abc6ff0ecc427c0b43b429edb607f83f4fde6f05611fbb8",
+   "evidence_sha256": [
+    "5349e794f6cc4726e1dc791d640f69629fd360d9a140a0b418474c9e45fca5bc",
+    "e29c4f2403691207ff8ddd2b58b07e9e9ab42580f1f3428f35a127aa1a372c13"
+   ],
+   "case_sha256": "2ba405d0f4a15034394b54744032f1b13f69a988e82fa9700cdc5b87e6ee2507"
+  },
+  {
+   "id": "C06",
+   "cat": "identifier",
+   "diff": "easy",
+   "gold": [
+    6
+   ],
+   "n_evidence": 2,
+   "query_sha256": "1e76a4f9f4898cd5264b3c9279ab6c89f1cc0cd534c9b3a997364fd0cc05e400",
+   "evidence_sha256": [
+    "c03abbd24310b6b5603d507209cebe251760331d17fa05c60ade9432546cf344",
+    "0d39d4a443499fc7c51306254036e29108df46eae4e8b6f0534506eeb7b9bfc4"
+   ],
+   "case_sha256": "f367338f7a22355074d9806add1f4991a256d18b72107dbd18ec129fd2873df3"
+  },
+  {
+   "id": "C07",
+   "cat": "identifier",
+   "diff": "easy",
+   "gold": [
+    7
+   ],
+   "n_evidence": 2,
+   "query_sha256": "7b42a1f7547ca626d04d99ae2f2f4ba701ca97c1ef8339f27e546117662abc6a",
+   "evidence_sha256": [
+    "63e43500a66298d5510dfddeda455f2a97eea2825e0ab4bf188e0e5342b447b4",
+    "a0f64ea1821741c34cb188ba5e03874a4578f3406f82af77e6fca2f109feee17"
+   ],
+   "case_sha256": "984673e7da526c5530b4396afacda5bd9345e8281e4cae612acb9a933a54279f"
+  },
+  {
+   "id": "C08",
+   "cat": "identifier",
+   "diff": "easy",
+   "gold": [
+    8
+   ],
+   "n_evidence": 2,
+   "query_sha256": "f446e634ac8be48c17b5273e2e0bd341c72a7176ff37210068f71707c8d33dd8",
+   "evidence_sha256": [
+    "c5dea6dff54bdd5509efa47b2208515368012e8e062b6950a9bb52215a304b53",
+    "0cba2d948309f6b3f2eb09ab304afed9ee1e696ab518e68fed54bbee5702c9c4"
+   ],
+   "case_sha256": "610adf7f0e168f1675e28628b6b51ea61d2a53fc5a06ff6623623fa4d2864495"
+  },
+  {
+   "id": "C09",
+   "cat": "numeric",
+   "diff": "medium",
+   "gold": [
+    9
+   ],
+   "n_evidence": 2,
+   "query_sha256": "4d58948d102d830f8d636476f371f93f96bef4aa79e832980ba5a04211cea92e",
+   "evidence_sha256": [
+    "983f85959250217fcdaae4a8db2fb27871f04d52476d7ae92dcad08469315cb2",
+    "94be8f599d7ea8af8e2e22f7dc958256a951b45232b4806d43a10a9fa2c9a185"
+   ],
+   "case_sha256": "be765c9df74fb7dec85c3645714e479bdd24c881b50284850e2d56426961514b"
+  },
+  {
+   "id": "C10",
+   "cat": "fact_lookup",
+   "diff": "medium",
+   "gold": [
+    10
+   ],
+   "n_evidence": 2,
+   "query_sha256": "8584bc9830d16c286232ae5fef5e74cbb440a1122b5a3c38357590c780fadddd",
+   "evidence_sha256": [
+    "6686fa2665ae3db192a77a08d0dbcd9dc010c1b918cacf08db029ec2bac58fac",
+    "53bb9b0b38ac812554abeb88ea6d56760d07ec147a75e8761c4f57ecc298218f"
+   ],
+   "case_sha256": "472ca771350a0688eb7d588ab6e608095830a11377120447cc25a963e7be2d23"
+  },
+  {
+   "id": "C11",
+   "cat": "identifier",
+   "diff": "easy",
+   "gold": [
+    11
+   ],
+   "n_evidence": 2,
+   "query_sha256": "4207d340cfda7ded7e886083f7257030a593699a515b1994923943bcd34a5a0e",
+   "evidence_sha256": [
+    "be6f7c5503f496992c937f585173680d8079b3f2538836302e1179ba93c6d391",
+    "8d272485ad489f935080df0e140f9a86ce6ba6f874d1bae79dd0bfa5ce2df17a"
+   ],
+   "case_sha256": "76fffac970bfd6ad0a6a1fa3a5f35ff4488d1c52e6571d16c8356652bb76f7f2"
+  },
+  {
+   "id": "C12",
+   "cat": "fact_lookup",
+   "diff": "easy",
+   "gold": [
+    12
+   ],
+   "n_evidence": 2,
+   "query_sha256": "ca01912020db586011f618d466e1799b592a35bb52f8669975eb257890a6a63d",
+   "evidence_sha256": [
+    "b15da6468a5debc9c4cbd9c8ff48e3aaf0706f8c69c8ffb50722389e1d7fbdbc",
+    "e6917cd85a72cf5e3d5bd8b04e8b588c1f7c304c629787ecfcde93b823cb51ab"
+   ],
+   "case_sha256": "578c47f54aa0768c4fdbdc23376fa3413a4b48b3a12e33de6ba8650a578bce58"
+  },
+  {
+   "id": "C13",
+   "cat": "fact_lookup",
+   "diff": "medium",
+   "gold": [
+    13
+   ],
+   "n_evidence": 2,
+   "query_sha256": "cc9170693087e767332823c9cc8221797f643764471d153ce5ba4d6d20e44e1c",
+   "evidence_sha256": [
+    "1ca8731fa9cd207a5b254e0cbbaeffb9981b500ca059dc6e31c9b02af87ceda0",
+    "406ae5e4a9599e109a20eed2a49c79fc37216f8c1ecf494ae03885619d5901e9"
+   ],
+   "case_sha256": "8985c2fa234c6b4d0b4deed721ad27598e5ec7ce541dd381f8558177e510316e"
+  },
+  {
+   "id": "C14",
+   "cat": "semantic",
+   "diff": "medium",
+   "gold": [
+    14
+   ],
+   "n_evidence": 2,
+   "query_sha256": "27587a515f9d9cea922ca6fbfc2413b625f5a70047e8211c7c623bc5822280a2",
+   "evidence_sha256": [
+    "84e9593a211c03dcfa7bafb166ce21fb44923e986c1bdc84da02e61e37f6be1f",
+    "6364e328244fc492c2f76b64d3f3b644e0b2779cf00f281a035d8b42318dc42f"
+   ],
+   "case_sha256": "6e6691c2fa997e134f2975f1ea2c1a194ca89e287b1e21eba383b24d7300f68a"
+  },
+  {
+   "id": "C15",
+   "cat": "numeric",
+   "diff": "easy",
+   "gold": [
+    15
+   ],
+   "n_evidence": 3,
+   "query_sha256": "72b053f57488264e651c98dd754893a4f7511207833324f8dac1cb0021304601",
+   "evidence_sha256": [
+    "883caeb7ca1165a22441d8487203cc8aa9284ad7c0f5664c704f98ecb10849b4",
+    "5518aa9a25d9a608ba616d700ad6ce117f84cb0c4e9e436cf777c6467ff89024",
+    "0962ad68a9646edd7572b12dd8a11450ccbed111ecb2b8d8c69bd5c90cd686aa"
+   ],
+   "case_sha256": "339b79e364ec08b5e8c164f2618688d99bf0819068a10e3963f7b1a8fe27cab4"
+  },
+  {
+   "id": "C16",
+   "cat": "fact_lookup",
+   "diff": "easy",
+   "gold": [
+    16
+   ],
+   "n_evidence": 2,
+   "query_sha256": "fbce7e693f03130d49934e496243824c8b6ae97c963f3d848e6cb8a46ab20eb6",
+   "evidence_sha256": [
+    "2217420eb0d431615deeedd32220a8bd17f332c123f1a526bbb4f7678f2b300e",
+    "8156e2a697dd70ed689eeb58bb7187c386585230dfab884ae7c4577be8d06e07"
+   ],
+   "case_sha256": "af8400f584782d5c4e5179ff37584ce897fb4477facd621c6c923be4ac3cb715"
+  },
+  {
+   "id": "C17",
+   "cat": "semantic",
+   "diff": "medium",
+   "gold": [
+    17
+   ],
+   "n_evidence": 1,
+   "query_sha256": "9703c9628d12129185fca6326fca1bdc91d0cffff4342292c502abe83a1b9cfa",
+   "evidence_sha256": [
+    "2799c4d84e5b7c37409370204a1c0baeac2962f42713c07e6e835d1e2b4a404b"
+   ],
+   "case_sha256": "82ae4b69b6c6d6694baf6a5806145e386610a19239891e459a3a189cd4395006"
+  },
+  {
+   "id": "C18",
+   "cat": "semantic",
+   "diff": "medium",
+   "gold": [
+    18
+   ],
+   "n_evidence": 2,
+   "query_sha256": "525dd59ad6b7b5d52ecee0d414987a2123df0c1c5fbb3ad0a521e19ada4113e9",
+   "evidence_sha256": [
+    "e0231aab9f38817880d39df78a6611ceb3ce4cf1a735564d4203274df35cf8a1",
+    "43ddc85e092e343a34c53cd391490fe19008a8ad6869aa9e76c1002834db3144"
+   ],
+   "case_sha256": "51457b9c37538bfd53695af477c5f7f3431cc5461a50dbb1815239706ef2f826"
+  },
+  {
+   "id": "C19",
+   "cat": "identifier",
+   "diff": "easy",
+   "gold": [
+    19
+   ],
+   "n_evidence": 2,
+   "query_sha256": "86926197bef5bdf6850ad0670168037079383a0ccbbaee824e1b619ac065e6fb",
+   "evidence_sha256": [
+    "a2eb9475a7fb01bb1d9ff5fb0cc6c4bc8a5f97e39c0853f0c0216245d24f7024",
+    "b832fc6f0b1004d7d909c10e7a35b587594c3a8e234cefeec828a1d41f04a290"
+   ],
+   "case_sha256": "e8c6b3790da785765164972be3e9de80c4bb46de35668cd367abe1a187d172d8"
+  },
+  {
+   "id": "C20",
+   "cat": "fact_lookup",
+   "diff": "easy",
+   "gold": [
+    20
+   ],
+   "n_evidence": 2,
+   "query_sha256": "1a2472ce12ba23218afed5e1cf6c39c9a42a475c3f9cd7c08ac3d132053b1b81",
+   "evidence_sha256": [
+    "7c40cd289d6e41de0c144c477439a212a7ccf505d544dba02abf68022b1a13f9",
+    "a51cb3870014d0dc27830c4214c70172d302aea27527901fddd4fc9ecaa6cd61"
+   ],
+   "case_sha256": "1cd55a5f14d723e57fbd40eca71f45bfb8f2e55e8ae016b96d0a9c660dae286f"
+  },
+  {
+   "id": "C21",
+   "cat": "definition",
+   "diff": "medium",
+   "gold": [
+    21
+   ],
+   "n_evidence": 3,
+   "query_sha256": "5cea3d134fc0ca381516142daf4db3881750ad721118553fe6ed8841c6af5677",
+   "evidence_sha256": [
+    "b8f0610605ace8992bab3290ef40598f53a258affa7fd86423f13c4daf4c17a9",
+    "ba779f05e25d484cef92820d39a89b96f69bf15c2a7392805b9d39327326a5e6",
+    "e3b4a62d43254faaaae16002e38b158549ee5c44738d8a23c9c75feaa09f3d5c"
+   ],
+   "case_sha256": "a91167dc7d814898f2753d66805cb49819a1dd1675ff77c87b8575944bbae84b"
+  },
+  {
+   "id": "C22",
+   "cat": "semantic",
+   "diff": "medium",
+   "gold": [
+    22
+   ],
+   "n_evidence": 3,
+   "query_sha256": "fc8cf3da826078a5feea26a46e05abb8443f1d947abea1c11d02d39df5eb29ef",
+   "evidence_sha256": [
+    "87d07a44541d38b4d31122dac1c834f72378ffe56c5b67458601cb196c1420fb",
+    "ece06d3c442078f5cdd938a414f0ad2f2c83c833f29defe57f640887b1aa0722",
+    "2b8a07782887c0eef07ac142b892d8cd850cd8d3a1a5b0c5798141db2c285c4b"
+   ],
+   "case_sha256": "a72e6a9d6c7904e00dc6405bf9d4a7b06684f08b10c5ea9037914f233ca799e6"
+  },
+  {
+   "id": "C23",
+   "cat": "semantic",
+   "diff": "hard",
+   "gold": [
+    23
+   ],
+   "n_evidence": 3,
+   "query_sha256": "4e56f16284b30b8f8c8157fa4ef2d9b6b18ed2de9aefd15dc3f83cb205bf68c3",
+   "evidence_sha256": [
+    "ca7cec82f2553eae7815dfbd98b5858806a71d890573f5b0655f80e2f3630038",
+    "ae5594a4032d183ea3da957271fff13d7b5e042dba75682a668a0a84821aab05",
+    "296de0e31f8c22d9343c1f07f7fcd2e88a425d769cb0c88d8b24cc865f2c0685"
+   ],
+   "case_sha256": "fdc9416db182fb878b671f6a12142527f6eac2eec2becf85d2747a8d404b9e35"
+  },
+  {
+   "id": "C24",
+   "cat": "definition",
+   "diff": "medium",
+   "gold": [
+    24
+   ],
+   "n_evidence": 2,
+   "query_sha256": "4a0ec50e13e16d36e092aaa2a09b33cc69a8630ce1833ae881efb287d9fbe84c",
+   "evidence_sha256": [
+    "a3a224cb034aae9499ed4744eea238d25d4176cd5b30bb79835bbfa52954c12c",
+    "4e290dbee8acd874fca0f2813ab8833d66a3e55565cb80ce457fcf07ca418e6f"
+   ],
+   "case_sha256": "7d1a525d5177cfddbb42ab3af75580333d316cb6fba38c975907e82b9a4cbb45"
+  },
+  {
+   "id": "C25",
+   "cat": "definition",
+   "diff": "medium",
+   "gold": [
+    25
+   ],
+   "n_evidence": 3,
+   "query_sha256": "968aaddcce055c572fa3d3093873680301b1ac4dbee93d9d969d04fa9d366702",
+   "evidence_sha256": [
+    "2289327e7c5cbd26c09f540f39d33dabe54b959234f964a312a4ac79d580508f",
+    "e92f5dfdfb5cc7bb7e2517f180b6ddedd797bd6ae05bbf76ba76d415b621334d",
+    "cf3b198d61663f861c40705e415e82848c4b464415db5cc38042678744cc268e"
+   ],
+   "case_sha256": "5bbaa330cc76a607e44ad3eef57b74ccb947077b310edf1ddfb38d07c8c3dd7d"
+  },
+  {
+   "id": "C26",
+   "cat": "semantic",
+   "diff": "medium",
+   "gold": [
+    26
+   ],
+   "n_evidence": 3,
+   "query_sha256": "9aadd522fca813aead66cac96439d924176a4d762f7b916098f4de766bf4d572",
+   "evidence_sha256": [
+    "ba3d5d0d98cf972915d6dd89fdb059125007a76e8de17ceedfe36588c0ba9435",
+    "5381ce088b057f4b522396aabcbf39336edbeeefa38acc399ce6ae767a82e0ae",
+    "c7cb6bf0567af75a894393700262d60e98fecaf11d75cc97867b1b9858bc307f"
+   ],
+   "case_sha256": "26d9b60c9e4710691d1a4c30ab1f5c38789661143d397357d36c2c85da2eb9ae"
+  },
+  {
+   "id": "C27",
+   "cat": "numeric",
+   "diff": "easy",
+   "gold": [
+    27
+   ],
+   "n_evidence": 2,
+   "query_sha256": "454384a0c81e4615fe4fe83700ff9d506d764b17f9068fe179a336669aadffc2",
+   "evidence_sha256": [
+    "728cf5f129df6168a4e3ffa4d75faecf31b22005ed249bca547a049fcc673a64",
+    "53b312842ba91f8bf78dc590f90f81232ca0e6e64e1b90f037164abc224feff5"
+   ],
+   "case_sha256": "c940136084eff4f096350992227dbb0e9758e2ec43f6311c0ca3a812fb154a92"
+  },
+  {
+   "id": "C28",
+   "cat": "semantic",
+   "diff": "hard",
+   "gold": [
+    28
+   ],
+   "n_evidence": 2,
+   "query_sha256": "12807a9b2e7226f006e48bc8f4ce6564af71517d0de6c2ea5d6b3d03798541f9",
+   "evidence_sha256": [
+    "3dde2ecf18c9442b4185cb922b17fca62c79a591616bff7e94a74b42c0e8f6c6",
+    "23ce6141aff8080c441625f58c8636e113056763d0e47824ff72b178226c3e9d"
+   ],
+   "case_sha256": "06946e207d9b2d5d4e90e1aaf6af6c6f4facbce36b32e84d9bbcb253bf3a342c"
+  },
+  {
+   "id": "C29",
+   "cat": "fact_lookup",
+   "diff": "medium",
+   "gold": [
+    29
+   ],
+   "n_evidence": 2,
+   "query_sha256": "d1d0ee950466f93acfc8687cce6c0beba3ae17b4311c9e0c0f236d813a58db22",
+   "evidence_sha256": [
+    "f3d735edbcacbf6efb64b6b1404dae2775dccbc2ddef755adc11129fa4a8cb2f",
+    "ace4ed08df5ea130f877061d18f76a0b5a7dfb4d85e6c410a8bad21d5a299a67"
+   ],
+   "case_sha256": "7c6a32df1c4554a4a5e981f9895473080620c44cb40af51d61f9c87655c1dd45"
+  },
+  {
+   "id": "C30",
+   "cat": "identifier",
+   "diff": "easy",
+   "gold": [
+    30
+   ],
+   "n_evidence": 3,
+   "query_sha256": "2e8029ccaf6a79b5aed8c53ea1e745ba5db52a581b23e91ed8453500f5c008a8",
+   "evidence_sha256": [
+    "bf2c563da06cd0ad8f437ff6ef3e72063f6c6389f1690232aa9bdd597e57882f",
+    "1c2a9e14dd0d3837a050357a0f257f224f6a37436e09ea0c3663a6b04654bbd4",
+    "faa99865576fba19f042b91e30e74407083b754f63088caa603a824d9e53e26f"
+   ],
+   "case_sha256": "3a79a4e6962800ca55cdfbda1004dbdee8ca6881ed5a223e326aa547b764d202"
+  },
+  {
+   "id": "C31",
+   "cat": "numeric",
+   "diff": "easy",
+   "gold": [
+    31
+   ],
+   "n_evidence": 3,
+   "query_sha256": "de4e5c1c66c112eeb8f49aab70f4066ef65441e928f7f4300bde9ccfd27bc7e0",
+   "evidence_sha256": [
+    "63af52bc27288588ea2e33a5dea3b141dbb19b4de1420c875e641fac862b94dc",
+    "7d50887e63526fbf175076f44376f29d2a3c3abae3cbc755fb01805fa7ff0f49",
+    "4f3a3e91015ed845f6eb5550bc3334001c9501620b1d75299234903fe95f527e"
+   ],
+   "case_sha256": "54e6d057a2baa0f902294c737769a3e23825f535e55496a96e9e9c25d2292233"
+  },
+  {
+   "id": "C32",
+   "cat": "definition",
+   "diff": "easy",
+   "gold": [
+    32
+   ],
+   "n_evidence": 3,
+   "query_sha256": "8bcbdcaff1d11f7a8c923f9ed4db4465087683056d7bc49fd9a1b6e110aa21d1",
+   "evidence_sha256": [
+    "08bf57b23fe9d99060fc0b98acc82be9ff329ef5c5a1646e2c42c426c898cf33",
+    "9b087651fa815b5c7093b6f9713403fed4181b6df1de905f860bab52ff5e7c49",
+    "2fab73ac0330ff94641d5c7ed54f3ddbb0b2c94786a32b763e7ef39a234d0571"
+   ],
+   "case_sha256": "a4579a441ff0987cfd09289606d781dd5a17b3e4e20ce73187089ab836ee0de8"
+  },
+  {
+   "id": "C33",
+   "cat": "fact_lookup",
+   "diff": "medium",
+   "gold": [
+    33
+   ],
+   "n_evidence": 3,
+   "query_sha256": "c2017ef0094010392a4fe0c5413700459ba77ce0a4d6c28f0f232b6819dc97f2",
+   "evidence_sha256": [
+    "94948d00175c482efcce1b84e82eca7d1ccca354f59a34701326ffd18102f23c",
+    "87960ad11558de2ba30b648ab905e6f7c5c9c9f823bb255bedaccac543df1749",
+    "477d38b1ec4cdc3b71452e639e374199b5052126314b7037a4236b5724be4823"
+   ],
+   "case_sha256": "ec9e9d12c2383ea3c152b8f103febe8d760dfe57c2f9b72dab45a07b31d3dcdd"
+  },
+  {
+   "id": "C34",
+   "cat": "semantic",
+   "diff": "medium",
+   "gold": [
+    34
+   ],
+   "n_evidence": 2,
+   "query_sha256": "ecd328133291c8a1cc4c6e3402909b13edb00eb64325da0e5d60d50e34e87a76",
+   "evidence_sha256": [
+    "80d95ddca246e7a31d61c89fe1a388e61de65268ed9ca1a8d96f4946357a5403",
+    "48321b8140972e9303eb4b48049c0efa2cd5938948f63e897d1576ec88d95a07"
+   ],
+   "case_sha256": "b0ee771354f31b3e3456cc001ba7d7dccc1bb161b1ba064931d15736d6e1a44a"
+  },
+  {
+   "id": "C35",
+   "cat": "semantic",
+   "diff": "hard",
+   "gold": [
+    35
+   ],
+   "n_evidence": 2,
+   "query_sha256": "b2692ab08661a0a20b9d98a766affa386f3819af893c0e59747c74c37fbd6001",
+   "evidence_sha256": [
+    "090a0322d0b59867730d12714e8761c6ce3042ff9c3a9a634c7829923f5a497b",
+    "be5a4571f6f2b64e64436a6cc382ab8d1793a8214ac2e5e6fec82762573051a0"
+   ],
+   "case_sha256": "06dca12e3fb2f0e95435bc0663c1ee5e3f36214a436cfeea57bfb2ad0ee33485"
+  },
+  {
+   "id": "C36",
+   "cat": "identifier",
+   "diff": "easy",
+   "gold": [
+    36
+   ],
+   "n_evidence": 3,
+   "query_sha256": "d480b9e8e370e5722c01539951137854eb8db52f01f044fa79ecc174aa992d43",
+   "evidence_sha256": [
+    "063b970a1b5cbc03eec1e5b8c690ba66b7fab014afd424a33e5456a129867379",
+    "e162e30a5a4c1e44a7e04fca063c296001f26636ecf384701ae17849a4f83b11",
+    "e5640b5bcc4e838913432e8a7c2fbd13b7a3df0b55923889638cc767ec93105f"
+   ],
+   "case_sha256": "4441297e3e95105360023ceb42ca3bea9b6446c0729aaf2072e39b9950e90394"
+  },
+  {
+   "id": "C37",
+   "cat": "identifier",
+   "diff": "easy",
+   "gold": [
+    37
+   ],
+   "n_evidence": 4,
+   "query_sha256": "c1d8050e9171987737181d55991b4b32400dfadd161d0e0593e2c84001bdc0d3",
+   "evidence_sha256": [
+    "f01f350fe62f91bb2b510607d181dc0e31e1b2ecc8e54cc5bb544aeed6f2e652",
+    "6c7643441a7c4a93ff18331f6f2f56cecd41c7ad6a5cffdb2df7460f367e3eb7",
+    "cfff426835741e6e8d9808f775a439c3657f8f8ae3d80f3e584159b7e98f0b83",
+    "2fd2ecfa61c829595f227b47f07b4f2afb424811be79db546da59be2d70d85e7"
+   ],
+   "case_sha256": "a555e2560fa8678990bfa4e4e0a1c03249f1899250ab13614285d1c278dc23f7"
+  },
+  {
+   "id": "C38",
+   "cat": "identifier",
+   "diff": "easy",
+   "gold": [
+    38
+   ],
+   "n_evidence": 3,
+   "query_sha256": "945dec095102c8d638a3bd8cca05af07ada57509c026304a922853b546d6c6e1",
+   "evidence_sha256": [
+    "453358594dcb4735d1a96a9cebf8ec3bf908f2e6ce54a3f610a9a940ee68b7f3",
+    "2fa2e5b96a466b305bd7e8a0da5926f53d5cb5e856e190d26588b61e2e6ca4a8",
+    "6518e21a8e5ff207074003e86dbad62be00c5b3c817e5cf907e9d92df14ffea5"
+   ],
+   "case_sha256": "0afda18df9350b3885890ab3850d95421d9a743308109a9cdd207052fda9dd74"
+  },
+  {
+   "id": "C39",
+   "cat": "semantic",
+   "diff": "medium",
+   "gold": [
+    39
+   ],
+   "n_evidence": 3,
+   "query_sha256": "d499188a8e62fddafa850a8c4ade28aaed16c56280cc1b64f62cb647d178dc2a",
+   "evidence_sha256": [
+    "bb1e3a9ddceda3437ced6f2164cf1510c6292a589a36e4747a2813457b6fb710",
+    "53ecf777fef0eda8843db0289293b44a859ac7526feb1d9f08399eddc79015a7",
+    "1e0f7c8f41b5d1037b8d6279dc896b660cd986b66a83c629caefe300126e1a38"
+   ],
+   "case_sha256": "b712f21d20e08e85af5ee2cdc2cfdb3cb463b2eb5326a3aa3b40c7d2a3f962c8"
+  },
+  {
+   "id": "C40",
+   "cat": "semantic",
+   "diff": "medium",
+   "gold": [
+    40
+   ],
+   "n_evidence": 2,
+   "query_sha256": "d72a998127e04f72482aa1a83be438bef1459400d0e630fc5c9da6ef56474282",
+   "evidence_sha256": [
+    "c7968585a5ac5accb3ba5aa4d6e0fed782d2306e48d78e1f4a113151d1abf0fb",
+    "15e40e4d6f4576ce9538706b3dfcc6a5f3afd24f057363f15532966a5e480a9d"
+   ],
+   "case_sha256": "678f851e804210410b9b644278e488e18548225aeec153aa8ddeef8ac450395e"
+  },
+  {
+   "id": "C41",
+   "cat": "numeric",
+   "diff": "medium",
+   "gold": [
+    41
+   ],
+   "n_evidence": 2,
+   "query_sha256": "1d4d50927e2d3249ae11c86ea960bf5936b95314300a29c34ca0dccc2ef3b9ce",
+   "evidence_sha256": [
+    "7234bd5eb063315fe03ae51c31dc5315774e513c6b75076db85c8ef536108f90",
+    "5a082c20b55db68f963efd0f94b5c10b4ee275c24773e588b81a60a8573d2d5c"
+   ],
+   "case_sha256": "2a70db935e0cbe3f8e310b4de592f2c91cc8f0ab3010413f83e18ac70d7f1408"
+  },
+  {
+   "id": "C42",
+   "cat": "semantic",
+   "diff": "medium",
+   "gold": [
+    42
+   ],
+   "n_evidence": 3,
+   "query_sha256": "5b75e791dd4f4e0423606663cccf1fda024b3bf190233b772a24185948ee7d7f",
+   "evidence_sha256": [
+    "47b5715f5e59e713fcc2e4ed42986f3307835de08f084f9364325bd11571cbb1",
+    "8bfdb935230389c90302543eb31d068d66309dbe42db9d7e3739e5d0f28d9432",
+    "143706a52ff2e0b91bd8274290862a351165212b0b9eb00bd2523ef234aeb070"
+   ],
+   "case_sha256": "8b93357d395448699c1cfd803fae6ffc1be6cc3e62c1feed83974d165cbb3194"
+  },
+  {
+   "id": "C43",
+   "cat": "definition",
+   "diff": "medium",
+   "gold": [
+    43
+   ],
+   "n_evidence": 3,
+   "query_sha256": "68fdb2a5fdac1245be3076e9a235448329df3ba3e2be1f7db005ddeeded6bd39",
+   "evidence_sha256": [
+    "1a7b9d6812aebb50307335ddc566829a22f85904d0ec4e4cf04b04ef06374130",
+    "7a97120ea9758e4aaf4b77aae8e766a5c421dd77f031e8c0baf2dbeaf1bc91d3",
+    "43d04f21304bc316b18a4eefffdc75365fbe66d2626990b57e0dd6ebdc379a04"
+   ],
+   "case_sha256": "1b5e0bf56318140798ffd82b14de19730b6ffa3c8159ff20f8d3d94754e1a1ad"
+  },
+  {
+   "id": "C44",
+   "cat": "semantic",
+   "diff": "hard",
+   "gold": [
+    44
+   ],
+   "n_evidence": 3,
+   "query_sha256": "0164c74f9408215d6f04bc264af5d1caeac5403212a068d915d20d3f98908728",
+   "evidence_sha256": [
+    "c500e3f6b51adccc1b42d73d2757ce00fd69777af4268ec4418d7be0c6b1a0c5",
+    "c24492388bb7395d31f9b11087baad1799fa87606ac3e573012e5ca5c60485dd",
+    "379b76cc287a16f18dbeacc23f41572e6f016500dcbf7f0d3cf6d97a487be884"
+   ],
+   "case_sha256": "1b2fe5e823561b146c74a835813ad2aa620bc57caeacd1d93e5bfd41baa377da"
+  },
+  {
+   "id": "C45",
+   "cat": "numeric",
+   "diff": "easy",
+   "gold": [
+    45
+   ],
+   "n_evidence": 4,
+   "query_sha256": "957113ae8518e089870228a043846d8997d5fdfd581431986b51801f385ed821",
+   "evidence_sha256": [
+    "19508060d787f6f2c7dd4f01ff0eb71b5fd4857802692d89dfdc24ea34a5a9f9",
+    "e087f4e5b018af5d3c7e019514123ed3c2b64a4b238795a448a25cc8420e7b59",
+    "607614d428ef29fc9078dade536882986c5c24f10ad82117e6a720035d838c8b",
+    "785f3ec7eb32f30b90cd0fcf3657d388b5ff4297f2f9716ff66e9b69c05ddd09"
+   ],
+   "case_sha256": "3c185ff281295b041e23e6951f72cdc57ea4275baf953d3ef6d4c6008bf84206"
+  },
+  {
+   "id": "C46",
+   "cat": "identifier",
+   "diff": "easy",
+   "gold": [
+    46
+   ],
+   "n_evidence": 3,
+   "query_sha256": "bfc37e5b595b1b02ca3caf4d2cf0aeada51faf69ee8a62fdc81dec9c9b0835b3",
+   "evidence_sha256": [
+    "7c16f3677f8c78278c2c6abd45f975175839e1ba30f932a9f88b56e9a3d9242f",
+    "f94b9402ce145a9f770efdad95efaddef1286fbcfb8a5589733a1687708a91d5",
+    "0c10a1e700171b0b8520fdaa2ca487f32c070a6cb522b1db887068685bb1ecc5"
+   ],
+   "case_sha256": "9da2238aa64ecb04934bc353f32a8c47cf7fa6ba323e8dc7f23433e1b6585c0f"
+  },
+  {
+   "id": "C47",
+   "cat": "semantic",
+   "diff": "medium",
+   "gold": [
+    47
+   ],
+   "n_evidence": 2,
+   "query_sha256": "fc7045f4fb1a4da8bd40a11e01547643afaee5e77acaf14325f3a3525dcfc4b1",
+   "evidence_sha256": [
+    "5639da4a5bb4670dedc5f7446d598bd957d10e1eb9de0446ef63671873dc8ef7",
+    "7c59c61a38b49e4dd77297a599ed496bdcaeb5f308d6864a29bf2723992ec4dc"
+   ],
+   "case_sha256": "8d7157c8dc57369bc9afc99cdcf35b51f3537aea2f76b9bbbb22d496124cd06d"
+  },
+  {
+   "id": "C48",
+   "cat": "semantic",
+   "diff": "medium",
+   "gold": [
+    48
+   ],
+   "n_evidence": 2,
+   "query_sha256": "24ce4c0428ecebea0c8cfc74b57779abc660a670852981b708ea7c22ddf76c5d",
+   "evidence_sha256": [
+    "bf11bc55c1b9e29771063e58ca6462d10f6b1d56399ad2a64088a47f0a75d344",
+    "df67835dd2930a62727749736d836c5916a113413c68e20c6a784ec8e20d0bff"
+   ],
+   "case_sha256": "5667e6943298a7011af21a65931ec7cfa96984f6ace36693b3f104b44459f7e7"
+  },
+  {
+   "id": "C49",
+   "cat": "semantic",
+   "diff": "hard",
+   "gold": [
+    49
+   ],
+   "n_evidence": 3,
+   "query_sha256": "67b68d1cebc0e499544e74d594ab6decc4dd450ef11cb4d4d8cbffd3844b11ca",
+   "evidence_sha256": [
+    "cbc626711d078bb0522a374b3116a5b927d4494a54a036ef7943fb783211cc24",
+    "a07483a7d9444a39438dfd4d517cc71195f9b803949e8913b1e20c7fa5d6210e",
+    "7eae5d85d9cf338dc09c95da7cb76f387a37ce423b31176cdcf5978d243d06d3"
+   ],
+   "case_sha256": "eb0eefaafa0fb234216bdf20a64d85bd5f0de4623d8a101d4c32e4b10120aa4e"
+  },
+  {
+   "id": "C50",
+   "cat": "semantic",
+   "diff": "hard",
+   "gold": [
+    50
+   ],
+   "n_evidence": 3,
+   "query_sha256": "c4d2f206a49b18050814ed19a0aa2adcbae43eb5df52afc59ffecd5dfd2b9e4f",
+   "evidence_sha256": [
+    "99a6029ef0090026ce7ffc2f69cb308c624efb15056cdcc0b3d5962ef641308e",
+    "62a9892c67bfb009e0b90dbc717534513df90190242b1ab374039d338a798ef6",
+    "4cf7e6af53d430fa8dfba86db0a88b972d317101e5528b050942e3a77056d1d2"
+   ],
+   "case_sha256": "ac7f8540573fa6b3630b59ee702c14ff8bc0b262eff0419d077915f831649987"
+  },
+  {
+   "id": "C51",
+   "cat": "identifier",
+   "diff": "easy",
+   "gold": [
+    51
+   ],
+   "n_evidence": 3,
+   "query_sha256": "b63ce9185fa38204a21aa47a846a4bf56c3d969dcffd1fd8c8275b94f2ff231d",
+   "evidence_sha256": [
+    "b1d99f04d784713cfce9cdc6719333c69feee06ddbe23c4556760b5feba25273",
+    "efdbb18afca7615955804478fde78bff5e7336dee41fa0844bc1d5f8ec527cbe",
+    "d3bc1cef2e46a7f384eac49d29846f16b622303b8da9045f807977781274d332"
+   ],
+   "case_sha256": "c9f1b9c25199363cef5fda79d7fa8c28877daed12032152ccddd0eced7986f02"
+  },
+  {
+   "id": "C52",
+   "cat": "semantic",
+   "diff": "medium",
+   "gold": [
+    52
+   ],
+   "n_evidence": 2,
+   "query_sha256": "047b2ad1ac9592f51ff67ec94813eb2c681be90c09fc50fcbdc80e67c398abe7",
+   "evidence_sha256": [
+    "bfeb73dee892cc2f4fb8841b24977eeb9432068ee6057285e0bb7f2b40f31fee",
+    "feacbfc4ce6cf93ed59b27b17cf935ec8dc96647d9e0a9c45ce771bf3508583c"
+   ],
+   "case_sha256": "0804561c665b53c1f954789e5f9405e78af992f47be97534fc4d62ff1d5ee3ac"
+  },
+  {
+   "id": "C53",
+   "cat": "semantic",
+   "diff": "hard",
+   "gold": [
+    53
+   ],
+   "n_evidence": 2,
+   "query_sha256": "3eea3ee28cd23bdda3a1724995327b12d301e66a2fb03a9b3fbbb35abd3f27b3",
+   "evidence_sha256": [
+    "53aa197b4a9d5372c1415e44aa617926f239d433a4b356f6e45fc3700aec26bc",
+    "20f1e79efe39e7747bfbe739975972b5ee5ec12b9039d15ad15518e90d36a021"
+   ],
+   "case_sha256": "7cfad66706d262c2abe5de86dbba552513ac3cf92c3bc091198737f9b6c04387"
+  },
+  {
+   "id": "C54",
+   "cat": "identifier",
+   "diff": "easy",
+   "gold": [
+    54
+   ],
+   "n_evidence": 3,
+   "query_sha256": "f65ec9fc32cba8dc1ae5ceb316ad82e3d83fe4a5bf53008ef117894eb657361f",
+   "evidence_sha256": [
+    "1e312f11b23ae7bdaaa7b445da7314c2fb4fb5f225673f528dd8455a1742b52d",
+    "345ab92f84955f63357b9b771a48fd853f4d2456dc780da420a651f6b7e8bc9f",
+    "f00eddf0c1be1a9e3d67d7d83fbd9014fdfd6b3bfe55bd8ce45fd8d1523bf163"
+   ],
+   "case_sha256": "6b620b5df4e5fbf5ddb64fc28adc86e6cd07195ed63f9edc0eec93cf38a8819f"
+  },
+  {
+   "id": "C55",
+   "cat": "fact_lookup",
+   "diff": "easy",
+   "gold": [
+    55
+   ],
+   "n_evidence": 3,
+   "query_sha256": "06fca6b979f94ca17dd3a8a32860f2792a19a3fb6990714fff02bc097091e971",
+   "evidence_sha256": [
+    "639b95a5b6eae5d02191bf61a878e4704ec071e01a3081ae2c840e1a8a3e6e2b",
+    "3bb5dc18418d082fbfabdaa3dc67d822e8567285a2d82492da0319af5a8efab1",
+    "18f8eb4b5b54c096b3e85fb527cfd28b9eaabe12e490c56c27ebb0e342fe76f6"
+   ],
+   "case_sha256": "c948da73986c5950932822cf0dbd50b9c6487af5d1ffc447a9e72b6c935045b4"
+  },
+  {
+   "id": "C56",
+   "cat": "fact_lookup",
+   "diff": "medium",
+   "gold": [
+    56
+   ],
+   "n_evidence": 4,
+   "query_sha256": "dc365edf8a5f5001c8e5c5b619ed4399cc154ce4bd27a21e345326a7ed89fc6c",
+   "evidence_sha256": [
+    "3b5eb0bdc4ef6b480bb92489c7d74468de5c0153d7b21dfde9a667604f6cc352",
+    "f850d949259b7c23596fd86821b2736292ea26f390777d940b3d80911b0d5dbc",
+    "e77e3d58b0dcffaa8ded5cabb79d056dd5427a4a087128ca348f28085a27699d",
+    "39e9eb1025ac1dbd310502e16e046cb68764578121f4787dc2abfa854a4f1649"
+   ],
+   "case_sha256": "695f35da64b5aa878951e9fb1efca667056730a7ea8a6a6f51db92ccb25b166e"
+  },
+  {
+   "id": "C57",
+   "cat": "semantic",
+   "diff": "medium",
+   "gold": [
+    57
+   ],
+   "n_evidence": 3,
+   "query_sha256": "166fd79aa4e0271000a3ca3132bfb3ab40d33898480fadc14f20ac74ed7fa874",
+   "evidence_sha256": [
+    "d2df3d6c8b3e3ca069f1927e35db0f40066b22ac2b13a856d7d2d5135093487c",
+    "6a200c21071edd3474f1d8a9d0541bdf06f8be80fd6d3c4debc5f7ee54076227",
+    "f8a0987b2aecec47fc5dd4244f430a57f83fad121027ca95ff1860c72d684f27"
+   ],
+   "case_sha256": "dd5109144c94aacf5131bf971aeaf980e996c235be256fcb06e63b4f892c7f0b"
+  },
+  {
+   "id": "C58",
+   "cat": "fact_lookup",
+   "diff": "easy",
+   "gold": [
+    58
+   ],
+   "n_evidence": 3,
+   "query_sha256": "7111fabe1696a3e24f3a192c0392b0b3472db5b18433381a7413c0aa9274470c",
+   "evidence_sha256": [
+    "38434c721b69959e0e3bc39c43c8ee989522e6702947648be2be3003a879a7ff",
+    "31596ba87f33e8d3473b7b4fd69fc8bbd001cfb5285470697998225e2ce07877",
+    "9abb7835f7b8190b32b85260b88a85393d0b84edfc995bf2f94aad5747d16447"
+   ],
+   "case_sha256": "34538adba34b96fcb362b50062ac7f9e8b0388f228dd8538621124c6e52e8450"
+  },
+  {
+   "id": "C59",
+   "cat": "definition",
+   "diff": "medium",
+   "gold": [
+    59
+   ],
+   "n_evidence": 3,
+   "query_sha256": "f016016b64d09aef146d71b0205367baf36b0d143829ec956ee76ae5fcea9b9f",
+   "evidence_sha256": [
+    "437d14b8facbf2ed49180dc0a0e54d8e7fcf5473003624f8a6ccebd96c75d889",
+    "ce0025ccdc9510e1582cd1e0dd26195301e4c924c20c03790d4ed63f520cf492",
+    "8ff467df0e481b416f31ffeb073126ba1d85a310d58bfbd6c1242d0cdc04a933"
+   ],
+   "case_sha256": "efc86223fd218cb2c509d107008428ed4e2cce3d140670d3117e17682addb2ab"
+  },
+  {
+   "id": "C60",
+   "cat": "identifier",
+   "diff": "easy",
+   "gold": [
+    60
+   ],
+   "n_evidence": 3,
+   "query_sha256": "7280a69bbad70fea3267b8d47fe2b2935170a5da89f488582563d80f117c61dc",
+   "evidence_sha256": [
+    "6c0929c2722191bb2a56d4809cbe74cd225fabbcc3ae9d7e36505907bac5a6cb",
+    "a10e01579043101926e8cb02651aea1d2ce36eda37c43d289c536de8bff29498",
+    "ab5af826ec0ff17e7d9fddec3fd8d58ac5e766cea12d63287651472d5f1f1475"
+   ],
+   "case_sha256": "9ca42cdaaec1de5b8b2cf96dad76c1b3283b551eb5b87f4f0fcdf81a072f3730"
+  },
+  {
+   "id": "M01",
+   "cat": "multi_hop",
+   "diff": "hard",
+   "gold": [
+    29,
+    30
+   ],
+   "n_evidence": 3,
+   "query_sha256": "bc55c594d572df464a2ffd1f33edd07132c609641df71e7e8d4163ccfc7474c3",
+   "evidence_sha256": [
+    "ace4ed08df5ea130f877061d18f76a0b5a7dfb4d85e6c410a8bad21d5a299a67",
+    "bf2c563da06cd0ad8f437ff6ef3e72063f6c6389f1690232aa9bdd597e57882f",
+    "1c2a9e14dd0d3837a050357a0f257f224f6a37436e09ea0c3663a6b04654bbd4"
+   ],
+   "case_sha256": "b45298072823ae6d81290b69ba157152eb7f96cfe6c95a7a6146fe45e7e66a16"
+  },
+  {
+   "id": "M02",
+   "cat": "multi_hop",
+   "diff": "hard",
+   "gold": [
+    52,
+    53
+   ],
+   "n_evidence": 2,
+   "query_sha256": "44eb04f290a03a90baf7df46af9026b3fae6f5368e7f2ba05c98a299d288fecc",
+   "evidence_sha256": [
+    "26161fb8a050353ff13574b9d5040294d9c6982a44c22762c6954faf86cb2fb9",
+    "53aa197b4a9d5372c1415e44aa617926f239d433a4b356f6e45fc3700aec26bc"
+   ],
+   "case_sha256": "7a17af236ae40cee66509a7b4f8589ac2c5b121530583fb9625772e7f9cd325f"
+  },
+  {
+   "id": "M03",
+   "cat": "multi_hop",
+   "diff": "hard",
+   "gold": [
+    31,
+    32
+   ],
+   "n_evidence": 2,
+   "query_sha256": "fac6d78ca712ee71ce2b7196279b8b034bf454274514d2ba062bb4827b90e403",
+   "evidence_sha256": [
+    "089eacb36c9fc71cafc7c97bcdf14bbb3bbfd41c24a438a0b7c5c6357344e24f",
+    "c50128cf99c06e860afbffcc4ddda158ddf9b1e7cce03899251cf667229066ab"
+   ],
+   "case_sha256": "eca84f197c0e2b46b42e53f2402d25d030959aa2f3b5be98964cb5ee0dd8957a"
+  },
+  {
+   "id": "M04",
+   "cat": "multi_hop",
+   "diff": "hard",
+   "gold": [
+    25,
+    26
+   ],
+   "n_evidence": 2,
+   "query_sha256": "38d6316c76f225b0a5a5d6c01fd653657e467fdee309f89cdedd368a8b5149c1",
+   "evidence_sha256": [
+    "c7cb6bf0567af75a894393700262d60e98fecaf11d75cc97867b1b9858bc307f",
+    "f8a975c8ff3064405ada4708762831dcd7e400c943143c777c42cdf86170e7e6"
+   ],
+   "case_sha256": "ba956bcd9f683c2a97f028b0913352a8ebdc65a918cf16d81311a740b1daa6ef"
+  },
+  {
+   "id": "M05",
+   "cat": "multi_hop",
+   "diff": "hard",
+   "gold": [
+    15,
+    16
+   ],
+   "n_evidence": 3,
+   "query_sha256": "1d855f8e730eb0d57086d4156d16801467c54e16d78314968bbe00a30f6e1d2e",
+   "evidence_sha256": [
+    "883caeb7ca1165a22441d8487203cc8aa9284ad7c0f5664c704f98ecb10849b4",
+    "845bbc27a312cec74a653a429222ceebf75ccce4e6f551ed536aafa2eeef5aa3",
+    "4948ce200f8d6243327406c6fbdeb62fac188b55c23eb3742ca71c43bdc87800"
+   ],
+   "case_sha256": "2b88b189785cce07b9483460525d730fe8723416035ebaf26f5a26aac6319ac2"
+  },
+  {
+   "id": "M06",
+   "cat": "multi_hop",
+   "diff": "hard",
+   "gold": [
+    4,
+    5
+   ],
+   "n_evidence": 2,
+   "query_sha256": "74cd4c1a15986d290d2415c8206f0b8fc18312d21e97e350b23ced5f7128ee30",
+   "evidence_sha256": [
+    "4f61a1c31cb6b90a69ce1fa15a770039b008efa85bad59b69364c39404b8d9e2",
+    "5349e794f6cc4726e1dc791d640f69629fd360d9a140a0b418474c9e45fca5bc"
+   ],
+   "case_sha256": "bc37d7b392e3d6d55a44f32380d5e66cd44e947d8e2ac76b611d7f154068f725"
+  },
+  {
+   "id": "M07",
+   "cat": "multi_hop",
+   "diff": "hard",
+   "gold": [
+    62,
+    63
+   ],
+   "n_evidence": 3,
+   "query_sha256": "a683f6539041050b9168196ddd317b7e0114e7d3467d79c67fb57892090f59ea",
+   "evidence_sha256": [
+    "70a50006facc950d78d5f4628cc698d9b64dd12d2f22419d48d0f005682efe9c",
+    "bd98569cef0323d023610c444c29c7e51b7539b80ecc37b416ac4a9dc0eeb83b",
+    "facb30b71119a93d15c23db59181ea8c9818175a27af1f9108aa73ca2111d977"
+   ],
+   "case_sha256": "1453088fa1d98921298e232d8e2494af54f6d9f78f3960f03f2834c90fee0f50"
+  },
+  {
+   "id": "M08",
+   "cat": "multi_hop",
+   "diff": "hard",
+   "gold": [
+    24,
+    59
+   ],
+   "n_evidence": 2,
+   "query_sha256": "a7b945015cd1fb875c5fcf9733aeaef0b842744e2a093063cba3bee536400cfc",
+   "evidence_sha256": [
+    "4e290dbee8acd874fca0f2813ab8833d66a3e55565cb80ce457fcf07ca418e6f",
+    "8ff467df0e481b416f31ffeb073126ba1d85a310d58bfbd6c1242d0cdc04a933"
+   ],
+   "case_sha256": "afbc3afa902b83830a08155f1f0405f89f810809799abde9e3d5456aa566b4fc"
+  },
+  {
+   "id": "M09",
+   "cat": "multi_hop",
+   "diff": "hard",
+   "gold": [
+    43,
+    44
+   ],
+   "n_evidence": 3,
+   "query_sha256": "2bc9a499e8a527b357dfa909f9726cb9240099345df50ab112d9e9febc8168ba",
+   "evidence_sha256": [
+    "1a7b9d6812aebb50307335ddc566829a22f85904d0ec4e4cf04b04ef06374130",
+    "ec443c75281c780485c52c2ee802be6f4f45fadf7ea9dac71bd1368c20a44057",
+    "379b76cc287a16f18dbeacc23f41572e6f016500dcbf7f0d3cf6d97a487be884"
+   ],
+   "case_sha256": "9d0b8294c09c3c54b3756a6a1fa307e36d3e676611c548d991dd52f0185f65b0"
+  },
+  {
+   "id": "M10",
+   "cat": "multi_hop",
+   "diff": "hard",
+   "gold": [
+    27,
+    50
+   ],
+   "n_evidence": 2,
+   "query_sha256": "112215ca0499c30167ff7de6916decd5a09272d56b4703741130ee3404f53bd2",
+   "evidence_sha256": [
+    "728cf5f129df6168a4e3ffa4d75faecf31b22005ed249bca547a049fcc673a64",
+    "4cf7e6af53d430fa8dfba86db0a88b972d317101e5528b050942e3a77056d1d2"
+   ],
+   "case_sha256": "9b95c153c1530fdab0d9a1de3a35a567e1545bb31ad9aa9a33561b0bece73663"
+  },
+  {
+   "id": "Q01",
+   "cat": "colloquial",
+   "diff": "medium",
+   "gold": [
+    2
+   ],
+   "n_evidence": 2,
+   "query_sha256": "5fdfd23ee1169bf81e124258ef188457dca7d13cb080b7f88feb175b097c3e29",
+   "evidence_sha256": [
+    "069585d96fd37f70bdae5e2cfb19c7dc51685d8ba0b1a91f01135ccbf01bb599",
+    "56a315e2431c3fbab60522a0562ac071eda6d797d5c5b5e2295e34fc23c7c2a3"
+   ],
+   "case_sha256": "40642474f1c5b99f05eedcf0ae69d9d0f4946138a32c8165c2cd91950ee9aef8"
+  },
+  {
+   "id": "Q02",
+   "cat": "definition",
+   "diff": "medium",
+   "gold": [
+    32
+   ],
+   "n_evidence": 1,
+   "query_sha256": "bad41d4471a95f6f90335122d889c99089039be1514fc030aeb80a6a1fa577e1",
+   "evidence_sha256": [
+    "08bf57b23fe9d99060fc0b98acc82be9ff329ef5c5a1646e2c42c426c898cf33"
+   ],
+   "case_sha256": "1d1d919c1c82258865b3aafc81c799d058f32d5c4d6db358e1acaa638f26bae6"
+  },
+  {
+   "id": "Q03",
+   "cat": "definition",
+   "diff": "hard",
+   "gold": [
+    62
+   ],
+   "n_evidence": 1,
+   "query_sha256": "a62390081171c60ca41b101854f30d79edf75906463f8f083d6e4aeacc3c3e54",
+   "evidence_sha256": [
+    "9bc6e4cf33a168dd78c68328314c50b1689b1afef1db1375bc00da7647c3cb8e"
+   ],
+   "case_sha256": "11ff5fca60990c64001d7dfea5af506ff51c1afe7ead9b0eea775ec83f7fb149"
+  },
+  {
+   "id": "Q04",
+   "cat": "colloquial",
+   "diff": "hard",
+   "gold": [
+    55
+   ],
+   "n_evidence": 2,
+   "query_sha256": "a9fc3dfeb873862d3e7b87e67fa94c5ad1ea2a704a25efd56efbaeb94d6d7c56",
+   "evidence_sha256": [
+    "639b95a5b6eae5d02191bf61a878e4704ec071e01a3081ae2c840e1a8a3e6e2b",
+    "71b7f9dc68ea0a1694d0b42064cb857205891e9c3a85f1ad98e5cee94ac94db9"
+   ],
+   "case_sha256": "344cb159412ab3fc3a6cbf466730efbf894caec1ded18b2cf475db9cf9a26265"
+  },
+  {
+   "id": "Q05",
+   "cat": "definition",
+   "diff": "medium",
+   "gold": [
+    54
+   ],
+   "n_evidence": 2,
+   "query_sha256": "57ed66cbcfa0de9ed811e5dcb9caa3bea3c44535b70af0d8440bc6e104750b36",
+   "evidence_sha256": [
+    "1e312f11b23ae7bdaaa7b445da7314c2fb4fb5f225673f528dd8455a1742b52d",
+    "e1ad4cf9c29dae2fe599eb14c8577301e84f3e4599ab853de612e479211e473b"
+   ],
+   "case_sha256": "be49d4532428007d53b73d6161c7bec87d90d51d4b9c3e03b5aa19f3dc1012f8"
+  },
+  {
+   "id": "N01",
+   "cat": "negative",
+   "diff": "easy",
+   "gold": [],
+   "n_evidence": 0,
+   "query_sha256": "60cdfce1f7a614265e8e65322d8f19b93ac1631faf6667eee1848344448fded5",
+   "evidence_sha256": [],
+   "case_sha256": "034a2ab7c084f4b51fa7c2e868687a8d98648fdd7827da51a57171bb07d555df"
+  },
+  {
+   "id": "N02",
+   "cat": "negative",
+   "diff": "easy",
+   "gold": [],
+   "n_evidence": 0,
+   "query_sha256": "2d3fad5bd97ee91308f83dcf23db6be7d68bfdb0650185c7c4878541ee589c2d",
+   "evidence_sha256": [],
+   "case_sha256": "fa2fb83e43174096aa96e73360e9135a7840a027ae27a981a1504661229e6639"
+  },
+  {
+   "id": "N03",
+   "cat": "negative",
+   "diff": "easy",
+   "gold": [],
+   "n_evidence": 0,
+   "query_sha256": "3f6940c478c0f157a2c5d0f9b31f863b64fb1c019699b4502c068e6ae23471b2",
+   "evidence_sha256": [],
+   "case_sha256": "5761d7589d2c4d88df7edf847fbc93ab2d08538897425f675cf5682f630ee61a"
+  },
+  {
+   "id": "N04",
+   "cat": "negative",
+   "diff": "easy",
+   "gold": [],
+   "n_evidence": 0,
+   "query_sha256": "df1cb9351bf2305abd590d260d177bb74c5179faed81e167c12549f629a8af6a",
+   "evidence_sha256": [],
+   "case_sha256": "36e28819b2eb1e7a2a796270fd88e5b2fdf18022bb4fee93648ae70409a5aea6"
+  },
+  {
+   "id": "N05",
+   "cat": "negative",
+   "diff": "easy",
+   "gold": [],
+   "n_evidence": 0,
+   "query_sha256": "a2fa6455d0d2cadf92d8163585d009dc649b79b4151a41080cc80d1d32c256c4",
+   "evidence_sha256": [],
+   "case_sha256": "88c3c492edb4292487217c986771bffc9b5ed4d2c6ff1bae012b4bf7d89731e0"
+  },
+  {
+   "id": "N06",
+   "cat": "negative",
+   "diff": "easy",
+   "gold": [],
+   "n_evidence": 0,
+   "query_sha256": "6bae07cf60b205d44aa6d47f0e7616ea7c3f7e5dd0873ebd0e0a48637ea4cf7e",
+   "evidence_sha256": [],
+   "case_sha256": "0b9fa02619d4cc3b89298092c29f2f5450e36002319b39784fae47da66b647ff"
+  },
+  {
+   "id": "N07",
+   "cat": "negative",
+   "diff": "easy",
+   "gold": [],
+   "n_evidence": 0,
+   "query_sha256": "0d30af22036604e8e4af5bdf9e2b638edd2efb624a0551c2191597e6d9f40943",
+   "evidence_sha256": [],
+   "case_sha256": "345c5f9a1fdeed2476a27c5013e9ce42eaeebe95015ae2985aab8efbee51ab25"
+  },
+  {
+   "id": "N08",
+   "cat": "negative_adversarial",
+   "diff": "hard",
+   "gold": [],
+   "n_evidence": 0,
+   "query_sha256": "f3a91fb62c20e1beb5a6f29d87cb748fcb212065784f2408babc2b012114c1d2",
+   "evidence_sha256": [],
+   "case_sha256": "a0b1b69afc0efde25fd7716e62c3e4a5127a776ae7c1f11938f0d7b60630af8f"
+  },
+  {
+   "id": "N09",
+   "cat": "negative",
+   "diff": "easy",
+   "gold": [],
+   "n_evidence": 0,
+   "query_sha256": "92f47f7de1df80658f7897674b9d665242b2f170e3e9a35b4433aebcf7bacc14",
+   "evidence_sha256": [],
+   "case_sha256": "c04ab8f8a8ba722a2257f20f4375b3bf914af1cc5173e4220bcd129327ab9dbe"
+  },
+  {
+   "id": "N10",
+   "cat": "negative_adversarial",
+   "diff": "hard",
+   "gold": [],
+   "n_evidence": 0,
+   "query_sha256": "a3601b6f064ac6947bbb32e45e271c64e1d2f155156c93b316791760abc57b5c",
+   "evidence_sha256": [],
+   "case_sha256": "54a8605a87d2439b8b4d9ec2f753ce7a0c4dc8d9446f55015564fa9cec015cf1"
+  },
+  {
+   "id": "N11",
+   "cat": "negative_adversarial",
+   "diff": "hard",
+   "gold": [],
+   "n_evidence": 0,
+   "query_sha256": "185f5f440bee43a3c544457b150921f0323ce631e887340dd2d46073304a1e80",
+   "evidence_sha256": [],
+   "case_sha256": "145f1b0030a114e8e0b7edf832d3100a5a8b49de4b1eb245f0fd579543974bde"
+  },
+  {
+   "id": "N12",
+   "cat": "negative",
+   "diff": "easy",
+   "gold": [],
+   "n_evidence": 0,
+   "query_sha256": "46b657c3f8b6ac2c28e13263191308c310aab09bc09c54fc99885fbd4e746a74",
+   "evidence_sha256": [],
+   "case_sha256": "27d222c43a5f4b17a959f03e9a77bf6a5770e9e6d36e8840f09dbe813358882d"
+  }
+ ]
 }
