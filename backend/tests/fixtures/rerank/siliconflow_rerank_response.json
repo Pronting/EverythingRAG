@@ -1,0 +1,64 @@
+{
+  "provenance": {
+    "source": "real SiliconFlow rerank call (T06 probe)",
+    "endpoint_host": "api.siliconflow.cn",
+    "http_status": 200,
+    "content": "fixed public probe text only; no private knowledge base content and no credentials"
+  },
+  "request": {
+    "model": "Qwen/Qwen3-Reranker-8B",
+    "query": "为什么本地部署的 RAG 需要增量同步？",
+    "documents": [
+      "增量同步通过文件指纹比对，只重新切块并嵌入发生变化的文档，未变文件直接跳过。",
+      "今天天气很好，适合出门散步。",
+      "AI native 应用的客户端 Native 渲染性能优化经验。"
+    ],
+    "top_n": 3,
+    "return_documents": true,
+    "instruction": "内容应提供回答原问题至少一个明确需求的事实、原因、步骤或约束；词语重合不构成依据。"
+  },
+  "response_headers": {
+    "content-type": "application/json; charset=utf-8",
+    "x-siliconcloud-trace-id": "ti_vt1aaddm2v782jnwbr"
+  },
+  "response_body": {
+    "id": "01a0b8ed4e877578b562b1012878832b",
+    "results": [
+      {
+        "index": 0,
+        "document": {
+          "text": "增量同步通过文件指纹比对，只重新切块并嵌入发生变化的文档，未变文件直接跳过。"
+        },
+        "relevance_score": 0.9701576828956604
+      },
+      {
+        "index": 2,
+        "document": {
+          "text": "AI native 应用的客户端 Native 渲染性能优化经验。"
+        },
+        "relevance_score": 0.00021110977104399353
+      },
+      {
+        "index": 1,
+        "document": {
+          "text": "今天天气很好，适合出门散步。"
+        },
+        "relevance_score": 1.2911860949316178e-06
+      }
+    ],
+    "meta": {
+      "tokens": {
+        "input_tokens": 347,
+        "output_tokens": 0,
+        "image_tokens": 0
+      },
+      "billed_units": {
+        "input_tokens": 347,
+        "output_tokens": 0,
+        "image_tokens": 0,
+        "search_units": 0,
+        "classifications": 0
+      }
+    }
+  }
+}
