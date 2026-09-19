@@ -1,0 +1,91 @@
+{
+ "corpus_md_files": 1750,
+ "indexed_source_files": 291,
+ "indexed_and_present": 291,
+ "indexed_orphan": 0,
+ "corpus_not_indexed": 1459,
+ "index_live_text": {
+  "name": "索引实况（文本类块）",
+  "n": 3981,
+  "p10": 21,
+  "p25": 56,
+  "median": 133,
+  "mean": 335.4,
+  "p75": 344,
+  "p90": 974,
+  "max": 2000,
+  "lt50_pct": 22.23,
+  "lt100_pct": 40.57,
+  "lt150_pct": 52.9
+ },
+ "rechunk_indexed_files": {
+  "name": "当前chunker重切（同批文件,文本类）",
+  "n": 3939,
+  "p10": 22,
+  "p25": 56,
+  "median": 131,
+  "mean": 339.0,
+  "p75": 342,
+  "p90": 1033,
+  "max": 2000,
+  "lt50_pct": 22.29,
+  "lt100_pct": 40.82,
+  "lt150_pct": 53.16
+ },
+ "rechunk_all_no_image": {
+  "name": "全语料重切（剔除 image）",
+  "n": 31244,
+  "p10": 26,
+  "p25": 54,
+  "median": 108,
+  "mean": 253.6,
+  "p75": 222,
+  "p90": 559,
+  "max": 2000,
+  "lt50_pct": 22.66,
+  "lt100_pct": 46.81,
+  "lt150_pct": 62.4
+ },
+ "top_docs_by_chunks": [
+  [
+   "208c88257fff4532815867d5d87178ff\\doc\\基础服务\\cider-基建2023.md",
+   880
+  ],
+  [
+   "64265bf0f80349baaacae80d27701cdd\\doc\\基础服务\\cider-基建2023.md",
+   880
+  ],
+  [
+   "8f1def730e9845b9aa5641a28e5d705e\\obsidian-valut-master\\cider\\doc\\基础服务\\cider-基建2023.md",
+   880
+  ],
+  [
+   "acf46255e1f147b8a36a19f2d065c978\\doc\\基础服务\\cider-基建2023.md",
+   880
+  ],
+  [
+   "d2bdda24a7f44a67bb2128d0c2218da4\\doc\\基础服务\\cider-基建2023.md",
+   880
+  ],
+  [
+   "doc\\基础服务\\cider-基建2023.md",
+   880
+  ],
+  [
+   "8f1def730e9845b9aa5641a28e5d705e\\obsidian-valut-master\\edream&实习\\公司业务\\PRD\\BTN.md",
+   237
+  ],
+  [
+   "8f1def730e9845b9aa5641a28e5d705e\\obsidian-valut-master\\reading\\ai碎碎念\\ECC学习解读第一篇.md",
+   173
+  ],
+  [
+   "208c88257fff4532815867d5d87178ff\\doc\\风控\\行为风控数据分析.md",
+   166
+  ],
+  [
+   "64265bf0f80349baaacae80d27701cdd\\doc\\风控\\行为风控数据分析.md",
+   166
+  ]
+ ]
+}

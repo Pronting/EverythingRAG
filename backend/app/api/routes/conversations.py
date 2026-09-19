@@ -68,6 +68,16 @@ class MoveWorkspaceRequest(BaseModel):
     workspace_id: str = Field(min_length=1)
 
 
+class WorkspacePinRequest(BaseModel):
+    pinned: bool
+
+
+class WorkspaceReorderRequest(BaseModel):
+    """按给定顺序重写工作区位次（侧边栏拖拽排序落库）。"""
+
+    ids: list[str] = Field(min_length=1, max_length=200)
+
+
 class TruncateRequest(BaseModel):
     """从第 index 条消息起截断（用户点铅笔编辑重发时调用）。"""
 
@@ -92,9 +102,24 @@ async def list_workspaces(
     store: WorkspaceStore = Depends(get_workspace_store),  # noqa: B008
     conversations: ConversationStore = Depends(get_conversation_store),  # noqa: B008
 ) -> list[dict[str, Any]]:
-    """返回全部工作区（默认工作区在最前），带各分区活跃会话数。"""
+    """返回全部工作区（置顶在前 → 手工位次 → 创建时间），带各分区活跃会话数。"""
     counts = conversations.count_by_workspace()
     return [_workspace_payload(workspace, counts.get(workspace.id, 0)) for workspace in store.list()]
+
+
+@router.put("/api/workspaces/order")
+async def reorder_workspaces(
+    request: WorkspaceReorderRequest,
+    store: WorkspaceStore = Depends(get_workspace_store),  # noqa: B008
+    conversations: ConversationStore = Depends(get_conversation_store),  # noqa: B008
+) -> list[dict[str, Any]]:
+    """按给定顺序重写工作区位次（侧边栏拖拽排序），返回新的完整顺序。
+
+    必须注册在 ``/api/workspaces/{workspace_id}`` 之前，否则会被当成工作区 id。
+    """
+    counts = conversations.count_by_workspace()
+    ordered = store.reorder(request.ids)
+    return [_workspace_payload(workspace, counts.get(workspace.id, 0)) for workspace in ordered]
 
 
 @router.post("/api/workspaces", status_code=201)
@@ -104,6 +129,19 @@ async def create_workspace(
 ) -> dict[str, Any]:
     """新建工作区（名称为空/重复由存储层兜底，id 冲突自动追加序号）。"""
     workspace = store.create(request.name, request.id)
+    return _workspace_payload(workspace, 0)
+
+
+@router.put("/api/workspaces/{workspace_id}/pin")
+async def pin_workspace(
+    workspace_id: str,
+    request: WorkspacePinRequest,
+    store: WorkspaceStore = Depends(get_workspace_store),  # noqa: B008
+) -> dict[str, Any]:
+    """置顶 / 取消置顶工作区（别针图标）。"""
+    workspace = store.set_pinned(workspace_id, request.pinned)
+    if workspace is None:
+        raise HTTPException(status_code=404, detail="工作区不存在")
     return _workspace_payload(workspace, 0)
 
 
@@ -367,6 +405,7 @@ def _summary(conv: Any) -> dict[str, Any]:
         "sort_index": conv.sort_index,
     }
 
+
 def _workspace_payload(workspace: Any, conversation_count: int) -> dict[str, Any]:
     return {
         "id": workspace.id,
@@ -374,5 +413,7 @@ def _workspace_payload(workspace: Any, conversation_count: int) -> dict[str, Any
         "created_at": workspace.created_at,
         "updated_at": workspace.updated_at,
         "is_default": workspace.is_default,
+        "pinned": workspace.pinned,
+        "order_index": workspace.order_index,
         "conversation_count": conversation_count,
     }

@@ -1,0 +1,475 @@
+{
+ "corpus_files": 1750,
+ "parsed_files": 1728,
+ "skipped_files": 22,
+ "production": {
+  "tag": "max=2000,min=120",
+  "raw_chunks_including_image_tasks": 41242,
+  "pending_image_tasks": 9998,
+  "n_docs": 1728,
+  "n_chunks": 31244,
+  "chunks_per_doc_mean": 18.08,
+  "chunks_per_doc_median": 14.0,
+  "chunks_per_doc_max": 880,
+  "top1_doc_share_pct": 2.82,
+  "top10_doc_share_pct": 19.27,
+  "len_min": 1,
+  "len_p10": 26,
+  "len_p25": 54,
+  "len_median": 108,
+  "len_mean": 253.6,
+  "len_p75": 222,
+  "len_p90": 559,
+  "len_max": 2000,
+  "frag_lt50_pct": 22.66,
+  "frag_lt100_pct": 46.81,
+  "frag_lt150_pct": 62.4,
+  "frag_lt200_pct": 71.98,
+  "empty_lt5_pct": 0.73,
+  "over_max_pct": 0.0,
+  "hard_cut_pct_near_limit": 81.0,
+  "near_limit_chunks": 1037,
+  "dup_text_blocks": 1255,
+  "dup_text_pct": 4.02,
+  "no_heading_pct": 2.01,
+  "text_mixed_with_table_pct": 0.0,
+  "types": {
+   "text": 24526,
+   "code": 1833,
+   "table": 4885
+  },
+  "chunk_seconds": 0.51,
+  "parse_seconds": 17.42
+ },
+ "ablations": [
+  {
+   "tag": "max=2000,min=120",
+   "raw_chunks_including_image_tasks": 41242,
+   "pending_image_tasks": 9998,
+   "n_docs": 1728,
+   "n_chunks": 31244,
+   "chunks_per_doc_mean": 18.08,
+   "chunks_per_doc_median": 14.0,
+   "chunks_per_doc_max": 880,
+   "top1_doc_share_pct": 2.82,
+   "top10_doc_share_pct": 19.27,
+   "len_min": 1,
+   "len_p10": 26,
+   "len_p25": 54,
+   "len_median": 108,
+   "len_mean": 253.6,
+   "len_p75": 222,
+   "len_p90": 559,
+   "len_max": 2000,
+   "frag_lt50_pct": 22.66,
+   "frag_lt100_pct": 46.81,
+   "frag_lt150_pct": 62.4,
+   "frag_lt200_pct": 71.98,
+   "empty_lt5_pct": 0.73,
+   "over_max_pct": 0.0,
+   "hard_cut_pct_near_limit": 81.0,
+   "near_limit_chunks": 1037,
+   "dup_text_blocks": 1255,
+   "dup_text_pct": 4.02,
+   "no_heading_pct": 2.01,
+   "text_mixed_with_table_pct": 0.0,
+   "types": {
+    "text": 24526,
+    "code": 1833,
+    "table": 4885
+   }
+  },
+  {
+   "tag": "max=2000,min=300",
+   "raw_chunks_including_image_tasks": 41242,
+   "pending_image_tasks": 9998,
+   "n_docs": 1728,
+   "n_chunks": 31244,
+   "chunks_per_doc_mean": 18.08,
+   "chunks_per_doc_median": 14.0,
+   "chunks_per_doc_max": 880,
+   "top1_doc_share_pct": 2.82,
+   "top10_doc_share_pct": 19.27,
+   "len_min": 1,
+   "len_p10": 26,
+   "len_p25": 54,
+   "len_median": 108,
+   "len_mean": 253.6,
+   "len_p75": 222,
+   "len_p90": 559,
+   "len_max": 2000,
+   "frag_lt50_pct": 22.66,
+   "frag_lt100_pct": 46.81,
+   "frag_lt150_pct": 62.4,
+   "frag_lt200_pct": 71.98,
+   "empty_lt5_pct": 0.73,
+   "over_max_pct": 0.0,
+   "hard_cut_pct_near_limit": 81.0,
+   "near_limit_chunks": 1037,
+   "dup_text_blocks": 1255,
+   "dup_text_pct": 4.02,
+   "no_heading_pct": 2.01,
+   "text_mixed_with_table_pct": 0.0,
+   "types": {
+    "text": 24526,
+    "code": 1833,
+    "table": 4885
+   }
+  },
+  {
+   "tag": "max=1200,min=200",
+   "raw_chunks_including_image_tasks": 42715,
+   "pending_image_tasks": 9998,
+   "n_docs": 1728,
+   "n_chunks": 32717,
+   "chunks_per_doc_mean": 18.93,
+   "chunks_per_doc_median": 14.0,
+   "chunks_per_doc_max": 880,
+   "top1_doc_share_pct": 2.69,
+   "top10_doc_share_pct": 18.53,
+   "len_min": 1,
+   "len_p10": 28,
+   "len_p25": 56,
+   "len_median": 114,
+   "len_mean": 242.1,
+   "len_p75": 256,
+   "len_p90": 763,
+   "len_max": 1200,
+   "frag_lt50_pct": 21.74,
+   "frag_lt100_pct": 44.91,
+   "frag_lt150_pct": 59.92,
+   "frag_lt200_pct": 69.14,
+   "empty_lt5_pct": 0.69,
+   "over_max_pct": 0.0,
+   "hard_cut_pct_near_limit": 80.06,
+   "near_limit_chunks": 2001,
+   "dup_text_blocks": 1291,
+   "dup_text_pct": 3.95,
+   "no_heading_pct": 2.27,
+   "text_mixed_with_table_pct": 0.0,
+   "types": {
+    "text": 25165,
+    "code": 1965,
+    "table": 5587
+   }
+  },
+  {
+   "tag": "max=800,min=200",
+   "raw_chunks_including_image_tasks": 44722,
+   "pending_image_tasks": 9998,
+   "n_docs": 1728,
+   "n_chunks": 34724,
+   "chunks_per_doc_mean": 20.09,
+   "chunks_per_doc_median": 15.0,
+   "chunks_per_doc_max": 882,
+   "top1_doc_share_pct": 2.54,
+   "top10_doc_share_pct": 17.71,
+   "len_min": 1,
+   "len_p10": 28,
+   "len_p25": 58,
+   "len_median": 122,
+   "len_mean": 228.1,
+   "len_p75": 303,
+   "len_p90": 717,
+   "len_max": 800,
+   "frag_lt50_pct": 20.64,
+   "frag_lt100_pct": 42.76,
+   "frag_lt150_pct": 57.07,
+   "frag_lt200_pct": 65.9,
+   "empty_lt5_pct": 0.68,
+   "over_max_pct": 0.0,
+   "hard_cut_pct_near_limit": 81.64,
+   "near_limit_chunks": 3405,
+   "dup_text_blocks": 1382,
+   "dup_text_pct": 3.98,
+   "no_heading_pct": 2.51,
+   "text_mixed_with_table_pct": 0.0,
+   "types": {
+    "text": 26090,
+    "code": 2147,
+    "table": 6487
+   }
+  },
+  {
+   "tag": "max=3000,min=400",
+   "raw_chunks_including_image_tasks": 40616,
+   "pending_image_tasks": 9998,
+   "n_docs": 1728,
+   "n_chunks": 30618,
+   "chunks_per_doc_mean": 17.72,
+   "chunks_per_doc_median": 14.0,
+   "chunks_per_doc_max": 880,
+   "top1_doc_share_pct": 2.87,
+   "top10_doc_share_pct": 19.65,
+   "len_min": 1,
+   "len_p10": 26,
+   "len_p25": 53,
+   "len_median": 105,
+   "len_mean": 258.8,
+   "len_p75": 210,
+   "len_p90": 492,
+   "len_max": 3000,
+   "frag_lt50_pct": 23.09,
+   "frag_lt100_pct": 47.72,
+   "frag_lt150_pct": 63.66,
+   "frag_lt200_pct": 73.41,
+   "empty_lt5_pct": 0.74,
+   "over_max_pct": 2.99,
+   "hard_cut_pct_near_limit": 81.79,
+   "near_limit_chunks": 648,
+   "dup_text_blocks": 1213,
+   "dup_text_pct": 3.96,
+   "no_heading_pct": 1.94,
+   "text_mixed_with_table_pct": 0.0,
+   "types": {
+    "text": 24261,
+    "code": 1801,
+    "table": 4556
+   }
+  }
+ ],
+ "worst_fragments": [
+  {
+   "file": "208c88257fff4532815867d5d87178ff\\doc\\2023年01月05日，plutus-prd环境不可用.md",
+   "heading": "发生原因",
+   "kind": "image",
+   "text": ""
+  },
+  {
+   "file": "208c88257fff4532815867d5d87178ff\\doc\\2023年01月05日，plutus-prd环境不可用.md",
+   "heading": "发生原因",
+   "kind": "image",
+   "text": ""
+  },
+  {
+   "file": "208c88257fff4532815867d5d87178ff\\doc\\2023年01月05日，plutus-prd环境不可用.md",
+   "heading": "发生原因",
+   "kind": "image",
+   "text": ""
+  },
+  {
+   "file": "208c88257fff4532815867d5d87178ff\\doc\\2023年01月05日，plutus-prd环境不可用.md",
+   "heading": "如何避免",
+   "kind": "image",
+   "text": ""
+  },
+  {
+   "file": "208c88257fff4532815867d5d87178ff\\doc\\ab测试\\AB测试服务技术方案-V0.1.md",
+   "heading": "二、模块设计 > 2.4 数据库表结构",
+   "kind": "image",
+   "text": ""
+  },
+  {
+   "file": "208c88257fff4532815867d5d87178ff\\doc\\ab测试\\AB测试服务技术方案-V0.1.md",
+   "heading": "二、模块设计 > 2.4 数据库表结构",
+   "kind": "image",
+   "text": ""
+  },
+  {
+   "file": "208c88257fff4532815867d5d87178ff\\doc\\ab测试\\AB测试服务技术方案-V0.1.md",
+   "heading": "二、模块设计 > 2.5 接口设计 （待补充）",
+   "kind": "image",
+   "text": ""
+  },
+  {
+   "file": "208c88257fff4532815867d5d87178ff\\doc\\ab测试\\AB测试系统-操作手册.md",
+   "heading": "2.账号和权限",
+   "kind": "image",
+   "text": ""
+  },
+  {
+   "file": "208c88257fff4532815867d5d87178ff\\doc\\ab测试\\AB测试系统-操作手册.md",
+   "heading": "3.使用流程 > (1) 创建试验层(自定义事件)",
+   "kind": "image",
+   "text": ""
+  },
+  {
+   "file": "208c88257fff4532815867d5d87178ff\\doc\\ab测试\\AB测试系统-操作手册.md",
+   "heading": "3.使用流程 > (2) 创建试验",
+   "kind": "image",
+   "text": ""
+  },
+  {
+   "file": "208c88257fff4532815867d5d87178ff\\doc\\ab测试\\AB测试系统-操作手册.md",
+   "heading": "3.使用流程 > (2) 创建试验",
+   "kind": "image",
+   "text": ""
+  },
+  {
+   "file": "208c88257fff4532815867d5d87178ff\\doc\\ab测试\\AB测试系统-操作手册.md",
+   "heading": "3.使用流程 > (2) 创建试验",
+   "kind": "image",
+   "text": ""
+  },
+  {
+   "file": "208c88257fff4532815867d5d87178ff\\doc\\ab测试\\AB测试系统-操作手册.md",
+   "heading": "3.使用流程 > (3) 上线试验",
+   "kind": "image",
+   "text": ""
+  },
+  {
+   "file": "208c88257fff4532815867d5d87178ff\\doc\\ab测试\\AB测试系统-操作手册.md",
+   "heading": "3.使用流程 > (4) C端对接试验",
+   "kind": "image",
+   "text": ""
+  },
+  {
+   "file": "208c88257fff4532815867d5d87178ff\\doc\\ab测试\\AB测试系统-操作手册.md",
+   "heading": "3.使用流程 > (4) C端对接试验",
+   "kind": "image",
+   "text": ""
+  },
+  {
+   "file": "208c88257fff4532815867d5d87178ff\\doc\\ab测试\\AB测试系统-操作手册.md",
+   "heading": "3.使用流程 > (5) 查看设备ID > PC*网页查看设备ID(方式1)",
+   "kind": "image",
+   "text": ""
+  },
+  {
+   "file": "208c88257fff4532815867d5d87178ff\\doc\\ab测试\\AB测试系统-操作手册.md",
+   "heading": "3.使用流程 > (5) 查看设备ID > PC*网页查看设备ID(方式1)",
+   "kind": "image",
+   "text": ""
+  },
+  {
+   "file": "208c88257fff4532815867d5d87178ff\\doc\\ab测试\\AB测试系统-操作手册.md",
+   "heading": "3.使用流程 > (5) 查看设备ID > PC*网页查看设备ID(方式2)",
+   "kind": "image",
+   "text": ""
+  },
+  {
+   "file": "208c88257fff4532815867d5d87178ff\\doc\\ab测试\\AB测试系统-操作手册.md",
+   "heading": "3.使用流程 > (5) 查看设备ID > 手机浏览器查看设备ID(方式1)",
+   "kind": "image",
+   "text": ""
+  },
+  {
+   "file": "208c88257fff4532815867d5d87178ff\\doc\\ab测试\\AB测试系统-操作手册.md",
+   "heading": "3.使用流程 > (5) 查看设备ID > 手机浏览器查看设备ID(方式1)",
+   "kind": "image",
+   "text": ""
+  },
+  {
+   "file": "208c88257fff4532815867d5d87178ff\\doc\\ab测试\\AB测试系统-操作手册.md",
+   "heading": "3.使用流程 > (5) 查看设备ID > 手机浏览器查看设备ID(方式2)",
+   "kind": "image",
+   "text": ""
+  },
+  {
+   "file": "208c88257fff4532815867d5d87178ff\\doc\\ab测试\\AB测试系统-操作手册.md",
+   "heading": "3.使用流程 > (5) 查看设备ID > 手机浏览器查看设备ID(方式2)",
+   "kind": "image",
+   "text": ""
+  },
+  {
+   "file": "208c88257fff4532815867d5d87178ff\\doc\\ab测试\\AB测试系统-操作手册.md",
+   "heading": "3.使用流程 > (5) 查看设备ID > 手机浏览器查看设备ID(方式2)",
+   "kind": "image",
+   "text": ""
+  },
+  {
+   "file": "208c88257fff4532815867d5d87178ff\\doc\\ab测试\\AB测试系统-操作手册.md",
+   "heading": "3.使用流程 > (5) 查看设备ID > 安卓APP查看设备ID",
+   "kind": "image",
+   "text": ""
+  },
+  {
+   "file": "208c88257fff4532815867d5d87178ff\\doc\\ab测试\\AB测试系统-操作手册.md",
+   "heading": "3.使用流程 > (5) 查看设备ID > 安卓APP查看设备ID",
+   "kind": "image",
+   "text": ""
+  },
+  {
+   "file": "208c88257fff4532815867d5d87178ff\\doc\\ab测试\\AB测试系统-操作手册.md",
+   "heading": "3.使用流程 > (5) 查看设备ID > 安卓APP查看设备ID",
+   "kind": "image",
+   "text": ""
+  },
+  {
+   "file": "208c88257fff4532815867d5d87178ff\\doc\\ab测试\\AB测试系统-操作手册.md",
+   "heading": "3.使用流程 > (5) 查看设备ID > 安卓APP查看设备ID",
+   "kind": "image",
+   "text": ""
+  },
+  {
+   "file": "208c88257fff4532815867d5d87178ff\\doc\\ab测试\\AB测试系统-操作手册.md",
+   "heading": "3.使用流程 > (5) 查看设备ID > 安卓APP查看设备ID",
+   "kind": "image",
+   "text": ""
+  },
+  {
+   "file": "208c88257fff4532815867d5d87178ff\\doc\\ab测试\\AB测试系统-操作手册.md",
+   "heading": "3.使用流程 > (5) 查看设备ID > 苹果APP查看设备ID",
+   "kind": "image",
+   "text": ""
+  },
+  {
+   "file": "208c88257fff4532815867d5d87178ff\\doc\\ab测试\\AB测试系统-操作手册.md",
+   "heading": "3.使用流程 > (5) 查看设备ID > 苹果APP查看设备ID",
+   "kind": "image",
+   "text": ""
+  }
+ ],
+ "top_docs_by_chunks": [
+  [
+   "208c88257fff4532815867d5d87178ff\\doc\\基础服务\\cider-基建2023.md",
+   880
+  ],
+  [
+   "64265bf0f80349baaacae80d27701cdd\\doc\\基础服务\\cider-基建2023.md",
+   880
+  ],
+  [
+   "8f1def730e9845b9aa5641a28e5d705e\\obsidian-valut-master\\cider\\doc\\基础服务\\cider-基建2023.md",
+   880
+  ],
+  [
+   "acf46255e1f147b8a36a19f2d065c978\\doc\\基础服务\\cider-基建2023.md",
+   880
+  ],
+  [
+   "d2bdda24a7f44a67bb2128d0c2218da4\\doc\\基础服务\\cider-基建2023.md",
+   880
+  ],
+  [
+   "doc\\基础服务\\cider-基建2023.md",
+   880
+  ],
+  [
+   "8f1def730e9845b9aa5641a28e5d705e\\obsidian-valut-master\\edream&实习\\公司业务\\PRD\\BTN.md",
+   237
+  ],
+  [
+   "8f1def730e9845b9aa5641a28e5d705e\\obsidian-valut-master\\reading\\ai碎碎念\\ECC学习解读第一篇.md",
+   173
+  ],
+  [
+   "208c88257fff4532815867d5d87178ff\\doc\\风控\\行为风控数据分析.md",
+   166
+  ],
+  [
+   "64265bf0f80349baaacae80d27701cdd\\doc\\风控\\行为风控数据分析.md",
+   166
+  ],
+  [
+   "8f1def730e9845b9aa5641a28e5d705e\\obsidian-valut-master\\cider\\doc\\风控\\行为风控数据分析.md",
+   166
+  ],
+  [
+   "acf46255e1f147b8a36a19f2d065c978\\doc\\风控\\行为风控数据分析.md",
+   166
+  ],
+  [
+   "d2bdda24a7f44a67bb2128d0c2218da4\\doc\\风控\\行为风控数据分析.md",
+   166
+  ],
+  [
+   "doc\\风控\\行为风控数据分析.md",
+   166
+  ],
+  [
+   "208c88257fff4532815867d5d87178ff\\doc\\排查bug的真实案例.md",
+   165
+  ]
+ ]
+}

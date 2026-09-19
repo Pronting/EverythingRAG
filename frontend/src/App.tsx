@@ -12,7 +12,14 @@ import {
   moveConversationToWorkspace,
   truncateConversation,
 } from "./api/conversationApi";
-import { createWorkspace, deleteWorkspace, listWorkspaces, renameWorkspace } from "./api/workspaceApi";
+import {
+  createWorkspace,
+  deleteWorkspace,
+  listWorkspaces,
+  renameWorkspace,
+  reorderWorkspaces,
+  setWorkspacePinned,
+} from "./api/workspaceApi";
 import Chat from "./components/Chat";
 import { CitationPanel } from "./components/CitationPanel";
 import ConfirmDialog from "./components/ConfirmDialog";
@@ -165,6 +172,38 @@ export default function App() {
       }
     },
     [activeConversationId, activeWorkspaceId, loadConversations, loadWorkspaces, showToast],
+  );
+
+  /** 拖拽工作区排序：先本地立即生效（拖拽手感），再把新顺序落库。 */
+  const handleReorderWorkspaces = useCallback(
+    (orderedIds: string[]): void => {
+      const byId = new Map(workspaces.map((workspace) => [workspace.id, workspace]));
+      const optimistic = orderedIds
+        .map((id) => byId.get(id))
+        .filter((workspace): workspace is Workspace => workspace !== undefined);
+      if (optimistic.length === workspaces.length) setWorkspaces(optimistic);
+      void reorderWorkspaces(orderedIds)
+        .then((items) => setWorkspaces(items))
+        .catch((error: unknown) => {
+          showToast("error", error instanceof Error ? error.message : "调整工作区顺序失败");
+          void loadWorkspaces();
+        });
+    },
+    [loadWorkspaces, showToast, workspaces],
+  );
+
+  /** 置顶 / 取消置顶工作区（别针）。 */
+  const handleToggleWorkspacePin = useCallback(
+    async (workspace: Workspace): Promise<void> => {
+      const next = workspace.pinned !== true;
+      try {
+        await setWorkspacePinned(workspace.id, next);
+        await loadWorkspaces();
+      } catch (error) {
+        showToast("error", error instanceof Error ? error.message : "置顶失败，请稍后重试");
+      }
+    },
+    [loadWorkspaces, showToast],
   );
 
   /**
@@ -534,6 +573,8 @@ export default function App() {
         onRenameWorkspace={handleRenameWorkspace}
         onDeleteWorkspace={handleDeleteWorkspace}
         onDropConversation={(conversationId, target) => void handleDropConversation(conversationId, target)}
+        onReorderWorkspaces={handleReorderWorkspaces}
+        onToggleWorkspacePin={(workspace) => void handleToggleWorkspacePin(workspace)}
       />
       <main className="app-main">
         <header className="workspace-header">

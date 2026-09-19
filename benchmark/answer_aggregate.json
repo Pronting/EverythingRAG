@@ -1,0 +1,13 @@
+{
+ "n": 87,
+ "errors": 0,
+ "pos_avg_ev_hit": 0.6622,
+ "pos_full_ev": 34,
+ "pos_zero_ev": 10,
+ "pos_src_hit": 72,
+ "neg_basis": {
+  "general": 8,
+  "knowledge": 4
+ },
+ "pure_neg_reject": 0.8889
+}

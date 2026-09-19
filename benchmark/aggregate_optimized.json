@@ -1,0 +1,134 @@
+{
+ "hybrid": {
+  "hit": {
+   "1": 0.6667,
+   "3": 0.8933,
+   "5": 0.9333,
+   "8": 0.9467,
+   "10": 0.9467
+  },
+  "mrr": 0.7782,
+  "ndcg8": 0.8135,
+  "ev_cov": 0.9733
+ },
+ "dense": {
+  "hit": {
+   "1": 0.6,
+   "3": 0.76,
+   "5": 0.8267,
+   "8": 0.8667,
+   "10": 0.8667
+  },
+  "mrr": 0.7038,
+  "ndcg8": 0.7414,
+  "ev_cov": 0.9244
+ },
+ "bm25": {
+  "hit": {
+   "1": 0.6267,
+   "3": 0.7867,
+   "5": 0.8,
+   "8": 0.9067,
+   "10": 0.92
+  },
+  "mrr": 0.7256,
+  "ndcg8": 0.7516,
+  "ev_cov": 0.92
+ },
+ "by_cat": {
+  "colloquial": {
+   "n": 2,
+   "hit5": 1.0,
+   "mrr": 0.6,
+   "ev_cov": 1.0,
+   "pollution": 0.125
+  },
+  "definition": {
+   "n": 9,
+   "hit5": 1.0,
+   "mrr": 1.0,
+   "ev_cov": 1.0,
+   "pollution": 0.2269
+  },
+  "fact_lookup": {
+   "n": 12,
+   "hit5": 1.0,
+   "mrr": 0.7917,
+   "ev_cov": 1.0,
+   "pollution": 0.1625
+  },
+  "identifier": {
+   "n": 13,
+   "hit5": 1.0,
+   "mrr": 0.7692,
+   "ev_cov": 1.0,
+   "pollution": 0.3052
+  },
+  "multi_hop": {
+   "n": 10,
+   "hit5": 0.8,
+   "mrr": 0.7,
+   "ev_cov": 0.95,
+   "pollution": 0.2679
+  },
+  "numeric": {
+   "n": 7,
+   "hit5": 0.7143,
+   "mrr": 0.6429,
+   "ev_cov": 0.9286,
+   "pollution": 0.3061
+  },
+  "semantic": {
+   "n": 22,
+   "hit5": 0.9545,
+   "mrr": 0.7803,
+   "ev_cov": 0.9545,
+   "pollution": 0.3435
+  }
+ },
+ "by_diff": {
+  "easy": {
+   "n": 26,
+   "hit5": 0.9615,
+   "mrr": 0.8013,
+   "ev_cov": 1.0
+  },
+  "medium": {
+   "n": 30,
+   "hit5": 0.9333,
+   "mrr": 0.79,
+   "ev_cov": 0.95
+  },
+  "hard": {
+   "n": 19,
+   "hit5": 0.8947,
+   "mrr": 0.7281,
+   "ev_cov": 0.9737
+  }
+ },
+ "ablation": {
+  "0.60": {
+   "hit5": 0.9333,
+   "ev_cov": 0.9733,
+   "mean_n_out": 5.89,
+   "neg_reject": 1.0,
+   "zero_all_rate": 0.1034
+  }
+ },
+ "negative": {
+  "pure_count": 9,
+  "reject_rate": 1.0,
+  "leaked": 0,
+  "leak_top1_sim_mean": null
+ },
+ "quality": {
+  "pollution": 0.2745,
+  "dup": 0.0,
+  "ev_full": 0.96,
+  "ev_zero": 0.0133,
+  "lat_hybrid_ms_median": 120.2,
+  "lat_dense_ms_median": 7.0,
+  "lat_bm25_ms_median": 23.8
+ },
+ "total_miss": 4
+}

@@ -1,0 +1,762 @@
+[
+ {
+  "n": 1,
+  "block_id": "b0d9e228a82b04d4d79a6f08ac2d75af::c60cc123dc7ff599::/H1/3-需求设计说明/H2/32-开款时明确产品分类风格线/H3/33-修改数企监控看板drop-看板#6",
+  "file": "doc/业务/自己业务/上新进度过程管控—分类&风格线维度.md",
+  "heading": "3 、需求设计说明 > 3.2 开款时明确产品分类、风格线 > 3.3 修改数企监控看板（Drop 看板）",
+  "chars": 265,
+  "text": "一个接口，返回一二级风格线，如果选择一级风格线，则会把所有对应的二级风格线选择。\n\n建立二级风格线对产品标签的映射（如果标签是所有，则填写空字符串，查询时候依次判断是否查询所有）\n\n建立二级风格线对产品品类的映射 (女装是三级品类，其余是二级品类，产品品类为 Long)\n\n查询的时候会查出选择二级风格线对应产品分类下的所有被映射产品标签的 spu\n\n一二级风格线存储字符串，查询的时候通过枚举取值，标签枚举也存储字符串，到时候通过 product 表链接查询 product_attr 表拿到产品标签名称，产品分类存储 id 。"
+ },
+ {
+  "n": 2,
+  "block_id": "57d5335f2b40ff160db5521f0d69d103::f4f40bdd2afc5362::/H2/发生原因#1",
+  "file": "doc/事故报告/2024合集/2024年12月03日，验证码邮件重复发送.md",
+  "heading": "发生原因",
+  "chars": 515,
+  "text": "1、直接原因就是用 int 值来处理自增 ID，但是由于 Email 发送记录已经超过了 21.8 亿（在约12.02 21:25的时候超过，实际上我们邮件发送早就超过21亿条，我们中间清理过数据，ID从 0 开始），我们知道 int 值最大值为 2,147,483,647，所以出现异常：outside of valid range for type java.lang.Integer。\n\n2、出现异常为什么会给用户重复发送 Email？这里补充一个历史背景：只有验证码邮件考虑到时效性，我们还在走老的发送逻辑（即上游通过调用 CRM RPC，CRM 在发送一条消息，CRM 再消费消息进行 Email 渲染发送），老的逻辑如下代码。可以看到，如果整个 Email 渲染发送的过程出现了 Exception，我们是分情况进行重试和飞书通知，例如上游参数或忽略发送我们是不会重试，但是网络异常或未知异常（RuntimeException）等我们是会进行重试。\n\n3、MyBatisSystemException 继承于 RuntimeException，所以刚好被 catch 返回了 false，这样 MQ 就会进行消息重试。"
+ },
+ {
+  "n": 3,
+  "block_id": "e7a2d62440c9765caf6b050fcf393058::1a6ae031674229de::/H1/时间线#1",
+  "file": "doc/事故报告/2024合集/2024年08月26日，以图搜图识别图片特征.md",
+  "heading": "时间线",
+  "chars": 254,
+  "text": "2024-08-26 11:30 @何昀Sunny 查看内网的aigc管理后台发现以图搜图识别图片特征的请求量比较大，消耗的token比较多\n\n2024-08-26 11:35 检查以图搜图一天的图片数据。发现以图搜图的请求量确实大。\n\n第一时间跟@刘江涛 涛哥这边商量先将这个请求gpt的代码注释，然后上线修复。\n\n（因为这个需求之前是做到大半了，虽然业务那边走了，但我们在挖掘特征，这些数据也是可以用的，就做完收尾上线。\n\n以图搜图，商品特征自动化解析，分列入库：roi是节省每个国家站运营的0.5pd）"
+ },
+ {
+  "n": 4,
+  "block_id": "6d87e36ea6fb762ce91968e730a82013::8bac8a611b5bea40::/H1/21-黑五/H3/监控更完善#1",
+  "file": "doc/黑五_双十一/黑五分享.md",
+  "heading": "21-黑五 > 监控更完善",
+  "chars": 475,
+  "text": "之前的埋点比较混乱，整理了各个服务的埋点数据，梳理了整个用户相关的业务监控\n\n用户访问/鉴权：从登录/注册成功率、数量、失败原因、流量趋势多个维度监控，配置相关阀值报警；\n\n用户信息：从 获取信息 和 更新信息 趋势以及失败原因 监控分析；\n\n用户地址：从 添加地址 和 更新地址 趋势以及失败原因 监控分析；\n\n用户礼品卡：从 使用礼品卡 和 创建礼品卡 趋势以及失败原因 监控分析，监控有无异常的礼品卡操作，并配置相关阀值报警；\n\n用户心愿单：添加心愿单 和 删除心愿单 趋势以及失败原因 监控分析，这一块目前比较欠缺，还在持续优化；\n\n用户活动：目前包含了抽奖活动，作为本次黑五比较重要的活动之一，也从进行/查看抽奖流量成功率、流量趋势、分端分来源分析、失败原因等多个维度进行监控分析，保障活动的顺利运转； PS: 之前抽奖项目不就可以派上用场了 🤣🤣，贴一个连接 👉 大营销抽奖\n\n用户通知：目前比较重要的是邮件通知，有着量大请求频繁的特点，也从 按类型进行拆分、数量、失败原因、流量趋势等多个维度进行监控分析，并配置每日限额报警和动态切换。"
+ },
+ {
+  "n": 5,
+  "block_id": "6d87e36ea6fb762ce91968e730a82013::8bac8a611b5bea40::/H1/21-黑五/H2/不足之处第一次#1",
+  "file": "doc/黑五_双十一/黑五分享.md",
+  "heading": "21-黑五 > 不足之处(第一次)",
+  "chars": 339,
+  "text": "两封营销邮件带来的总转化率仅为 0.19%，GMV 为 $2604。对于一个电商平台的黑五来说，这个数字可以说是相当低的，PS:可能是第一次做黑五吧hhh\n\n11月26日发送 2 万封提醒使用礼品卡邮件：\n\n礼品卡使用的邮件效果不太明显，大部分用户是抽中低额度的礼品卡，吸引力不够大\n\n后面和抽奖相关的营销方式需要考虑提示用户的后续渠道和方式。\n\n11月26日、27日分批次发放 17 万封弃车邮件（全量用户）：\n\n并没有发放弃车折扣码，没有折扣激励的弃车召回邮件，转化率自然会很低\n\n全量用户统一发没有做差异化，VIP/优质用户应该做到精准激励\n\n设计的时间比较紧张，没有考虑太多可能会影响打开率和转化率的因素，有部分用户收到 noreply 的邮件发送人的影响可能会被归档；"
+ },
+ {
+  "n": 6,
+  "block_id": "c8a0c6720c62f8b642f8d897ddaa0c31::e7827ba2b64c2929::/H2/规范注释使用/H3/禁止接口定义#1",
+  "file": "doc/基础服务/CI_自动生成接口文档.md",
+  "heading": "规范注释使用 > 禁止接口定义",
+  "chars": 444,
+  "text": "在code review发现该定义直接打回\n\n使用map作为返回值\n\n@GetMapping(value = \"/object\")\npublic Map<String, User> testMapUser() {\n    return null;\n}// or\n@GetMapping(value = \"/object\")\npublic Map<String, Object> testMap() {\n    return null;\n}\n\n由于代码中 map 的键值无法分析，无法生成好的文档。\n\n使用JSONObject\n\n/**\n * Return user information\n * @return\n */\n@GetMapping(value = \"/user\")\npublic JSONObject object() {\n    return null;\n}\n\nJSONObject 可以在程序运行时返回任何 json 数据，因此也无法清楚地知道自动生成文档的返回数据类型。"
+ },
+ {
+  "n": 7,
+  "block_id": "c8a0c6720c62f8b642f8d897ddaa0c31::e7827ba2b64c2929::/H2/接入指南/H3/引入maven插件/H5/统一依赖管理引用#1",
+  "file": "doc/基础服务/CI_自动生成接口文档.md",
+  "heading": "接入指南 > 引入maven插件 > 统一依赖管理引用",
+  "chars": 301,
+  "text": "如果引用了cider-parent或erp-common作为统一依赖管理，只需要升级cider-parent到0.``3.2及以上版本,然后在项目的parent pom中添加插件添加下面的插件\n\n<plugin>\n    <artifactId>yapidoc-maven-plugin</artifactId>\n    <groupId>com.cider.yapidoc</groupId>\n    <configuration>\n        <yapiUrl>http://yapi.shopcider.cn/</yapiUrl>\n    </configuration>\n</plugin>"
+ },
+ {
+  "n": 8,
+  "block_id": "353c969756790aacffc20a7ec9a97867::748cb03bf92827bc::/H2/2024-33周/H3/rocketmq如何实现批量消费消息#1",
+  "file": "doc/基础服务/基础服务功能QA.md",
+  "heading": "2024-33周 > rocketmq如何实现批量消费消息",
+  "chars": 1098,
+  "text": "public class BatchConsumer {\n\n    public static final String CONSUMER_GROUP = \"gid-xiaozou-batch\";\n\n    public static final String TOPIC = \"xiaozou-batch-topic\";\n\n    public static void main(String[] args) throws Exception {\n\n        System.setProperty(\"rocketmq.namesrv.domain\", \"mqcloud-cider-dev.hishopcider.com:80\");\n        System.setProperty(\"rocketmq.namesrv.domain.subgroup\", \"nsaddr-2\");\n\n        DefaultMQPushConsumer consumer = new DefaultMQPushConsumer(CONSUMER_GROUP);\n        consumer.setConsumeMessageBatchMaxSize(32); // 设置批量消费最大消息数\n        consumer.subscribe(TOPIC, \"*\");\n        consumer.registerMessageListener((MessageListenerConcurrently) (msgs, context) -> {\n            // 批量处理消息\n            for (MessageExt msg : msgs) {\n                // 处理单条消息\n                System.out.println(\"messageId\" + msg.getMsgId() + \"接受到的消息body: \" + new String(msg.getBody()));\n            }\n            System.out.println(\"一批消息消费完成\");\n            return ConsumeConcurrentlyStatus.CONSUME_SUCCESS;\n        });\n\n        consumer.start();\n        System.out.printf(\"Consumer Started.%n\");\n    }\n}"
+ },
+ {
+  "n": 9,
+  "block_id": "bb3c1a554c2a863b9ac164a79fdc39d1::664d5cc595d72ea6::/H1/散修宗四大门派/H2/东岳泰山-改换门庭-tiktokshop#3",
+  "file": "doc/多渠道/多渠道修仙传.md",
+  "heading": "散修宗四大门派 > 东岳泰山 - 改换门庭 TiktokShop",
+  "chars": 545,
+  "text": "商品传上去以后，运营同学还要在 TT 的后台里面手动填充商详，从主站截图洗水唛和尺码表的图 CV 进去\n\n由于这个过程确实比较痛苦，填充商详的过程非常机械化，干活的时候运营同学 be like：\n\n于是运营同学就提需求希望能在系统上直接填充商详的信息 TTS 上传商品痛点\n\n刚开始接到任务的时候，说实话是有点汗流浃背，万一代码挪过来以后跑起来嘎嘎报错，影响运营同学上新，那就难搞了\n\n不过想那么多也没用，需求已经摊到我头上了，来都来了，干呗\n\n先把代码从商品中台挪到九头蛇里面，再用什么 开闭原则、高内聚低耦合 一顿嘎嘎整， 然后某一天测试的时候突然就报了个错：\n\n那没招啊，我寻思我也妹改啥东西，怎么就不行了？行吧，那就不耻下问看看怎么个事儿吧\n\n然后呢？然后就没有然后了\n\n这个问题直至今日他们也没人给个答复，至于问题怎么解决的呢？诶嘿，过几个小时他自己就好了\n\n虽然过程略微有点坎坷，但是最后功能总算是做好了\n\n上线以后也确实节省了业务很多时间，一个 SPU 可以节省 10 分钟\n\n接入以来已经上传了 1500+ SPU，累计节约了运营同学 250 小时，按 996 算那也得 20 个工作日，可以说生产力大幅提升\n\n现在 TikTokShop 基本上已经稳坐我们销量榜的第二梯队"
+ },
+ {
+  "n": 10,
+  "block_id": "bb3c1a554c2a863b9ac164a79fdc39d1::664d5cc595d72ea6::/H1/散修宗四大门派/H2/北岳恒山-持续迭代-amazon#1",
+  "file": "doc/多渠道/多渠道修仙传.md",
+  "heading": "散修宗四大门派 > 北岳恒山 - 持续迭代 Amazon",
+  "chars": 480,
+  "text": "门派护法：@陈伟杰 weijie\n\n对接 amazon 的时候，按照以前的经验，其实就是对接一下商品、订单相关的 api 嘛\n\n中途还出现店铺被封的情况，不过也是很快就顺利解决了\n\n其实在对接 amazon api 的过程中，我们已经隐约察觉到，亚马逊的系统可能是一大坨的屎山\n\n但没想到，后面发生的故事还是略微超出了我们的想象，在我们用 api 把商品推上去之后，amazon 以 edge case 为由，让我们别用 api 传品，而是给一个 csv 给他们来帮我们传\n\n说实话，多渠道也接了五六家了，这么逆天的还是第一次见，当时遇到的冲击不亚于我第一次看见这张图：\n\n虽然略有震撼，但是该干的活还得干，于是我们快速出了一个导出功能，但没想到的是：\n\n精彩，实在是太精彩了\n\n当然，amazon 的部分远不止这里讲的这些，还有仓库 FBA 条码 Fba 贴标、FMB 库存更新等等，@陈伟杰 weijie 现在一直在给我们的业务同学做相关的信息导出，整个多渠道的部分也还有很多有趣的内容，比如 shopify 和 shopee ，鉴于篇幅有限，暂且按下不表"
+ },
+ {
+  "n": 11,
+  "block_id": "08cd9ae55a446a4b78a88b8a34cd04a1::7c24315fa04bccc4::/H1/消息交互/H2/用户提问分析更新#1",
+  "file": "doc/c端/客服/客服bot/chatbot落地需求第二期.md",
+  "heading": "消息交互 > 用户提问分析更新",
+  "chars": 407,
+  "text": "{\n    \"conversation_id\": \"\", // 会话 id，即 Conversation.conversationId\n    \"continuous\": \"\", // true: 该条消息响应未结束，后续还会有相同 msg_id 的消息 flase:该条消息已结束，后续不会有相同的 msg_id 消息返回\n    \"content_type\": \"\", // 消息类型，text:普通消息 notice: 通知消息, msg_analysis: 消息分析\n    \"msg\": {\n        \"msg_id\": \"\", // IMessage.tId\n        \"body\": \"\" // 返回的消息, mes_analysis 时返回 json 字符串：{'category_name': new_ct_name,'mood_point': mood_point}\n    }\n}"
+ },
+ {
+  "n": 12,
+  "block_id": "08cd9ae55a446a4b78a88b8a34cd04a1::7c24315fa04bccc4::/H1/背景/H2/代码分支#1",
+  "file": "doc/c端/客服/客服bot/chatbot落地需求第二期.md",
+  "heading": "背景 > 代码分支：",
+  "chars": 341,
+  "text": "前端项目： https://gitlab.shopcider.cn/erp/phoebe-web\n\n分支： vain/feat_客服助手\n\n@林景恒 jingheng\n\n后端项目： https://gitlab.shopcider.cn/erp/chat-assistant\n\n@张旸 Yory\n\nC端M站：\n\n用户名： yun.he@shopcider.com\n\n验证码： 888888\n\n客服工作台：\n\n可以用我的测试环境账号，已开通客服权限 yun.he@shopcider.com\n\n123456\n\n页面代码地址： app/pages/customer-service-workbench/components/user-center/Assistant/index.tsx"
+ },
+ {
+  "n": 13,
+  "block_id": "57324e4268498ae2721192a757432ef9::5e8f90c11de47ee7::/H1/设计文档obsidian-article-skill本地文章模式/H2/8-验收标准#1",
+  "file": "8f1def730e9845b9aa5641a28e5d705e/obsidian-valut-master/docs/superpowers/specs/2026-08-09-obsidian-article-design.md",
+  "heading": "设计文档：obsidian-article skill（本地文章模式） > 8. 验收标准",
+  "chars": 331,
+  "text": "/obsidian-article 房价 能触发并走完 6 步流程\n\nskill 能被 Claude Code 识别（frontmatter 最小兼容集，目录名=skill 名）\n\n配置读取正确：改 article.config.yaml 的 sources 后，搜索范围随之变化；无配置时用默认值\n\n素材清单只含相关笔记，格式正确，路径为相对路径\n\n提纲在写正文前强制停点，用户可改\n\n成稿符合叙事评论风格（对照房价文），无 AI 味\n\n归档到 /article/{主题}/（写死输出路径），frontmatter 双链可点击回溯\n\n素材不足时正确拒绝并给建议\n\n仓库内 article.config.example.yaml 存在，含注释说明，可直接复制使用"
+ },
+ {
+  "n": 14,
+  "block_id": "57324e4268498ae2721192a757432ef9::5e8f90c11de47ee7::/H1/设计文档obsidian-article-skill本地文章模式/H2/2-已确认的需求/H3/21-路径设计开源友好#1",
+  "file": "8f1def730e9845b9aa5641a28e5d705e/obsidian-valut-master/docs/superpowers/specs/2026-08-09-obsidian-article-design.md",
+  "heading": "设计文档：obsidian-article skill（本地文章模式） > 2. 已确认的需求 > 2.1 路径设计（开源友好）",
+  "chars": 250,
+  "text": "可配置路径（素材源）：通过配置文件 article.config.yaml（默认）读取，内容为相对项目根（vault）的相对路径，带占位符。skill 运行时解析占位符 + 相对路径得到真实目录。不写死任何用户特有路径。\n\n写死路径（输出）：文章输出目录固定为 /article（即项目根下的 article/），这是跨用户一致的约定路径，符合开源惯例。\n\n配置示例：仓库内提供 article.config.example.yaml，用户复制为 article.config.yaml 并按需修改。"
+ },
+ {
+  "n": 15,
+  "block_id": "d004f57f11bf50299ab4aed7cc40d61b::9177802a4f97438f::/H2/准确率与可观测性#1",
+  "file": "一个比较有潜力的 Agent 项目—— Agent-Sentiel.md",
+  "heading": "准确率与可观测性",
+  "chars": 568,
+  "text": "光跑通还不够,我们更关心的是 稳不稳。\n\n在我们团队长时间的测试下,Agent-Sentinel 的根因定位准确率能够保持在 90% 以上。这个数字其实有点超出我们的预期——一开始我们只敢估计 60~70%。后来分析下来,准确率高的核心原因有两个:\n\n上下文足够丰富:多源数据(日志 + 指标 + trace + 配置变更)同时摆在 LLM 面前,误判率显著下降;\n\n提示词工程做得到位:每个数据源的查询都有专门优化的 Prompt,把\"原始数据 → 结构化结论\"这一步做得比较扎实。\n\n但 90% 不是 100%,所以我们坚持一个原则:Agent 只给候选,不做最终决策。最终拍板,还是工程师。\n\n另外,我们也为这套系统配上了对应的 可观测性平台,监控以下几项关键指标:\n\n缓存命中率:对于一些高频查询(比如同一个服务的常见错误),我们做了语义缓存,避免重复打 LLM;\n\nToken 输入与输出:精确到每一次 LLM 调用的 prompt / completion token,方便算账;\n\n节点耗时:LangGraph 每个节点的执行时间都有埋点,可以快速定位瓶颈;\n\n飞书回调延迟:从告警触发到消息推回群里的端到端延迟。\n\n可观测性这件事,我们认为是 Agent 项目能不能落地的关键。一个黑盒 Agent,业务团队是不敢用的。"
+ },
+ {
+  "n": 16,
+  "block_id": "d004f57f11bf50299ab4aed7cc40d61b::9177802a4f97438f::/H2/这件事的未来价值#1",
+  "file": "一个比较有潜力的 Agent 项目—— Agent-Sentiel.md",
+  "heading": "这件事的未来价值",
+  "chars": 418,
+  "text": "写到这里,可能有人会问:大模型这么火,这件事到底有没有未来?\n\n我的看法是:非常有。\n\n回到本质,Agent 在生产环境的价值,从来不是\"替代人\",而是把工程师从重复劳动里解放出来。SRE 同学最值钱的时间,应该花在架构优化、根因复盘、防患于未然,而不是拼查询条件。\n\n而 Agent-Sentinel 切中的,恰好是几乎所有有一定规模的技术团队都会遇到的痛点——多平台、多渠道、高频切换。它不是一个\"花架子 Agent\",而是一个 真正能跑在生产环境、能稳定输出价值 的工程化 Agent。\n\n未来我们计划在以下几个方向继续演进:\n\n接入更多办公软件:企微、钉钉、Slack;\n\n支持更多云厂商:目前主要是阿里云 + Datadog,后续会扩展到 AWS、Azure;\n\n根因知识库:把历史上确认过的根因沉淀成 RAG 知识库,让 Agent \"越用越聪明\";\n\n自动化工单:从\"给候选\"升级到\"开自动化工单\",进一步缩短 MTTR。"
+ },
+ {
+  "n": 17,
+  "block_id": "27c15fbd6ec5e44c802e6968985c7db1::2ae8a62ab1c7899f::/H1/芒格的投资评估过程#1",
+  "file": "《穷查理宝典》.md",
+  "heading": "芒格的投资评估过程",
+  "chars": 373,
+  "text": "钱有时间价值，未来的 100 元不如现在的 100 元值钱，金融学引入了单利/复利以及贴现的概念 如果社会平均的年收益率（折现率）是 $r = 5%$：， 现在的 100 元（现值 $PV$），一年后的终值 ($FV$) 就是\n\n$$FV = 100 \\times (1 + 5%) = 105 \\text{ 元}$$\n\n巴菲特的一个段子：如果在赌桌上，你不知道谁是傻瓜，那么你就是\n\n你必须有浓厚的兴趣去弄明白正在发生的事情背后的原因。如果你能够长期保持这种心态，你关注显示的能力将会逐渐得到提高。如果你没有这种心态，呢么及时你有很高的智商，也注定失败 芒格在说：好奇心比智商更重要。 如果你对\"事情为什么会这样发生\"没有一种近乎本能的追问欲，那么再高的智商也只是装饰品——你会在错误的方向上高效地推理，最终撞得头破血流。\n\n确认偏误 认知偏差"
+ },
+ {
+  "n": 18,
+  "block_id": "27c15fbd6ec5e44c802e6968985c7db1::2ae8a62ab1c7899f::/H1/芒格的生活学习和决策方法#1",
+  "file": "《穷查理宝典》.md",
+  "heading": "芒格的生活，学习和决策方法",
+  "chars": 290,
+  "text": "你必须指导重要学科的重要理论，并经常使用他们——要全部都用上，而不是只用几种。大多数人都只使用学过的一个学科的思维模型，比如说经济学，视图用一种方法来解决所有的问题。在手里拿着铁锤的人看来，世界就像一颗钉子，这是处理问题的一个笨方法，分科越细，思维越窄\n\n人们往往觉得一件事太难，往往会放弃做它\n\n不要非常频繁地进行买卖。和巴菲特相同，芒格认为，只要几次决定便能够造就成功地投资生涯\n\n如果一件事情是一个坏主意，你不会做过头，但如果一件事情是一个好主意，蕴含着重要地真理，那你就没办法忽略了。然后你就很容易做过头。所以呢，如果你把他们做过头了，那些好主意是让你遭受可怕后果的好方法"
+ },
+ {
+  "n": 19,
+  "block_id": "fd8d17fa65c9c9ffb421f370525dd462::a434cd007cfa8685::/H1/1时间线/H3/12#1",
+  "file": "doc/事故报告/2024合集/2024年07月13日，广告策略引擎误操作.md",
+  "heading": "1、时间线 > 1.2",
+  "chars": 451,
+  "text": "2024-07-12 21:09 @谭小艺Tanny 发现某条广告被误关停\n\n2024-07-12 22:54 @叶文鸿 看了下策略的执行逻辑，发现数据在正确的情况下，该广告应该是需要被关停的，于是怀疑当天eroi低的原因是因为一天刚开始，想等过完一天再看看\n\n2024-07-13 22:43 @叶文鸿 本地再跑了一下数据和@谭小艺Tanny 对齐了一下，发现之前和现在的数据都不太对，@叶文鸿 检查了组装和计算数据的逻辑，发现代码逻辑正确\n\n2024-07-14 18:32 @叶文鸿 发现是数据库返回的数据异常，定位到异常数据对应哪几个表以及对应哪几个sql不对，通知给@高鹏宇 @张华洋Huayang @赵凯 Kai\n\n2024-07-15 10:28 @杨亦灵Yiling 发现bi_warehouse_dw_us_w2p_product_app_hourly表9号之后数据没了，@高鹏宇 把数据同步过来\n\n2024-07-15 12:00@杨亦灵Yiling @叶文鸿 验证数据，数据恢复了"
+ },
+ {
+  "n": 20,
+  "block_id": "fd8d17fa65c9c9ffb421f370525dd462::a434cd007cfa8685::/H1/5如何避免#1",
+  "file": "doc/事故报告/2024合集/2024年07月13日，广告策略引擎误操作.md",
+  "heading": "5、如何避免",
+  "chars": 291,
+  "text": "给apollo里的每个配置加上注释，并且release改动的时候需要@赵凯 Kai approve\n\n确保广告任务报错不会影响业务是非常重要的，以下是一些避免广告任务报错影响业务的方法：\n\n@高鹏宇 建立指定广告同步warebase的报错群，及时发现并解决问题：建立一个专门飞书群组，负责监控和处理广告任务的报错情况。及时收集并汇总报错信息，快速定位问题并采取有效措施解决，避免报错信息过多导致关键信息被淹没。\n\n与warebase合作方沟通，督促其提升系统稳定性和性能，减少系统故障和异常的发生。同时建立快速响应机制，确保在出现问题时能够迅速定位、处理和修复，以减少对业务的影响。"
+ },
+ {
+  "n": 21,
+  "block_id": "cb6cf583005b5aa2ccdf5109fc5f64cd::bdfa089576ebfce0::/H1/财税和政府行为/H2/纵向不平衡与横向不平衡#1",
+  "file": "《置身事内：中国政府与经济发展》.md",
+  "heading": "财税和政府行为 > 纵向不平衡与横向不平衡",
+  "chars": 635,
+  "text": "分税制改革之后，中央拿走了税收的大头，但是办事的仍然在地方，花钱大头仍然在地方，因此中央通过转移支付填补这大窟窿，整体上看，确实能够补全地方财政不足，让地方资金足够，但总数能补全不代表每级政府能补全，广州有钱不代表兰州有钱，有蛋糕不代表你能吃蛋糕，这种纵向与横向的不平衡造成了很多矛盾与冲突，也催生出很多改革\n\n财权层层上收，事权层层下放\n\n三农问题直到后续中国加入 WTO 组织飞速发展的工商业，使国家财政不在依赖农业税费\n\n所以在 21 世纪初，全国开始推行“扩权强县”和“财政省直管县”改革。前者给县里下放一些和市里等同的权限，比如土地审批、证照发放等；后者则让县财政和省财政直接发生关系，绕开市财政，在财政收支权力上做到县市平级。这些改革增加了县一级的财政资源，缩小了城乡差距\n\n公共财政\n\n中央对地方的转移支付大概可以分为两类：一般性转移支付（2009 年之后改称“均衡性转移支付”）和专项转移支付。 简单来说，前者附加条件少，地方可自行决定用途，而后者必须专款专用。为什么要指定资金用途、不让地方自主决策呢？因为无条件的均衡性转移支付是为了拉平地区差距，所以越穷的地方拿到的钱越多，地方也就越缺乏增收动力。而且均衡性转移支付要保证政府运作和公务员工资，可能会刺激财政供养人员增加，恶化冗员问题。专项转移支付约占转移支付总额的四成，一般以“做项目”的形式来分配资金，专款专用，可以约束下级把钱花在上级指定的地方，但在实际操作中，这种转移支付加大了地区间的不平等"
+ },
+ {
+  "n": 22,
+  "block_id": "cb6cf583005b5aa2ccdf5109fc5f64cd::bdfa089576ebfce0::/H1/财税和政府行为/H3/分税制改革#1",
+  "file": "《置身事内：中国政府与经济发展》.md",
+  "heading": "财税和政府行为 > 分税制改革",
+  "chars": 495,
+  "text": "1994 年分税制改革\n\n地方有钱，中央就没钱了，所以要搞分税制改革，避免阻碍统一市场\n\n。我国的基本国策决定了不能对所有权做出根本性变革，只能对使用权和经营权实行承包制，以提高工作积极性\n\n20 世纪 80 年代是改革开放的起步时期，在很多根本性制度尚未建立、观念尚未转变之前，各类承包制有利于调动全社会的积极性，推动社会整体走出僵化的计划经济，让人们切实感受到收入增长，逐渐转变观念。\n\n鞭打快牛核心矛盾在于：惩罚优秀，纵容平庸。\n\n要创造平稳的环境，就需要缩小地区间基本公共服务差异。通电通气\n\n毛主席说，“手里没把米，叫鸡都不来\n\n公众所接触的信息和看到的现象，大都已经是博弈后的结果，而缺少社会阅历的学生容易把博弈结果错当成博弈过程。\n\n成功的政策背后是成功的协商和妥协，而不是机械的命令与执行，所以理解利益冲突，理解协调和解决机制，是理解政策的基础。\n\n三大税种：\n\n商品增值税\n\n企业所得税\n\n个人所得税\n\n20 世纪 90 年代，各地烟厂、酒厂越办越多，很多地方只抽本地牌子的烟、喝本地牌子的啤酒，这种严重的地方保护主义不利于形成全国统一市场，也不利于缩小地区间的经济差距。"
+ },
+ {
+  "n": 23,
+  "block_id": "736cecae4e6cac5b8d379481b16c1a34::1fc54b21bdc30199::/H2/assistant-1#1-s0",
+  "file": "8f1def730e9845b9aa5641a28e5d705e/obsidian-valut-master/reading/YOLO/Exports/弗洛伊德论的性变态的形成机制.md",
+  "heading": "Assistant",
+  "chars": 460,
+  "text": "[!note]- Thinking 用户正在阅读关于弗洛伊德精神分析的笔记，特别关注第71行关于\"夸大但未被压抑\"导致性变态的论述。这是一个很好的问题——需要我深入解释弗洛伊德理论中这个关键但容易被误解的概念。\n\n让我仔细拆解用户的问题：\n\n\"被夸大但未被压抑\"是什么意思？\n\n为什么这会导致\"性变态\"（perversion）？\n\n这涉及到弗洛伊德关于神经官能症（neurosis）和性变态（perversion）之间关系的核心理论。经典的弗洛伊德框架是：\n\n压抑（repression）→ 神经官能症\n\n未被压抑（但夸大）→ 性变态\n\n升华（sublimation）→ 正常\n\n\"底片\"比喻非常精妙——神经官能症是性变态的\"negative\"，意思是二者实际上是同一种心理结构的正反两面。\n\n让我用弗洛伊德的理论框架来深入分析。\n\n弗洛伊德理论中，性心理发展经历几个阶段：口欲期、肛欲期、性器期、潜伏期、生殖期。在每个阶段，都有特定的\"子本能\"（component instincts/partial drives）。"
+ },
+ {
+  "n": 24,
+  "block_id": "736cecae4e6cac5b8d379481b16c1a34::1fc54b21bdc30199::/H2/书中逻辑/H3/3-夸大到底是什么意思#1",
+  "file": "8f1def730e9845b9aa5641a28e5d705e/obsidian-valut-master/reading/YOLO/Exports/弗洛伊德论的性变态的形成机制.md",
+  "heading": "【书中逻辑】 > 3. \"夸大\"到底是什么意思？",
+  "chars": 388,
+  "text": "这里的\"夸大\"（exaggeration），不是指这个子本能在意识层面被刻意强化，而是在心理发展的早期，由于某些体质性因素或偶然的经历，某一个子本能获得了过度的力比多投注（hypercathexis），它在心理经济系统中占据了不相称的份额。\n\n举个例子：一个孩子在肛欲期（2-3岁），因为某种原因——可能是排便训练时的特殊互动模式，可能是某种体质敏感性——对\"控制与释放\"的快感获得了异常强烈的心理强化。这个冲动没有被压抑（父母没有严厉打压，或者这个孩子没有因为这种快感产生道德焦虑），于是它被\"保留\"到了成人期，直接表现为对肛门性行为或控制-服从关系的性固着。\n\n关键点：它之所以\"未被压抑\"，往往是因为这个子本能没有引发足够强烈的道德焦虑。 压抑的发生需要一种冲突——本能冲动 vs. 自我理想/道德禁令。如果这个冲突没有发生（或者道德方不够强大），冲动就直接\"通关\"了。"
+ },
+ {
+  "n": 25,
+  "block_id": "ac28ad7a30266b221b8b55f4a6683df9::7730471c2f42b874::/H1/政府的账本一场借明天的钱的接力赛/H2/第三节-城投加杠杆债务的放大器#1",
+  "file": "8f1def730e9845b9aa5641a28e5d705e/obsidian-valut-master/reading/article/经济/2026-08-09-政府的账本：一场借明天的钱的接力赛.md",
+  "heading": "政府的账本：一场\"借明天的钱\"的接力赛 > 第三节 城投加杠杆——债务的放大器",
+  "chars": 588,
+  "text": "2008 年，全球金融危机蔓延，中央印了 4 万亿砸下去，配套的还有汶川重建等一堆大项目。钱是来了，可这 4 万亿不可能全由中央掏，地方的配套资金从哪来？\n\n答案是：借钱。而借钱需要一个能借到钱的\"壳\"——城投公司。\n\n城投公司，全称城市建设投资公司，是地方政府全资的融资平台。它本身不盈利，投的都是基础设施这种\"项目本身赚不了钱、但能带动周边经济\"的活。这样的项目，银行本来不敢贷，可一旦有了政府背书，融资就容易得多——有国企参与或政府背书的项目，借钱根本不是问题。\n\n《置身事内》还补了一个更底层的经济学视角：市场交易是有成本的，企业之所以存在，就是为了降低这些交易成本——科斯（诺贝尔经济学奖得主）早在 1930 年代就问过，\"企业和市场的边界在哪里？市场如果有效，为什么会有企业？\"。城投公司，某种程度上就是地方政府为了降低\"融资的交易成本\"而长出来的一个器官：与其政府亲自下场去市场上借钱，不如开一家公司，用企业的壳、政府的信用去借，成本更低、也更灵活。\n\n于是逻辑就拧成了这样：市政府开一家城投 → 城投以政府的信用去借债 → 借来的钱修路建园区 → 园区带动土地升值 → 升值的地再卖钱还债 → 卖不动了就再借。这个循环在房价上涨的年代转得飞快，看起来人畜无害，直到某一天发现——15 万亿的债务，已经压得喘不过气。\n\n而真正让这个循环停不下来的，是官员的任期。"
+ },
+ {
+  "n": 26,
+  "block_id": "ac28ad7a30266b221b8b55f4a6683df9::7730471c2f42b874::/H1/政府的账本一场借明天的钱的接力赛/H2/第二节-卖地还账土地财政诞生#1-s1",
+  "file": "8f1def730e9845b9aa5641a28e5d705e/obsidian-valut-master/reading/article/经济/2026-08-09-政府的账本：一场借明天的钱的接力赛.md",
+  "heading": "政府的账本：一场\"借明天的钱\"的接力赛 > 第二节 卖地还账——土地财政诞生",
+  "chars": 468,
+  "text": "供给刻意失衡：政府压低工业用地价格招商，刻意收紧商住用地指标，住宅土地稀缺，土拍地价持续走高——地价是房价最主要的成本，地价撑住房价就难跌。\n\n财政高度依赖卖地：基建、城市运转全靠土地出让金，政府没有主动压低地价的动力，形成\"控地→抬地价→赚出让金\"的循环。\n\n城市化催生刚需：低价工业地引来企业和人口，进城定居、上学落户催生买房刚需，需求旺盛进一步托住房价。\n\n金融与保值预期：房产是优质抵押资产、抗通胀硬通货，加上长期涨价的大众预期，投资叠加刚需，双重拉高价格。\n\n一环扣一环，地方政府就这样把\"卖地\"从一个应急动作，做成了一套可持续数十年的财政模式。《官僚体系》的解读把这条逻辑点破了：中国经济的很多现象——招商引资、土地财政、产业园区竞争——都不是中央单方面设计出来的，而是在\"上级控制—下级自主\"的结构里慢慢演化出来的。上级给了地方财政压力，地方就自己找到了卖地这条路，谁也别想一纸文件堵住。\n\n到这里，地方政府有了第一张\"信用卡\"：卖地。可光靠卖地还不够，2008 年之后，真正让债务滚起来的，是另一张更大的卡——城投平台。"
+ },
+ {
+  "n": 27,
+  "block_id": "47632fb6b5da4d7c621c101e6fca9f79::ee3b56ff156691fe::/H1/01-star-完整版c端商详页视角/H2/三30-秒精简版被打断时用#1",
+  "file": "doc/业务/自己业务/做业务踩的坑/面试-STAR-首单加深/01-STAR-C端完整版.md",
+  "heading": "01 · STAR 完整版（C端商详页视角） > 三、30 秒精简版（被打断时用）",
+  "chars": 342,
+  "text": "\"做商详页的相似款推荐+销量背书。公司数据是分层的，有离线数仓，但销量角标是商详页实时接口要读的，等不了 T+1，所以必须直接查交易库 1.7 亿行的订单表。接口 30 秒超时、相似款模块白屏。性能我很快解决——物化视图按天预聚合，本质是把数仓'预聚合'思路下沉到在线侧，销量查询从 2 分钟降到毫秒级。真正的困难是数据对不上：四个叠加根因——INNER JOIN 商品主表丢历史单、窗口 off-by-one、刷新时点差、最隐蔽的时区日界不一致（timestamptz 存 UTC，date() 按会话时区截断，原查询用 LocalDateTime，两套'一天'）。我靠变量隔离+逐天对账+边界采样定位，统一上海时区日界+半开区间后完全对齐。接口 30s→5s 内，21 天交付。\""
+ },
+ {
+  "n": 28,
+  "block_id": "47632fb6b5da4d7c621c101e6fca9f79::ee3b56ff156691fe::/H1/01-star-完整版c端商详页视角/H2/二完整-star-口述版面试直接讲/H3/升华数据湖亮点收尾#1",
+  "file": "doc/业务/自己业务/做业务踩的坑/面试-STAR-首单加深/01-STAR-C端完整版.md",
+  "heading": "01 · STAR 完整版（C端商详页视角） > 二、完整 STAR 口述版（面试直接讲） > 升华（数据湖亮点收尾）",
+  "chars": 280,
+  "text": "所以回到您的问题——最大的困难不是把接口做快。性能是显性问题，超时你看得见、有日志；口径是隐性问题，根因被四层因素遮蔽，只有把变量全部隔离完才浮出水面，而它不可妥协：C端数字错一个，是信任事故。\n\n而这件事也让我把公司数据架构的三个分层——OLTP 交易库、离线数仓、加速查询层——完整串了一遍：物化视图本质上就是把数仓\"预聚合、空间换时间\"的思路下沉到在线侧，离线链路按天分区、在线链路用快照，各解决各的时效和口径问题。我最大的成长是学会\"先立口径基线，再谈优化\"——任何优化都在改变数据的投影方式，每动一层，都必须回到原始口径验证它还是不是原来的那个业务。"
+ },
+ {
+  "n": 29,
+  "block_id": "06fcc07cd6b265c98de3bd8224ca45f4::e69da36130707e9b::/H1/再次排查-5月2627日/H2/第二层缓存代码#1",
+  "file": "doc/事故报告/OMS切面偶发问题排查.md",
+  "heading": "再次排查-5月26、27日 > 第二层缓存代码",
+  "chars": 395,
+  "text": "470往里，就是一个全局的CHashMAP，说明这里也有缓存\n\n回到getShadowMatch，用arthas去执行当前这个方法，发现返回的shadowMatch对象确实是不匹配，但有个特点是test里面存的都是null\n\n和代码对照下，这就有意思了，正常来说返回的对象就算是不匹配其他属性也不是null的，说明进入了最下面这段代码\n\n这个时候，已经以为接近曙光了，我把日志级别改成debug清除2层缓存重新跑不就行了吗？\n\n然后操作一手，结果是直接成功，没报错！！！切面也恢复了，一切都正常起来了\n\n剩下懵逼的我，阿？重跑就没报错了？\n\n再往里看代码，又臭又长，看不出明显问题，本次排查就先到这里了，已经定位就是这里报错了，调整发布，下次遇到就能拿到具体的堆栈了\n\n为排查出之前，一度认为是类加载器影响的\n\n到了这里，实际有办法来处理这个偶发切面失效，就是把两个缓存都清除重跑就能修复了"
+ },
+ {
+  "n": 30,
+  "block_id": "06fcc07cd6b265c98de3bd8224ca45f4::e69da36130707e9b::/H1/拿到堆栈-5月29日#1",
+  "file": "doc/事故报告/OMS切面偶发问题排查.md",
+  "heading": "拿到堆栈-5月29日",
+  "chars": 393,
+  "text": "因为这段时间又没遇到说AOP失效了，就没看，等29号有时间了，我跑去sls查看日志，发现有报错，这次终于拿到堆栈了！\n\n空指针？这不小意思吗\n\n往里（跳过看迭代器的一坨，绕来绕去的，不如一个数组解决）\n\n剩下就前面的，再往里\n\n一个getDeclaredMethods方法和parameterizedWith方法，先看前者\n\n这是一个new，然后set值，所以不可能返回null，说明整个getDeclaredMethods返回的就不存在null\n\n那剩下就parameterizedWith看看，也一样，也是new\n\n到这里真不知道为啥能出问题了，这个空指针怎么来的？是我上面那些步骤出错了？去github找找，看有没有大佬解决，还刚好前一天也有人遇到这个空指针并发出来了\n\n然后看了整个上下文，也并未有说明是为什么会有空指针，然后我在签名写上：职业生涯最难BUG（因为真的想不明白）"
+ },
+ {
+  "n": 31,
+  "block_id": "b440a0554aa58f3eae0d94dcae0c5c6d::3aa5f4dad11915ee::/H1/优化三步曲/H2/怎么优化资源懒加载混淆采用特殊的发布格式/H3/针对其他资源优化#1",
+  "file": "doc/其他/Android/Cider Android包（APK）体积优化.md",
+  "heading": "优化三步曲： > 怎么优化【资源懒加载，混淆，采用特殊的发布格式】 > 针对其他资源优化",
+  "chars": 570,
+  "text": "在调研了一番后，发现使用R8混淆技术正是我们所需要的，结合shrinkResource配置，它能使项目在从字节码到APK的构建过程中体积获得大幅度缩减，总结如下：\n\n代码缩减：从应用及其库依赖项中检测并安全地移除未使用的类、字段、方法和属性。\n\n资源缩减：从应用中移除不使用的资源，包括应用库依赖项中的不使用的资源。\n\n优化：检查并重写代码，以进一步减小应用的 DEX 文件的大小。\n\n混淆：缩短类和成员的名称，从而减小 DEX 文件的大小。\n\n在一系列的混淆配置后，我们直接看收获。\n\n总大小63MB，继续缩减7.1MB 【70.1MB --> 63MB】，咱们也可以看到基本所有dex文件大小都缩减到位。\n\n值得一提的是，使用R8混淆技术时 混淆规则必须写稳且覆盖到位，不能一股脑盲目混淆。因为在混淆完后，我对应用进行内测，发现Flutter相关的部份功能存在不可用的情况，随后通过配置相关混淆规则修复。另外R8混淆可能会影响firebase排查问题【因为混淆会导致我们看到的调用栈基本都是abcd形式】，但目前已经按照Firebase提供的解决方案进行相关的配置，后续持续跟踪影响大不大。\n\n不过这个问题还有其他解决方案，如将混淆后的堆栈信息复制到Android Sdk提供的proguard.sh里面后，也可以看到混淆前的堆栈数据。"
+ },
+ {
+  "n": 32,
+  "block_id": "b440a0554aa58f3eae0d94dcae0c5c6d::3aa5f4dad11915ee::/H1/优化三步曲/H2/怎么优化资源懒加载混淆采用特殊的发布格式/H3/针对处理器架构#1",
+  "file": "doc/其他/Android/Cider Android包（APK）体积优化.md",
+  "heading": "优化三步曲： > 怎么优化【资源懒加载，混淆，采用特殊的发布格式】 > 针对处理器架构",
+  "chars": 456,
+  "text": "对于我们上述提到的ab架构资源包，我们不能暴力剔除v7资源包，但又不希望因为它导致APK体积变大影响我们的下载转化率。需要怎么做呢？ 于是我又调研了一波，最终答案是利用Google Play的功能，采用全新的发布格式 -- AAB【Android APP Bundle】\n\nAndroid App Bundle 是一种发布格式，准确地说，是一个带有.aab扩展名的 zip 文件。它的功能简单的说就是我们交付给Google Play一个可以构建出APK的全部资源压缩包，当用户去Google Play安装应用时，Google Play会按照用户机型的ab架构/语言/屏幕分辨率去动态集成相应资源然后构建出APK给到用户下载。\n\n举个例子，用户手机的ab架构为v8，那么到Google Play下载对应APK的时候，v7资源包是不会包含在内的。 而如果用户手机的ab架构为v7，那么到Google Play下载我们的安装包中只会包含v7资源包。 这样我们就既做到了适配不同的ab架构的手机，又不会让APK体积变大！"
+ },
+ {
+  "n": 33,
+  "block_id": "7efbaaadf0b0e87d9e1b35065443ff61::4b7281599526b9d7::/H1/自我介绍/H2/section#1",
+  "file": "8f1def730e9845b9aa5641a28e5d705e/obsidian-valut-master/edream&实习/秋招项目面试/面试背诵环节.md",
+  "heading": "自我介绍 >",
+  "chars": 336,
+  "text": "一分钟之内讲清楚项目的基本情况，项目的名称背景给哪个客户做，项目做了哪些基本的工作开发完成。项目的规模有多大。用到了哪些技术。然后模块有哪些。\n\n这个项目是 TOB 的，叫做星链系统，主要是给百威做供应链的。入职的时候开发已经进行第二期了。所以单表的操作都搞好了，主要将数据的聚合和汇总。项目有 MPS, APS, MPR, DPS，基础设施。就我们这个模块 MPS 有 2个产品，3个前端，6个后端包括 4 个实习生。前五周是参与了 MPS 算法模块，主要负责通过一系列的规则生成生产数据的各个版本，选择生产版本下发到企业的 ERP, MES 系统。后面完成 MPS 任务模块. 将每月，每周以及自定义任务的各个节点的不同分支串联起来。项目在8月初交付了，后面就在维护。"
+ },
+ {
+  "n": 34,
+  "block_id": "7efbaaadf0b0e87d9e1b35065443ff61::4b7281599526b9d7::/H1/你有什么问题想问我的#1",
+  "file": "8f1def730e9845b9aa5641a28e5d705e/obsidian-valut-master/edream&实习/秋招项目面试/面试背诵环节.md",
+  "heading": "你有什么问题想问我的？",
+  "chars": 305,
+  "text": "你能不能谈谈你作为公司的员工对于这个公司的感受和看法\n\n这个岗位需要招聘一个什么样的人\n\n我想了解一下我们的部门，我们部门大概有多少人？我们这个部门和那个部门的沟通比较多。我们这个部门工作主要集中在那一块？\n\n接下来我会有一段时间空档期，有什么值得注意和学习的吗？\n\n在刚刚的面试过程中，我感觉我有一些点没答全面。从语言组织，逻辑思维，技术能力，你对我今天的整体面试表现有什么建议或者看法吗。我也想汲取这次的宝贵经验\n\nCTO 或者技术主管\n\n面试官爱听的话：\n\n能考虑到代码的扩展性，参与到框架设计的意识。\n\n有调优意识，能通过监控发现问题点，然后解决\n\n动手能力强，肯干活，会的东西很多，团队合作精神比较好"
+ },
+ {
+  "n": 35,
+  "block_id": "fe688f235c1472769f09ef85848b7065::ab244e6b83776f3e::/H1/困境#1",
+  "file": "doc/经验分享与总结/如何测试你的代码.md",
+  "heading": "困境",
+  "chars": 501,
+  "text": "困境一：Spring容器启动太慢、甚至要启动多个微服务\n\n困境二：不断言\n\n对于测试方法，只会通过控制台的输出肉眼确认\n\n要么直接发布到测试环境，鼠标点点点\n\n困境三：依赖数据库\n\n今天的测试能通，明天数据库的数据变更了，测试就失败了\n\n困境四：面对遗留代码，“心路历程”如下\n\n第一步：新增功能代码，发现遗留代码好烂，想重构\n\n第二步：重构的时候，发现没有测试，万一出问题要写P0的啊\n\n第三步：要不先补测试？发现代码不可测...\n\n结论：最终变成“鸡生蛋，蛋生鸡”问题\n\n困境五：不知道要测什么？\n\nController、Dao、Repository、第三方调用要测吗？看场景\n\n采用充血模型，领域模型的业务逻辑可以通过单测验证\n\nController、Repository、Dao无业务逻辑\n\n困境六：大类、长方法\n\n容易违反单一职责，基本不可测\n\n困境七：业务逻辑代码和技术优化代码耦合（多线程、异步、分批）\n\n困境八：私有方法、面向具体实现而没有面向抽象（没法mock）\n\n困境九：不会做任务分解：一个功能流程，不会拆解成多个“做什么”，一上来就是“怎么做”，只看到了细节（说白了就没有设计）"
+ },
+ {
+  "n": 36,
+  "block_id": "c2195431f17c4748937bf6b39b3b1eee::62f4a3c531b094a8::/H2/4spm-scm#1",
+  "file": "doc/c端/埋点/埋点后台一期2.0.md",
+  "heading": "4.spm scm",
+  "chars": 970,
+  "text": "只维护区块，静态的点位 拼接交给端上\n\nSpm\n\n站点/页面类型-{id}/区块/点位\n\n${站点id}.${页面类型}-${页面标识}.${区块id}.${点位id]\n\n8.homePage-12.1a2b3c.1\n\n主站 id为12的首页 1a2b3c区块 第一个位置\n\n页面Id和区块sectionId，在后台创建固定值，端上查询后写死即可。 spm和scm是一一对应 页面SPM拼接规则：${siteId}.${pageId}.${sectionId}.${clickPosition} 举例分析 eg：8.1005482.10003.2 表示：站点8数据下，pageId=1005482， 区块Id=10003，第二个点位\n\nScm\n\n首页等简单的由埋点后台下发scm信息，其他页面仅维护scm规则，eg。商品传递productId\n\n业务系统/testA-testB/id\n\n${业务系统映射id}.${实验}.${scmid}\n\n1.testA-testB.100005\n\nproduct系统 testA/B实验 1000005商品\n\n/**\n * id 生成的数字 和商品id生成规则一致\n */\nprivate Long scmId;\n\n/**\n * scm 具体内容\n */\nprivate String scmInfo;\n\n/**\n * scm type\n * 具体内容 / 规则\n */\nprivate String scmType;\n\n/**\n * 是否删除\n */\nprivate Integer isDeleted;\n\n/**\n * 备注\n */\nprivate String remark;\n\n    /**\n     * 创建人名称\n     */\n    private String createName;\n\n    /**\n     * 最近更新人的名称\n     */\n    private String modifyName;\n\n    /**\n     * 创建时间\n     */\n    private LocalDateTime createTime;\n\n    /**\n     * 更新时间\n     */\n    private LocalDateTime modifyTime;"
+ },
+ {
+  "n": 37,
+  "block_id": "c2195431f17c4748937bf6b39b3b1eee::62f4a3c531b094a8::/H2/2事件管理/H3/21-创建事件#1",
+  "file": "doc/c端/埋点/埋点后台一期2.0.md",
+  "heading": "2.事件管理 > 2.1 创建事件",
+  "chars": 607,
+  "text": "/**\n * 自增id\n */\nprivate Long id;\n/**\n * 事件类型\n */\nprivate String eventType;\n/**\n * 事件名称唯一\n */\nprivate String eventName;\n/**\n * 描述\n */\nprivate String description;\n/**\n * 范围\n */\nprivate String scope;\n /**\n * 触发时机\n */\nprivate String triggerTime;\n /**\n * 上报规则\n */\nprivate String reportingRule;\n/**\n * 版本信息\n */\nprivate String versionInfoList；\n/**\n * 备注\n */\nprivate String remark;\n/**\n * 是否删除\n */\nprivate Integer isDeleted;\n/**\n * 创建人名称\n */\nprivate String createName;\n/**\n * 最近更新人的名称\n */\nprivate String modifyName;\n/**\n * 创建时间\n */\nprivate LocalDateTime createTime;\n/**\n * 更新时间\n */\nprivate LocalDateTime modifyTime;"
+ },
+ {
+  "n": 38,
+  "block_id": "db3667bc0c85cc473c3b511c3b945693::81cbb6a511532727::/H1/时间线#1",
+  "file": "doc/事故报告/2023合集/2023年02月17日，PC_搜索异常.md",
+  "heading": "时间线",
+  "chars": 727,
+  "text": "2023年2月14日：项目开发完成，并提交 MR 进行 Review\n\n2023年2月16日 18:10分：各方全部开发、测试完成，PC 项目开始安排上线\n\n2023年2月16日 18:30分：上线完成\n\n2023年2月16日 20:25分有一次告警，由于pc的数据不稳定，平时偶尔也会有这个告警；就忽略了\n\n2023年2月16日 20:44分：@李家韵 Karen 找到@刘江涛 发现搜索 PC 偶现 搜索出现问题\n\n2023年2月16日 22:00分：@刘江涛 发现网关出现报错\n\n2023年2月16日 22:20分： @刘江涛 发现错误时间节点和热词上线节点一致，拉群同步相关的情况给@汤金鑫 Jinxin @李洋洋Leon\n\n2023年2月16日 22:40分：@刘江涛 对搜索接口网关添加白名单 ，解决报错问题，并发现线上热词数据为空\n\n2023年2月16日 22:41分： @汤金鑫 Jinxin 介入排查\n\n2023年2月16日 22:51分：@李洋洋Leon 拉会 @刘江涛 @汤金鑫 Jinxin @王筱磊 Xiaolei @王雅晴 @苏永康Yongkang 一起解决问题\n\n2023年2月16日 23:51分：线上热词为空问题得以解决\n\n2023年2月17日 10:25分： @汤金鑫 Jinxin @刘江涛 @李梓杰zijie 对昨天的网关问题进行复查\n\n2023年2月17日 11:00分：@李梓杰zijie @汤金鑫 Jinxin 发现 key_word_type 参数上报存在多份\n\n2023年2月17日 11:30分：@李梓杰zijie PC 进行回滚\n\n2023年2月17日 11:35分：@汤金鑫 Jinxin 修复完成"
+ },
+ {
+  "n": 39,
+  "block_id": "d95fd94cca262e49da244b7aacfb5689::2ced48435abd0a89::/H2/为什么作者把它放在第一章#1",
+  "file": "8f1def730e9845b9aa5641a28e5d705e/obsidian-valut-master/reading/Clippings/官僚体系.md",
+  "heading": "为什么作者把它放在第一章？",
+  "chars": 285,
+  "text": "因为后面整本书都建立在这个逻辑上。\n\n《置身事内》并不是在讲：\n\n中央下命令 → 地方执行\n\n而是在讲：\n\n中央与地方不断博弈。\n\n中央有：\n\n任命权\n\n考核权\n\n财政权\n\n地方有：\n\n信息优势\n\n执行权\n\n落地权\n\n所以中国经济发展的很多现象——比如招商引资、土地财政、产业园区竞争——都不是中央单方面设计出来的，而是在这种“上级控制—下级自主”的结构中逐渐演化出来的。\n\n用一句话概括这段话：\n\n在层级组织中，正式权力来自职位，但实际影响力很大程度来自信息优势；因此下级虽然受上级领导，却拥有相当大的自主空间，而组织运行本质上是在解决信息不对称带来的委托—代理问题。"
+ },
+ {
+  "n": 40,
+  "block_id": "46e600a81c96fdfe185251e126de3523::5ff9a5d4ead9dda7::/H1/claudemd/H2/working-with-this-repository/H3/specialized-knowledge-areas#1",
+  "file": "8f1def730e9845b9aa5641a28e5d705e/obsidian-valut-master/cider/CLAUDE.md",
+  "heading": "CLAUDE.md > Working with This Repository > Specialized Knowledge Areas",
+  "chars": 428,
+  "text": "A/B Testing Framework: Comprehensive experimentation system with statistical analysis\n\nMulti-channel Operations: Integration patterns for various e-commerce platforms\n\nGlobal Operations: Internationalization, currency handling, multi-region deployment\n\nSelf-developed Systems: LiveChat platform replacing Twilio, custom recommendation engines\n\nPerformance Optimization: Database sharding, caching strategies, real-time analytics"
+ },
+ {
+  "n": 41,
+  "block_id": "46e600a81c96fdfe185251e126de3523::5ff9a5d4ead9dda7::/H1/claudemd/H2/working-with-this-repository/H3/key-documentation-areas#1",
+  "file": "8f1def730e9845b9aa5641a28e5d705e/obsidian-valut-master/cider/CLAUDE.md",
+  "heading": "CLAUDE.md > Working with This Repository > Key Documentation Areas",
+  "chars": 420,
+  "text": "doc/总浏/cider整体业务架构.md - High-level system architecture overview\n\ndoc/CIDER 规范.md - Java coding standards based on Alibaba conventions\n\ndoc/数据库/ - Database optimization patterns, including shopping cart sharding (32 tables using custom MurmurHash algorithm)\n\ndoc/黑五_双十一/ - Major campaign preparations, incident reports, and operational procedures\n\ndoc/事故报告/ - Detailed incident post-mortems with technical lessons learned"
+ },
+ {
+  "n": 42,
+  "block_id": "a280078131a55bc79236cbc89de542d5::ee72485a6e857ffa::/H1/二期开发独立部署/H2/怎么保证上线没问题有问题要如何处理#1",
+  "file": "doc/erp/WMS_后段入库拆分复盘.md",
+  "heading": "二期开发——独立部署 > 怎么保证上线没问题？有问题要如何处理？",
+  "chars": 332,
+  "text": "测试环境做全流程的测试，主要作业场景完全覆盖测试\n\n先上部分代码保证线上机器和环境的稳定性，故先把 在库稽查 独立上线（作业量较少，相对独立，熟悉）\n\n去仓库发版本，若有问题立刻处理，在现场能够快速尝试复现\n\n依靠权限网关，把每个作业环节的特定人员的流量放到WMS环境进行验证，若有问题即刻关闭流入到WMS的流量。（秒级的流量切换，做到作业无影响）\n\n依靠 common SDK 里的 MQ 进行消费者控制，若MQ消费大量出问题，关闭 apollo ，然后重启即可\n\n仓库作业涉及到实物流转和批次处理，WMS的 MQ 短时间无法消费，基本对作业无影响，故可以接受10分钟内的回滚\n\n如何保证 MQ 正常过渡呢？\n\n总的来说就是充分测试+保证流量的进入可控，随开随关"
+ },
+ {
+  "n": 43,
+  "block_id": "adef6b49d78ac49f3c9c1837d8f8cac4::8bd825c28239d9ca::/H1/互惠#1-s1",
+  "file": "《影响力》.md",
+  "heading": "互惠",
+  "chars": 559,
+  "text": "互惠原则适用于大多数关系，然而，在家庭或稳定的友谊这类长期关系中，纯粹的互惠交换并无必要也不受欢迎\n\n要是有人反方向破坏互惠原则，即施予了恩惠却不让接受的人有机会回报，是不受人喜欢的。\n\n互惠原则通过两条途径来实现互相让步，第一条很明显：它迫使接受了对方让步的人以同样的方式做出回应；第二条尽管不那么明显，但更为关键：由于接受了让步的人有回报的义务，于是人们都乐意率先让步，从而启动有益的交换过程\n\n假设你想让我答应你的某个请求，为了提高获胜的概率，你可以向我提一个大些的要求，对这样的要求我保准是要拒绝的。等我真的拒绝以后，你再提出一个稍小的要求，而这个要求才是你一项真正提的。倘若你的要求设置巧妙，我会把你第二个要求看成是一种对我的让步。并有可能感到自己这一边也该让步，于是顺从第二个要求。\n\n很重要的一点，就是提出要求的人退而其次的较小要求，一定是一项真正够小的要求吗？他人能够接受吗？\n\n拒绝回撤策略\n\n销售时需要让客户自己说服自己选择你\n\n心理学和行为科学：拒绝后撤策略\n\n心理学里面有个核心原则：人们会更珍视和维护自己\"主动参与\"，\"自主选择\"的决定，而不是被强迫的\n\n人们或许是这样想的：靠着自己的努力，对手\"后撤\"了。如此达成的协议自然分外圆满\n\n互惠原则只说要以善意回报善意，可没说要用善意来回报诡计"
+ },
+ {
+  "n": 44,
+  "block_id": "adef6b49d78ac49f3c9c1837d8f8cac4::8bd825c28239d9ca::/H1/影响力的武器#1",
+  "file": "《影响力》.md",
+  "heading": "影响力的武器",
+  "chars": 549,
+  "text": "为他人做某事前，尝试向他人索要一点东西。人们对于付出额外上心，沉没成本参与决策，人性如此\n\n认知吝啬，马太效应\n\n我们在请求他人帮助时，要是能给出合理的理由或解释，成功的概率会更大\n\n没有人喜欢便宜，他们喜欢的是占便宜\n\n社会认同原则：人们往往会相信或去做自己身边人相信以及正在做的事\n\n人很难描述自己没有真正体验过的东西，这就是为什么假评价往往只会做整体的赞美，而不会具体深入细节\n\n真正的评价更注重名词\n\n有些人很清楚自动影响力武器藏在哪儿，他们娴熟老练地使用他们，借此达成自己地意图。他们出没于各种社交场合，要求别人顺从自己地愿望，其成功率让人目瞪口呆，他们之所以能够屡战屡胜，奥妙就在于他们对所提要求的结构体系做了设计\n\n锚定效应\n\n由俭如奢易，由奢入俭难\n\n曾经沧海难为水，除却巫山不是云。取次花丛懒回顾，半缘修道半缘君。\n\n拆屋效应\n\n自动行为模式往往是由该环境下相关信息的单一特征所触发的。这种单一特征或触发特征，大多数时候是极其可贵的，有了他们，个体无需对每一条信息进行详尽彻底的分析，就能决定正确的行动方针\n\n人喜欢走捷径\n\n思维惯式：\n\n贵就是好\n\n通过他人评价来说服自己，给个理由就认同了别人\n\n专家说的就是对的，适当的给自己贴标签\n\n锚定效应，在说一个事时之前说一个铺垫的事"
+ },
+ {
+  "n": 45,
+  "block_id": "8b71e4317a56e751892b589fa20abf27::bcb684859d86baff::/H2/2024-04-18/H3/新加坡爬虫#1",
+  "file": "doc/风控/行为风控数据分析.md",
+  "heading": "2024-04-18 > 新加坡爬虫：",
+  "chars": 360,
+  "text": "针对新加坡爬虫做的一些改动：\n\n我这边分析数据的时候分析到103.136.220/24 这个ip段的tt爬虫访问频率较高，我这边已经手动拉黑了\n\n然后就是先把下面这几个productDetail，paging，shortList接口的阈值调小了一点，之前这几个接口阈值定的比99分位阈值大了3倍以上，因为调太低会影响到误封率，新加坡的阈值大概是定在了2倍多，具体调整如下：\n\n收益：\n\nctr 从358% 降低 到30+%\n\nsession从 2k+ 降低到 22\n\n但是session下降不明显，昨日分析到，session不高的原因可能是，由于reportPoint接口还在被爬虫访问，给这个接口封禁后，session有明显下降\n\n（下图中ctr暴涨，原因好像是tt开始投新加坡了，这个需要等julia开完会确认一下）"
+ },
+ {
+  "n": 46,
+  "block_id": "8b71e4317a56e751892b589fa20abf27::bcb684859d86baff::/H2/2024-02-06-分析的app接入v3后的数据/H5/没拉黑的v3给出的风险分高于05的#1",
+  "file": "doc/风控/行为风控数据分析.md",
+  "heading": "2024-02-06 （分析的app接入v3后的数据） > 没拉黑的，v3给出的风险分高于0.5的",
+  "chars": 360,
+  "text": "下面该用户报出来触发了阈值，但是没有封禁他，人机识别v3给出他的风险分为0.7（没拉黑）\n\nuser-agent为Mozilla/5.0 (Linux; Android 11; vivo 1920 Build/RP1A.200720.012; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/120.0.6099.230 Mobile Safari/537.36/CiderAPP(Android/2.26.1)\n\n下面该用户报出来触发了阈值，但是没有封禁他，人机识别v3给出他的风险分为0.7（没拉黑）\n\n用户整体访问频率正常\n\n下面该用户报出来触发了阈值，但是没有封禁他，人机识别v3给出他的风险分为0.9（没拉黑）\n\n用户整体访问频率正常"
+ },
+ {
+  "n": 47,
+  "block_id": "e7f69069f2088d55e9743578188128dd::a9666910dc6b1ac5::/H3/2-安全性工具安全性数据安全性数据隔离/H4/数据隔离#1",
+  "file": "doc/客服 Agent 构建.md",
+  "heading": "2. 安全性：工具安全性、数据安全性、数据隔离 > 数据隔离",
+  "chars": 470,
+  "text": "会话工作空间隔离：\n\n每个会话都有独立的工作空间目录\n\n例子：会话 A 用 /workspace/session_123/，会话 B 用 /workspace/session_456/\n\n技能文件复制到会话工作空间，互不干扰\n\n例子：会话 A 和会话 B 都用 package-not-received 技能，但各自有独立的副本，修改不会互相影响\n\n状态存储隔离：\n\n每个会话的状态存在独立的 key 里\n\n例子：会话 A 的状态存在 chat_history:session_123，会话 B 存在 chat_history:session_456\n\nRedis：用会话特定的 key 格式\n\n例子：chat_history:{session_id}，不同会话的 key 不同\n\nOSS：用会话特定的路径格式\n\n例子：/state/session_123/state.json 和 /state/session_456/state.json\n\n会话之间完全隔离\n\n例子：会话 A 看不到会话 B 的对话历史，即使同一个用户的不同会话也隔离"
+ },
+ {
+  "n": 48,
+  "block_id": "e7f69069f2088d55e9743578188128dd::a9666910dc6b1ac5::/H3/2-安全性工具安全性数据安全性数据隔离/H4/数据安全性#1",
+  "file": "doc/客服 Agent 构建.md",
+  "heading": "2. 安全性：工具安全性、数据安全性、数据隔离 > 数据安全性",
+  "chars": 298,
+  "text": "UID 验证：\n\n统一验证：所有需要用户ID的工具调用都要经过 UID 验\n\n配置优先级：环境变量 > 配置文件 > 默认值\n\n安全默认：默认开启验证，防止未授权访问\n\n灵活配置：可以通过环境变量或配置文件来控制\n\n订单所有权验证：\n\n订单查询工具会自动验证订单所有权\n\n例子：用户 A（UID=100）想查订单 12345，系统先验证这个订单是不是用户 A 的\n\n如果 UID 在上下文里，直接就用，不用问用户\n\n例子：会话里已经有 UID=100，查询订单时直接用，不用再问\"你的用户ID是多少？\"\n\n防止用户查别人的订单信息\n\n例子：用户 A 不能查用户 B 的订单，即使他知道订单号也不行"
+ },
+ {
+  "n": 49,
+  "block_id": "27bf569ad11edfb9d6aa766c45cf4822::40a63640fbce7e84::/H2/q-我里面有个需求求近七天的平均销量和该-sku-上架-30-天内的总销量-如果这个-sku-上架时间在-5-年前甚至-10-年前是不是统计不到你觉得要怎么处理才好#2-s0",
+  "file": "doc/业务/自己业务/做业务踩的坑/首单加深销量优化——物化视图，和 AI 对线.md",
+  "heading": "Q： 我里面有个需求，求近七天的平均销量和该 sku 上架 30 天内的总销量, 如果这个 sku 上架时间在 5 年前甚至 10 年前，是不是统计不到？你觉得要怎么处理才好",
+  "chars": 935,
+  "text": "首 30 天总销量： -- 获取 shelf_date（应用层拿，一般在 sku_main/上架表） If shelf_date >= current_date - interval '2 years' then Select coalesce (sum (daily_sale_count), 0)::bigint From mv_sku_daily_sales Where sku_id = :sku And sale_date >= :shelf_date And sale_date < : shelf_date + interval '30 day' And channel not in (:excludeChannels); Else -- 兜底：基表计算（时间范围仅 30 天，带索引，通常可接受） Select count (*)::bigint From \"order\" o join order_detail od on o.oid = od. Oid Where od. Order_status = 1 and o.order_status = 3 And od. Sku_id = :sku and (o.order_add_time at time zone 'asia/shanghai'):: date >= :shelf_date and (o.order_add_time at time zone 'asia/shanghai'):: date < : shelf_date + interval '30 day' and o.channel not in (:excludeChannels);\n\n备选：做一张 MV “首 30 天总销量”\n\n如果 shelf_date 能在库中直接关联（例如 sku_main. Shelf_date），可以一次性做出 mv_sku_first 30 d_sales (sku_id, channel, total_count)，几乎静态，仅对新 SKU 有变动。\n\n但若 shelf_date 只能在应用侧计算/拼装，不适合写纯 SQL MV。这种情况更适合“应用聚合→入汇总表”。\n\n小结"
+ },
+ {
+  "n": 50,
+  "block_id": "27bf569ad11edfb9d6aa766c45cf4822::40a63640fbce7e84::/H2/q-为什么使用物化视图和我之前的-sql-跑出来的-sql-有一点点不一样呢细微的数据误差按理来说我每天更新一次而得出来的数据是天纬度的应该和原来的数据保持一致吧为什么会造成这种现象呢#2",
+  "file": "doc/业务/自己业务/做业务踩的坑/首单加深销量优化——物化视图，和 AI 对线.md",
+  "heading": "Q ：为什么使用物化视图和我之前的 sql 跑出来的 sql 有一点点不一样呢，细微的数据误差。按理来说我每天更新一次，而得出来的数据是天纬度的，应该和原来的数据保持一致吧，为什么会造成这种现象呢？",
+  "chars": 803,
+  "text": "若验证到是 inner join 造成丢单：\n\n重建 MV 把 inner join sku_main 改为 left join（仅当你后续需要 product_id 维度时使用；sku 维度不受影响）：\n\nFrom \"order\" o inner join order_detail od on o.oid = od. Oid Left join sku_main sm on sm. Id = od. Sku_id\n\n或者：做两个 MV\n\nMv_sku_daily_sales（不依赖 sku_main，供 sku 口径查询）\n\nMv_product_daily_sales（带 product_id 的 left join 口径）\n\n若验证到是时区问题：\n\n统一 sale_date 的生成时区，比如以业务时区（如 +8）结算：\n\nsale_date := date ((o.order_add_time at time zone 'utc') at time zone 'asia/shanghai')\n\n同时确保应用传入的 start/end 与这一定义一致（用 LocalDate，避免 LocalDateTime 的纳秒误差）。\n\n当前代码位置参考\n\n使用 MV 的方法：OrderDetailDAO. Xml: 132-152（listSkuSaleCountExcludeChannels）\n\n批量 30 天销量（已改 MV）：OrderDetailDAO. Xml: 392-418\n\nProduct 维度 V 2（已补 group by 与类型 cast）：OrderDetailDAO. Xml: 424-440\n\n如果你愿意，我可以：\n\n按“left join sku_main”或“双 MV”方案给出精确的建表 SQL，并帮你改刷新任务与调用点，确保与原口径对齐。你更倾向哪种？"
+ },
+ {
+  "n": 51,
+  "block_id": "6bbea58decb1c3f7136adddc08c26cf6::4ed53149adfa2d6b::/H1/4-skill-加载使用案例-2#1",
+  "file": "doc/电脑端使用指南.md",
+  "heading": "4. Skill 加载（使用案例 2）",
+  "chars": 513,
+  "text": "在用这个 skill 的时候请安装下面的工具\n\ngit windows 安装\n\nWin + R 打开 cmd ()\n\n输入下方命令\n\n遇到这类信息，输入 y 回车，脚本会自动安装所有依赖\n\n安装完毕之后 cmd 输入 claude 测试是否安装成功\n\n接下来配置相关的大模型 api, 首先下载 cc-switch 这是一个一键配置工具，安装完毕之后新增一个配置\n\n只需要填写下面这几个参数\n\n供应商名称随便写，其他的几项后面在填写，可以尝试 deepseek 可以尝试充值几块钱看看效果。如果你用的 deepseek 渠道，那么参数名填写如下所示\n\n请求地址：https://api.deepseek.com/anthropic\n\n主模型：deepseek-v4-pro[1M]\n\n设置完毕启用即可\n\n如果以上顺利无误，那么在 claude 里面就能够正常的对话\n\n打开我的 skills ，网页往下拉，观看安装教程\n\n按照安装步骤来\n\n把提示词复制到 claude 对话框内，让 claude 加载，安装，并启用\n\n在 claude 输入 /skills 下方显示 chat-skills 成功\n\n贴图使用 alt + v"
+ },
+ {
+  "n": 52,
+  "block_id": "dfd90a2ac83d75acc3a861fffd22bff4::f76143005814aa45::/H2/一电商归因目的#1",
+  "file": "doc/c端/埋点/电商归因模型技术方案.md",
+  "heading": "一、电商归因目的",
+  "chars": 479,
+  "text": "对于电商平台来说，当流量进入时，我们需要引导其完成购买任务，以实现流量价值最大化，在互联网红利消耗殆尽之时，流量会越来越贵，我们需要精细化运营每一份流量。\n\n我们在做各种banner活动、Feed流推荐优化、活动页等进行效果评估，无法知道该位置最终产生了多少收益，也就很难针对该位置进行有效的改进。\n\n如果进行单因数AB测试进行改版的效果评估，那也会存在如下2个问题：\n\n单因素变量控制并不容易做到完全可控，如果产品处在增长期，产品增长本身就是一个影响因子，很容易忽略此类因素的影响。\n\n评估方式低效，如果 2 天内只控制 1 个坑位变动，那么评估 20 个坑位内容改变就需要 40 天时间，这样的效率任何企业都无法接受\n\n因此，我们希望用数据分析中归因的方式解决坑位运营中评估的问题。\n\n我们引入电商坑位归因的概念，把每一笔的成交都归给转化路径中不同的坑位。根据坑位的曝光转化价值来评判坑位的好与坏。把宝贵的流量尽可能都引导到转化率更高的坑位，以此达到精细化运营的效果。当然有了这个坑位价值评判的机制后各个坑位的改版也能准确的评估，真正做到了数据驱动增长。"
+ },
+ {
+  "n": 53,
+  "block_id": "dfd90a2ac83d75acc3a861fffd22bff4::f76143005814aa45::/H2/四总结#1",
+  "file": "doc/c端/埋点/电商归因模型技术方案.md",
+  "heading": "四、总结‘’",
+  "chars": 301,
+  "text": "通过以上方案得到电商归因模型数据，可以大大提高运营同学的运营效率，不再是盲人过河实的凭感觉去优化各个坑位和活动，已经可以通过数据清晰公平的判断运营每一次迭代的结果。\n\n但是仅仅根据坑位归因决定坑位价值，容易出现短期偏见，即追求短期利益，比如在一款内容产品中镶嵌一些游戏元素，可以让用户停留更久、数据表现更好。但从长期来看，这种行为破坏了整个产品的价值定位，因为内容产品原本提供的是内容并不是游戏，产品也不并是为了追求用户停留时长而是为了实现价值。这是两者都存在的短期偏见。\n\n因此不能仅仅根据坑位归因后的销售转化价值来评价坑位，还需要综合考虑产品价值定位、战略发展等因素，才能围绕长期目标进行健康发展。"
+ },
+ {
+  "n": 54,
+  "block_id": "218be1560b4a322b3a2f206761da0ba0::eb2c481d414608ab::/H2/分页#1",
+  "file": "8f1def730e9845b9aa5641a28e5d705e/obsidian-valut-master/edream&实习/实习/RuoYi-Cloud.md",
+  "heading": "分页",
+  "chars": 335,
+  "text": "因为 PageHelper 的原理是将分页参数存储到 ThreadLocal 中，如果没有被 MySQL 消费，则会一直存在直到被消费，如果执行了另一个 SQL , 则会拦截这个 SQL 添加分页导致数据安全问题。\n\n只要可以保证在PageHelper方法调用后紧跟MyBatis查询方法，这就是安全的。因为PageHelper在finally代码段中自动清除了ThreadLocal存储的对象。 如果代码在进入Executor前发生异常，就会导致线程不可用，这属于人为的Bug（例如接口方法和XML中的不匹配，导致找不到MappedStatement时），这种情况由于线程不可用，也不会导致ThreadLocal参数被错误的使用。\n\n在业务层统一抛异常，在控制层做处理"
+ },
+ {
+  "n": 55,
+  "block_id": "49a734a6697c4f1b60fe29787df9f210::d6871eba3f873bce::/H1/时间线#1",
+  "file": "doc/事故报告/2025合集/2025年05月29日，K8S路由异常导致商品服务无法访问.md",
+  "heading": "时间线",
+  "chars": 391,
+  "text": "2025-05-29 16:32 @肖文庭 发现线上接口有503的情况，告知@赵臣 zhaochen 查看线上确实有503的情况，赶紧拉会确定下情况，这个时候只有灰度用户受影响\n\n16:40 发现商品服务有发布记录，以为是代码的问题，@王筱磊 Xiaolei 回滚商品服务到上个版本，在办公室的网络查看到活动页等情况显示空白，接口返回数据有异常情况，发现还是有503的情况，服务没有恢复\n\n16:41 回滚之后，所有用户都受影响了\n\n16:42 出现第一个服务告警电话\n\n16:41 @吕佳 Haon 启动商品灰度pod-3个，16:43恢复\n\n17：05删除了灰度路由\n\n17:22 @刘江涛 重新申请发布灰度，17:24构建完成\n\n17:23 pod 的label丢失导致路由失败\n\n17:34 @吕佳 Haon 发现是k8s的生产标签丢失导致服务无法响应，恢复标签服务恢复正常"
+ },
+ {
+  "n": 56,
+  "block_id": "1d926c8792617125890359aab1a5bb70::72600fa369a94512::/H1/模块一星链补充和优化/H2/计划任务全链路监控与提醒/H3/节点任务的手工完成#1",
+  "file": "8f1def730e9845b9aa5641a28e5d705e/obsidian-valut-master/edream&实习/公司业务/PRD/BTN.md",
+  "heading": "模块一：星链补充和优化 > 计划任务全链路监控与提醒 > 节点任务的手工完成",
+  "chars": 541,
+  "text": "允许用户在工作流实体节点表中，点击自己所负责的节点的操作按钮“完成节点”。\n\n节点任务的完成，要记录用户是谁，什么时候完成的，可以在节点表中添加一个“实际完成人”字段。\n\n点击后判断此节点的负责人是否属于本用户，或者是计划管理员。\n\n点击后判断前置任务是否完成了（可能有多个），如果没有，那么要提示用户是否强制完成此节点？\n\n暂时先把任务全部改为手动完成，可以在整个星链系统页面的右上角设置一个闹钟标识，点击之后就能直接跳转到“个人的待完成任务表”（即【工作流实体节点表】），方便操作。\n\n点击完成按钮后，自动修改任务的“完成时间”为当前时间，“实际完成人”为当前用户，“任务状态”为“已完成”并计算耗时，同时自动修改其后继节点的“开始时间”为当前时间，“任务状态”为“执行中”。\n\n前端：\n\n操作列按钮：完成\n\n点击之后，弹确认框\n\n后端逻辑：\n\n点击按钮触发以下逻辑：\n\n本条数据的“实际完成时间” 填入按钮触发时间\n\n“实际完成人” 填入执行按钮的用户\n\n“任务状态”变更为“已完成”\n\n计算“耗时” = “实际完成时间” - “开始时间”\n\n单位待确认\n\n同时更新表中所有“工作流节点编码”在本条数据的“后继节点”范围中的数据，将“开始时间”变更成本条数据的“实际完成时间”"
+ },
+ {
+  "n": 57,
+  "block_id": "1d926c8792617125890359aab1a5bb70::72600fa369a94512::/H1/模块二-工厂日明细计划-以青浦工厂为例/H2/原料排产#1",
+  "file": "8f1def730e9845b9aa5641a28e5d705e/obsidian-valut-master/edream&实习/公司业务/PRD/BTN.md",
+  "heading": "模块二: 工厂日明细计划-以青浦工厂为例 > 原料排产",
+  "chars": 518,
+  "text": "原料的背景：\n\n原料中，包含了青浦复合物和外采原料。数据都在SRM中。\n\n青浦复合物是供应全国各个工厂的，类似于一个内部原料供应商。各个工厂要问青浦通常买，因此各个工厂有复合物库存，青浦也有此库存。复杂的地方是，这些原料和待包品共用青浦工厂的产线。\n\n部分原料可能服务于复合物，也可能直接服务于待包品，因此相当于有多个父item。\n\n原料的需求，也是来自于月度MRP的结果，而且是根据全国的成品/待包品需求，得到全国的原料需求。\n\n原料的排产流程：\n\n原料的全国需求生成以后，苏会审核，并还会再多增加一些需求量。\n\n每次相当于拿到了M1-M3的原料需求，然后一起下单排产。\n\n现在排产模式：拿着原料需求给工厂，让工厂自己抽空去排。\n\n未来排产模式：算法自动排，会考虑到待包品需求的时间优先级。\n\n排产要求：\n\n原料和待包品混排时，优先满足各个月的待包品，再满足当月原料，因为原料是给下周用的。\n\n对于当月，第一周产当月原料（紧急加单产生的），第二周开始可以产次月原料（非青浦工厂，没有aps，因此只能按月提供原料需求）\n\nMRP生成的原料需求表？\n\n原料级别的BOM？可能要新建立。\n\n原料需求生成的逻辑，在2.5叶丹的原料生成步骤中。"
+ },
+ {
+  "n": 58,
+  "block_id": "41c49b124a6c473497475b00f6f87c18::0267ecfa4c2375ec::/H2/黑五回顾/H3/遇到的问题及优化#1",
+  "file": "doc/c端/推荐/推荐系统架构 + 黑五.md",
+  "heading": "黑五回顾 > 遇到的问题及优化",
+  "chars": 375,
+  "text": "Redis reco集群的0007分片在周六(11/25)凌晨3点开始出现异常，导致部分推荐请求失败。随后与aws同学一起排查并进行了纵向扩容，大概在4点服务恢复正常。\n\n异常原因为，0007分片所在节点的网络带宽被打满，导致请求该分片出现网络异常。\n\n为什么带宽会被打满？发现0007分片的带宽使用量明显高于其他分片，且在整点时会有定时任务往redis里写大量数据，加上流量高峰带来更多读请求，这些因素相加，便导致了0007分片带宽被打满。 为什么压测没有测出来？压测时的请求与线上实际流量有差距，而且应该没遇到定时写任务。\n\n在黑五过后，我们进行了进一步分析，怀疑可能存在大key热key问题。接下去的优化包括：\n\n解决某分片带宽使用量异常高的问题；\n\n将定时写redis任务改造为流式写入，以减少短时间内带宽使用量突增的情况，降低带宽的使用量。"
+ },
+ {
+  "n": 59,
+  "block_id": "946ab9573e769cdf36d722ba2196fce8::99f225b4d719b007::/H1/二自恋式地选择对象是什么意思#1",
+  "file": "8f1def730e9845b9aa5641a28e5d705e/obsidian-valut-master/reading/Clippings/哀悼.md",
+  "heading": "二、“自恋式地选择对象”是什么意思？",
+  "chars": 414,
+  "text": "这里的“自恋（narcissism）”， 不是现代网络说的：“自恋狂”。在弗洛伊德这里，它更像：\n\n人会爱上与自己有关的东西。\n\n比如：人可能会爱上：\n\n像自己的人\n\n拥有自己缺失特质的人\n\n理想中的自己\n\n自己希望成为的样子\n\n所以精神分析认为：很多爱，其实包含：\n\n对自我的爱。\n\n举个例子：\n\n有人爱上一个“强大、自信”的人。\n\n可能不只是因为对方优秀。\n\n还因为：\n\n对方承载了“我想成为的自己”。\n\n于是：\n\n这个对象就和自我融合了。\n\n如果你只是：“喜欢一个人”。那么分开虽然痛苦，但自我不会完全崩塌。但如果：你把自己的：\n\n价值感\n\n身份感\n\n安全感\n\n理想自我\n\n都绑定在对方身上。那么失去时，心理体验会变成：“不是他离开了。”“而是我缺失了一部分。”于是人会出现：\n\n空洞感\n\n自我价值崩塌\n\n不知道自己是谁\n\n严重自责\n\n甚至：“活不下去”。\n\n当对象已经变成“自我一部分”后，人对对象的愤怒，也会转向自己。"
+ },
+ {
+  "n": 60,
+  "block_id": "aeff60ac569e76f03308f4d513958ca4::3dc51f3cd1639aae::/H1/第三方接口依赖#1",
+  "file": "doc/c端/客服/客服bot/livechat接入chatbot.md",
+  "heading": "第三方接口依赖：",
+  "chars": 440,
+  "text": "以下接口的调用频率：如果客服只接待一位客户，那此时的接口调用频率就是一位客服工作时使用相关功能的调用频率\n\nERP 相关\n\nOMS 获取订单列表：/ms/oms/front/order-list/search\n\nOMS 获取订单详情：/ms/oms/front/getOrderDetailByChannel\n\nHades 获取物流轨迹：/ms/hades/logistics/v1/tracking/list\n\nERP 获取产品列表：/ms/erp/product/v1/list\n\nLivechat 相关\n\n转移会话：/ms/customer-plus-service/customer-v2/plus/robot/transfer\n\n发送消息：/ms/customer-plus-service/customer-v2/plus/robot/sendMsg\n\n关闭会话：/ms/customer-plus-service/customer-v2/plus/robot/end"
+ },
+ {
+  "n": 61,
+  "block_id": "aeff60ac569e76f03308f4d513958ca4::3dc51f3cd1639aae::/H1/对话效果/H2/pre-order#1",
+  "file": "doc/c端/客服/客服bot/livechat接入chatbot.md",
+  "heading": "对话效果 > Pre-order",
+  "chars": 416,
+  "text": "-- 查询 pre-order 的 sql\nselect * from order_detail where pre_sale_flag = true\n\n测试符合条件下是否可以拆单\n\n前提是没有拆单发货，然后是下面两种条件可以拆单：\n\n（1）商品数量 小于 4，express 物流 且 首单\n\n（2）商品数量大于等于 4，max(预计发货时间) - min (预计发货时间) >= 7\n\n第一步：咨询订单，或者直接表达出 pre-order 什么时候发货\n\nWhen will pre-order items ship?\n\n和 order inquiry 基本一致，当判断出有 pre-order item 时会自动切换分类为 pre-order\n\n第二步：咨询是否可以拆单发货\n\nCould you ship out the in stock items first?\n\nCould you split the shipment"
+ },
+ {
+  "n": 62,
+  "block_id": "c98412cdca8386bc4174f56dd742e0ea::8a99b9e8d32f3c58::/H1/423日早上#1",
+  "file": "doc/数据库/加字段？锁表？解密数据库不为人知的一面.md",
+  "heading": "4.23日早上",
+  "chars": 320,
+  "text": "有了时间来排查这个问题，查看了大量资料后，在微信找到了一篇文章，结合前面的PG事务日志，发现了一些不一样的情况。\n\n这里简单提一下PG的锁，提到锁就不得不说MVCC（多版本并发控制），简单来说就是数据库为了保证高效的访问，和数据的一致性，提供了一条更加灵活的方式来对表和数据加锁。我们最常用的的是行级锁和表级索。\n\n下面摘抄下公众号的描述\n\n表级锁通常会在执行各种命令执行时自动获取，或者通过在事务中使用LOCK语句显示获取。\n\n每种锁都有自己的冲突集合。\n\n表级锁：两个事务在同一时刻不能在同一个表上持有互相冲突的锁，但是可以同时持有不冲突的锁。\n\n表级锁共有八种模式，其存在于PG的共享内存中，可以通过 pg_locks 系统视图查阅。"
+ },
+ {
+  "n": 63,
+  "block_id": "c98412cdca8386bc4174f56dd742e0ea::8a99b9e8d32f3c58::/H1/排查过程/H2/是不是商品库的隔离级别设置的高#1",
+  "file": "doc/数据库/加字段？锁表？解密数据库不为人知的一面.md",
+  "heading": "排查过程 > 是不是商品库的隔离级别设置的高？",
+  "chars": 287,
+  "text": "查询了下商品库的隔离级别，默认的 读已提交， 没有问题。\n\n我们共有的认知是如果增加默认值会锁数据，我去掉默认值呢？后面实测了一下，发现没加默认值修改成功了。（这里埋下一个伏笔）\n\n想了一圈，我们还是没有找到根本原因，后面又重试了几次，发现还是能够复现，线上依然会出现大量的报错，同时会将数据库卡死。现在有经验了，出现错误之后，立即中止，并没有对线上的业务造成影响。\n\n在执行的时候，我们利用sql查看了下当前PG的事务情况，dump下来了一些日志如下（后面来看这些日志至关重要，对破案起了关键作用）\n\n拿到dump日志后，从日志上面也没看出什么端倪，忙其他的事情就放着了。"
+ },
+ {
+  "n": 64,
+  "block_id": "32be90021c466dab1936f03b44f59127::14df7a9963224b8c::/H3/2-ai-相关业务-aigc#1",
+  "file": "doc/红人系统/红人系统的一切.md",
+  "heading": "2. AI 相关业务 (AIGC)",
+  "chars": 453,
+  "text": "代码库中有一个专门的 com. Cider. Influhub. Services. Aigc 包，显示了系统 deeply integrated with AI capabilities。\n\n视频内容理解 (Video Analysis) ：\n\n功能 ：使用 AI (OpenAI GPT-5.1) 分析视频的描述（Caption）和评论（Comments）。\n\n目的 ：提取关键词，判断视频内容是否命中预设的营销文本（ textHit ），从而验证红人的推广是否符合要求。\n\n视频与商品匹配 (Video-Product Matching) ：\n\n功能 ：使用多模态 AI 模型 (代码中提及 gemini-3-flash-preview ) 将“订单商品列表”与“视频 URL”进行比对。\n\n目的 ：自动检测红人发布的视频中是否展示了寄送给他们的样品（SKU），实现推广履约的自动化审核。\n\n智能对话 (Chat) ：\n\n提供内部的 AIGC Chat 接口，可能用于辅助运营人员生成文案或查询信息。"
+ },
+ {
+  "n": 65,
+  "block_id": "32be90021c466dab1936f03b44f59127::14df7a9963224b8c::/H3/4-难点与复杂业务#1",
+  "file": "doc/红人系统/红人系统的一切.md",
+  "heading": "4. 难点与复杂业务",
+  "chars": 425,
+  "text": "多源数据一致性与归因 ：\n\n难点 ：需要将来自 TikTok API 的官方数据、爬虫抓取的非结构化数据、以及内部 ERP 的订单数据进行清洗和对齐。特别是在 InfluencerAffiliateOrderClaimService 中，如何准确地将一笔订单归因给正确的红人（考虑到红人可能更换账号、活动可能重叠），是业务逻辑最复杂的部分之一。\n\n高并发与外部依赖稳定性 ：\n\n依赖大量的外部服务（TikTok API, OpenAI, BrightData, Airtable, PayPal）。任何一个服务的波动（限流、格式变更、网络抖动）都需要系统具备强大的重试机制（如 RetryUtils ）和降级策略（如 DefaultCampaignMatcher 兜底）。\n\n非标数据处理 ：\n\n社交媒体数据是非标准化的（如视频描述、评论），利用 AI 进行语义理解虽然强大，但 Prompt 的调优和结果的解析（JSON 格式化容错）是持续的挑战。"
+ },
+ {
+  "n": 66,
+  "block_id": "7ca29b447a26c8515b6b1d919abe14f1::ead4d0470be1b223::/H1/3-业务#1",
+  "file": "doc/写简历/简历写法.md",
+  "heading": "3. 业务",
+  "chars": 442,
+  "text": "C 端-客服(埋点)：双节期间新增多个 SPM 散点并过滤上报至中台\n\nC 端-客服(系统稳定性)：黑五压测(Jmeter, PTS)，整体 tps 符合 3 倍要求,cpu 占用率正常,符合黑五需求\n\nC 端：erp 接入客服坐席平台，用户可以查看供应链信息（AI 说不行）\n\nC 端：维护智能客服控制台，采集智能客服机器人训练统一数据集 训练机器人，参与转人工方案调研, NPS 预测\n\n供应商端：定采审批驳回用 ares 与飞书卡片发送失败告警\n\nERP 端：重构优化首单加深[[doc/自己业务/做业务踩的坑/关于首单加深离奇的问题|关于首单加深离奇的问题]]，并新增 ai 以图搜图，ai 趋势预测\n\nC 端-基建：对 M 站客服页是否需要顶部 banner 栏添加 ab 实验，参与改进分流引擎，不同事件可以流量交叉，物理灰度表，apollo 开关\n\n履约：对接多渠道，tt，有赞，亚马逊\n\nWow 花费降低 90%，周 gmv 降低 5 w 美元\n\n异构数据的整合-数仓"
+ },
+ {
+  "n": 67,
+  "block_id": "7ca29b447a26c8515b6b1d919abe14f1::ead4d0470be1b223::/H1/4-排查的问题解决方案#1",
+  "file": "doc/写简历/简历写法.md",
+  "heading": "4. 排查的问题&解决方案",
+  "chars": 263,
+  "text": "关键词：物化视图，xxl-job\n\n参考文献\n\n[[关于首单加深离奇的问题|首单加深慢查询排查思路]]\n\n[[物化视图刷5年？违背了初衷]]\n\n关键词：表锁，dump 日志分析，skywalking agent, grafana, arms-后门堆栈分析, arthas, 自定义优化器\n\n在主库上运行的数据清洗任务，长时间持有了表锁，阻塞了需要获取独占锁的DDL操作，引起了连锁反应，导致数据库连接池耗尽，服务不可用。\n\n参考文献\n\n[[加字段？锁表？解密数据库不为人知的一面]]\n\n[[Warebase 慢查询排查记录]]"
+ },
+ {
+  "n": 68,
+  "block_id": "942722cc136eced86266f4ef46d961a3::4a40627427a75264::/H2/everything-claude-code#1",
+  "file": "8f1def730e9845b9aa5641a28e5d705e/obsidian-valut-master/reading/Clippings/ECCREADME.zh-CN.md at main.md",
+  "heading": "Everything Claude Code",
+  "chars": 467,
+  "text": "140K+ stars | 21K+ forks | 170+ 贡献者 | 12+ 语言系统 | Anthropic黑客松获胜者\n\nLanguage / 语言 / 語言 / Dil / Язык / Ngôn ngữ\n\nEnglish | Português (Brasil) | 简体中文 | 繁體中文 | 日本語 | 한국어 | Türkçe | Русский | Tiếng Việt | ไทย | Deutsch\n\n来自 Anthropic 黑客马拉松获胜者的完整 Claude Code 配置集合。\n\n不止是配置文件，而是一整套完整系统：技能体系、本能行为、记忆优化、持续学习、安全扫描，以及研究优先的开发模式。 包含可直接用于生产环境的智能体、技能模块、钩子、规则、MCP 配置，以及兼容传统命令的适配层——所有内容均经过 10 个多月高强度日常使用与真实产品开发迭代打磨而成。\n\n可在 Claude Code 、 Codex 、 Cursor 、 OpenCode 、 Gemini 及其他 AI 智能体框架中通用。"
+ },
+ {
+  "n": 69,
+  "block_id": "942722cc136eced86266f4ef46d961a3::4a40627427a75264::/H2/快速开始/H3/第二步仅在需要时安装规则#1",
+  "file": "8f1def730e9845b9aa5641a28e5d705e/obsidian-valut-master/reading/Clippings/ECCREADME.zh-CN.md at main.md",
+  "heading": "快速开始 > 第二步：仅在需要时安装规则",
+  "chars": 446,
+  "text": "WARNING: 重要提示： Claude Code 插件无法自动分发 rules 。\n\n如果你已经通过 /plugin install 安装了 ECC， 不要再运行 ./install.sh --profile full 、.\\install.ps1 --profile full 或 npx ecc-install --profile full 。插件已经会自动加载 ECC 的技能、命令和 hooks；此时再执行完整安装，会把同一批内容再次复制到用户目录，导致技能重复以及运行时行为重复。\n\n对于插件安装路径，请只手动复制你需要的 rules/ 目录。只有在你完全不走插件安装、而是选择“纯手动安装 ECC”时，才应该使用完整安装器。\n\n如需手动安装说明，请查看 rules/ 文件夹中的 README 文档。手动复制规则文件时，请直接复制 整个语言目录 （例如 rules/common 或 rules/golang ），而非目录内的单个文件，以保证相对路径引用正常、文件名不会冲突。"
+ },
+ {
+  "n": 70,
+  "block_id": "62d67b82e8bf12c8e960e2962959db19::d4ae5f1e907582d4::/H1/探索过去#1",
+  "file": "《弗洛伊德与精神分析》.md",
+  "heading": "探索过去",
+  "chars": 608,
+  "text": "口欲期，肛欲期，性器期\n\n弗罗伊德认为，神经官能症是早年某些反常的性欲冲动遭受抑制的结果。犹豫这种早期的压抑，神经官能症患者的性欲一直处于未成熟状态。当一个或者另一个子本能被夸大但未被压抑时，该人就会成为\"性变态\"，即他在现实生活中表现出反常的性倾向。因此，神经官能症患者和性变态的心理和情感都是在性欲发展的早期就以固定。因此弗罗伊德做出了一个著名的论断——神经官能症，可以说是性变态的底片\n\n[[弗洛伊德论的性变态的形成机制#^d5d13d|弗洛伊德论的性变态的形成机制]]\n\n俄狄浦斯情结与阉割情结\n\n弗洛伊德一如既往地力图将心理和情感问题归于生理原因\n\n今天，我们自然而然地认为，儿童与父亲或母亲地亲密关系，包括身体上的亲密接触，很可能影响他成年后与同龄人形成温暖，友爱的关系能力。这种设想主要归功于弗罗伊德\n\n超我就和俄狄浦斯情结与阉割焦虑有关\n\n研究表明，记忆力的发展是一个渐进的过程。记忆，保持记忆和回忆的能力再语言能力获得之前都是很弱的。所以没有人可以记得三四岁以前的事\n\n从出生到 5 岁，这一阶段人类的成长速度很快，青春期的成长速度也很快，中间有一段适应期，用来学习文化与传承，这些内容的有效学习，将于人类的适应能力正相关，要是这些内容有效进行，那对应的时期也要延长\n\n如果一个男人潜意识里无法把“母亲式依恋”与“成年性欲”分开，就可能在面对女性时同时产生欲望与焦虑，从而影响正常亲密关系与性功能。"
+ },
+ {
+  "n": 71,
+  "block_id": "62d67b82e8bf12c8e960e2962959db19::d4ae5f1e907582d4::/H1/自由联想梦与移情#1",
+  "file": "《弗洛伊德与精神分析》.md",
+  "heading": "自由联想，梦与移情",
+  "chars": 523,
+  "text": "人在清醒后回忆梦境时，无意识地对梦境内容进行编辑和整理，视图将原本零散，混乱的梦境片段转换为一个逻辑连贯，符合现实的故事，这个过程会进一步扭曲梦境的原始内容，导致显梦 (梦者回忆的表面内容) 与隐梦 (被压抑的真实欲望与冲突) 之间的差距更大。弗罗伊德认为，这种扭曲会掩盖能进的深层心理意义\n\n梦是原始的，非理性的精神现象，它忽视逻辑，秩序和有意识接受的时间及空间标准，但是，梦的解析是通向了解心灵潜意识活动的捷径\n\n象征并不是简单的“替代品”或“逃避现实”。在弗罗伊德的框架里，象征当然常常用于表达被压抑的欲望（尤其是性与攻击性），但在这一章的延伸讨论中，象征被进一步理解为一种 心理处理现实的基本方式 。也就是说，人并不是先有“纯现实”，再用象征去替换它，而是从一开始就通过象征来组织经验。\n\n例如玩具熊、毯子一角、布偶等。儿童对这些物体产生强烈依恋，它们既不是“真实的母亲”，也不是纯粹想象，而是介于两者之间的心理中介。它们象征母亲的安抚功能，但同时又是客观存在的物体，因此孩子可以“实际依附”它们。这说明象征不是脱离现实，而是现实的一部分被赋予情感意义。\n\n弗洛伊德对幻想抱以同样的否定看法，他认为幻想根本就是一种逃避\n\n[[移情解析]]"
+ },
+ {
+  "n": 72,
+  "block_id": "9632e9cb480594c7aadab676589e8c7b::377f36be49dc0836::/H1/chatgpt目前有2种方案#1",
+  "file": "doc/c端/客服/客服bot/LiveChat_内容方案生成调研.md",
+  "heading": "ChatGPT目前有2种方案",
+  "chars": 437,
+  "text": "方案一： 用GPT-3(text-davinci-003)模型，结合模型微调(Fine-tuning)，训练自己的对话模型\n\n方案二： 使用ChatGPT(gpt-3.5-turbo)模型，每次组装上下文去使用\n\n方案一是将各种数据(对话数据，邮件，各个国家的policy，商品等)都组装成为问答的形式，然后喂给模型，得到专有模型，然后基于专有模型来做。\n\n优点： 定制程度比较高，支持较大的数据量，使用价格偏高\n\n缺点： 因为使用的是同一份数据，对于不同国家的Policy是否存在搞混的情况。预计需要根据不同的国家做不同的Fine-tuning* 模型, 后续看看GPT-4\n\n方案二是根据用户问的问题的分类，国家，语言等，组装不同的promote初始上下文来回答用户的问题。\n\n优点： 模型更支持对话，比text-davinci-003更加优秀\n\n缺点：需要根据场景组装promote初始上下文，工作量略大；目前就GPT-3支持微调，gpt-3.5-turbo不支持微调"
+ },
+ {
+  "n": 73,
+  "block_id": "9632e9cb480594c7aadab676589e8c7b::377f36be49dc0836::/H1/实验二/H2/实验二结论#1",
+  "file": "doc/c端/客服/客服bot/LiveChat_内容方案生成调研.md",
+  "heading": "实验二 > 实验二结论：",
+  "chars": 349,
+  "text": "GPT-3的模型微调训练后，对于相似问题（完整的问题或提取关键字提问）的回答内容相差不大，对比喂投的数据中的回答（客服的回答），意思部分能相近。但有几个问题：\n\n每次的回答都不一样，并且表达的意思也有差别。\n\n回答的字数不好控制，max_tokens设值小了经常最后一句话不完整；max_tokens设值大了经常会在重复最后几句话，会多一些无用的话。\n\n有的时候Prompt多了些符号，回答的意思相差甚远：（左图多了(s) ，右图没有）右图和客服回答相近\n\ngpt3.5需要自定义system_init，也就是赋予对话一个背景。这个背景需要我们自己手动写，工作量会很大，基于自定义prompt的回答相对GPT-3的模型微调训练后的回答相对完整一些，基本能按照system_init的背景去回答问题。"
+ },
+ {
+  "n": 74,
+  "block_id": "4ec117448c2300ba44bdcde137a64372::eff0eca5a6666065::/H1/调研报告obsidian-笔记-公众号文章-agent/H2/三关键约束与踩坑点已验证/H3/31-微信-ip-白名单-最重要#1",
+  "file": "8f1def730e9845b9aa5641a28e5d705e/obsidian-valut-master/reading/调研报告：Obsidian笔记→公众号文章Agent.md",
+  "heading": "调研报告：Obsidian 笔记 → 公众号文章 Agent > 三、关键约束与踩坑点（已验证） > 3.1 微信 IP 白名单 ⚠️ 最重要",
+  "chars": 298,
+  "text": "获取 access_token 和所有 cgi-bin 接口，都要求调用方公网 IP 在白名单内。\n\n本地家用机是动态公网 IP → 每次换 IP 都要去后台 设置-基本配置-IP白名单 加 IP，否则 40164 invalid ip。\n\n三个解法：\n\n静态公网 IP（带宽/专线）——最省心但贵；\n\n固定代理出口 IP（一台有固定 IP 的云主机做中转或跑定时任务）；\n\n动态 IP 时手动加白名单（频率低的话完全够用，你增量频率低）。\n\n参考：wechat-publish-skill、wechat_artical_publisher_skill、md2wechat 都明确文档化了这一点。"
+ },
+ {
+  "n": 75,
+  "block_id": "4ec117448c2300ba44bdcde137a64372::eff0eca5a6666065::/H1/调研报告obsidian-笔记-公众号文章-agent/H2/三关键约束与踩坑点已验证/H3/33-草稿内容格式限制draftadd#1",
+  "file": "8f1def730e9845b9aa5641a28e5d705e/obsidian-valut-master/reading/调研报告：Obsidian笔记→公众号文章Agent.md",
+  "heading": "调研报告：Obsidian 笔记 → 公众号文章 Agent > 三、关键约束与踩坑点（已验证） > 3.3 草稿内容格式限制（draft/add）",
+  "chars": 275,
+  "text": "content 字段是 HTML，限制：< 2 万字符、< 1MB，JS 会被剥掉。\n\n正文图片 URL 必须来自\"上传图文消息内的图片获取 URL\"接口（media/uploadimg），外部图片 URL 会被微信过滤——所以正文图不能直接用 COS 外链。\n\nthumb_media_id（封面）必填，必须是永久素材 ID（先走 material/add_material）。\n\n字段长度：title ≤ 32 字、author ≤ 16 字、digest ≤ 120 字。\n\n草稿被群发/发布后，会从草稿箱移除。\n\n参考：微信官方文档 新增草稿"
+ },
+ {
+  "n": 76,
+  "block_id": "8f44053d3209213ecf3bd2d5f84e4bef::e8cebd26285f1879::/H1/一电商归因目的#1",
+  "file": "电商中的归因体系.md",
+  "heading": "一、电商归因目的",
+  "chars": 487,
+  "text": "对于电商平台来说，当流量进入时，我们需要引导其完成购买任务，以实现流量价值最大化，在互联网红利消耗殆尽之时，流量会越来越贵，我们需要精细化运营每一份流量。\n\n通常我们在做各种 banner 活动、Feed 流推荐优化、活动页等进行效果评估，无法知道该位置最终产生了多少收益，也就很难针对该位置进行有效的改进。\n\n如果进行单因数 AB 测试进行改版的效果评估，那也会存在如下 2 个问题：\n\n单因素变量控制并不容易做到完全可控，如果产品处在增长期，产品增长本身就是一个影响因子，很容易忽略此类因素的影响。\n\n评估方式低效，如果 2 天内只控制 1 个坑位变动，那么评估 20 个坑位内容改变就需要 40 天时间，这样的效率任何企业都无法接受 因此，我们希望用数据分析中归因的方式解决坑位运营中评估的问题。\n\n我们引入电商坑位归因的概念，把每一笔的成交都归给转化路径中不同的坑位。根据坑位的曝光转化价值来评判坑位的好与坏。把宝贵的流量尽可能都引导到转化率更高的坑位，以此达到精细化运营的效果。当然有了这个坑位价值评判的机制后各个坑位的改版也能准确的评估，真正做到了数据驱动增长。"
+ },
+ {
+  "n": 77,
+  "block_id": "8f44053d3209213ecf3bd2d5f84e4bef::e8cebd26285f1879::/H1/结论先行#3",
+  "file": "电商中的归因体系.md",
+  "heading": "结论先行",
+  "chars": 433,
+  "text": "所以是追溯用户行为路径的不同划分方式，一种是通过位置去找，一种是通过内容去找，追溯用户行为路径的目的就是刻画出一个完整的用户画像，为搜广推业务打下数据基础，个性化搜索，个性化广告，个性化推荐，都是建立起一个有一个 spm/scm 模型上面的\n\n举个例子，在 B 站搜索推荐中，我们常常能看到一些个性化的信息，大部分时候非常准确，最终提高了我们在平台的用户粘度\n\n而上述的 spm/scm 只是一种模型，一种规范，实际上在我们看不到的地方有各种参数被上报，例如设备信息，国家，用户信息，视频标签，分类，时间，地点，从哪个页面进入等。一般来讲，越精细化的推荐就意味着上报的参数越多，往往在几十到一两百个不等。而这些参数业界有个统一的命名——埋点，参数上报的行为，本质上叫做埋点上报。\n\n而庞大的参数数量需要管理、清洗、校验，就衍生了埋点治理，管理体系、等各种大数据的业务，这些都是后话\n\n如此完善的埋点体系就足以支持用户行为的归因。下面用我们电商场景介绍了归因的相关内容"
+ },
+ {
+  "n": 78,
+  "block_id": "da05480f94121599ed1fb7d133afe11d::e016d99946912cba::/H2/使用/H3/手动管理缓存#3",
+  "file": "doc/基础服务/Cider Cache的使用.md",
+  "heading": "使用 > 手动管理缓存",
+  "chars": 692,
+  "text": "getCache\n\nprivate final DefaultCiderCacheManager cacheManager;\n\n@GetMapping(\"/productManualCache\")\npublic List<StudentVO> productManualCache(String name) {\nList<StudentVO> studentVOS = cacheManager.getCacheOrPut(MyCiderCacheDataRegistered.PRODUCT_MANUAL_MultiLevel_CACHE, name, this::mockSelectSql);\n}\n\n@GetMapping(\"/productManualCache\")\npublic List<StudentVO> productManualCache(String name) {\n    CiderCache cache = cacheManager.getCache(MyCiderCacheDataRegistered.PRODUCT_MANUAL_CACHE);\n    List<StudentVO> list = cache.get(name, List.class);\n    if (Objects.nonNull(list)) {\n        return list;\n    }\n    List<StudentVO> vos = mockSelectSql();\n    cache.put(name, vos);\n    return vos;\n}"
+ },
+ {
+  "n": 79,
+  "block_id": "da05480f94121599ed1fb7d133afe11d::e016d99946912cba::/H2/使用/H3/引入依赖#1",
+  "file": "doc/基础服务/Cider Cache的使用.md",
+  "heading": "使用 > 引入依赖",
+  "chars": 566,
+  "text": "<dependency>\n<groupId>com.cider</groupId>\n<artifactId>cider-cache-all-spring-boot-starter</artifactId>\n<version>0.0.7</version>\n</dependency>\n\n如果是spring boot3以上版本请使用3.x相关的版本\n\n<dependency>\n<groupId>com.cider</groupId>\n<artifactId>cider-cache-all-spring-boot-starter</artifactId>\n<version>3.0.1</version>\n</dependency>\n\n启动添加注解@EnableCiderCaching\n\n@SpringBootApplication\n@EnableCiderCaching\npublic class CiderCacheApplication {\n\n    public static void main(String[] args) {\n       SpringApplication.run(CiderCacheApplication.class, args);\n    }\n}\n\n项目需要配置了RedissonConfig"
+ },
+ {
+  "n": 80,
+  "block_id": "5a921f07708234e6c4091f4461e04085::976d5c3ab56d36be::/H2/切割方案#1",
+  "file": "doc/基础服务/阿里云 RocketMQ 迁移自建的 MQ.md",
+  "heading": "切割方案",
+  "chars": 261,
+  "text": "切割前\n\n搭建线上RocketMQ集群\n\n整理所有线上阿里云topic和gid在mqcloud创建\n\n新增erp mq监控\n\n切割步骤\n\n所有系统将消息发送替换为发送消息到自建RocketMQ集群\n\n所有系统新增消费者消费自建RocketMQ集群消息\n\n原先消费阿里云的消费者保持不动，继续消费消息(16天后下掉)\n\n这里保持不动的方案有两种:\n\n保留未修改为新代码的pod(如果消费代码有改动，需要将两套代码隔离开)\n\n代码新增消费者消费自建MQ集群消息(这种情况实现起来可能稍微比较麻烦)\n\n切割后\n\noms先上\n\n其"
+ },
+ {
+  "n": 81,
+  "block_id": "88969e2453b225b07702f14e87e9e719::89e2f5557c4da016::/H1/解决过程#1",
+  "file": "doc/c端/履约/2022年01月08日，消息队列堆积，导致相关业务异常.md",
+  "heading": "解决过程",
+  "chars": 382,
+  "text": "问题代码\n\nprivate BigDecimal reduceShippingFee(BigDecimal shippingFee, BigDecimal total) {\n\n    while (shippingFee.compareTo(total) >= 0) {\n\n        shippingFee = shippingFee.divide(BigDecimalUtils.TWO, 2, RoundingMode.DOWN);\n\n    }\n\n    return shippingFee;\n\n}\n\n2021-01-08 10:20:00 修复代码上线 @王浩轩 Hyiki\n\n2021-01-08 11:00:00 死信队列堆积消息重发 @黄江 Wolf\n\n2021-01-08 14:00:00 捞日志，修复包裹数据，恢复发货 @黄江 Wolf"
+ },
+ {
+  "n": 82,
+  "block_id": "a22c1306a409ebf4a6b9cfdc3a66af37::cf28b06e8cf41a2c::/H1/四b2b2c模式探索#1",
+  "file": "doc/erp/分销系统的建设.md",
+  "heading": "四、B2B2C模式探索",
+  "chars": 255,
+  "text": "随着印度采买合作的深入，去年大概每一季度会走一宗大货，价值大概在百万刀，合作次数的增加以及批发流程的不断改良，就在去年年底，产研这边就正式立项，作为一个正式项目，开始投入项目建设所需资源。\n\n基于上述背景，也随着印度采买的合作深入，在原有B2B的合作模式基础上，探索 B2B2C 的模式，以及其他市场也存在潜在模式，但当前与印度nykka对接沟通成本较高，每次采买也需要付出一定的开发成本，工程化该业务可以提高效率，促进订单频次和数量增加，分销客户体验更好，有利于长期合作，也为公司在该渠道的探索打下工程基础。"
+ },
+ {
+  "n": 83,
+  "block_id": "2c62069d096c64b018f76ebc074f36ed::c19c9e0ddcc200be::/H1/埋点-v1#1",
+  "file": "doc/c端/埋点/埋点的自我理解.md",
+  "heading": "埋点 V1",
+  "chars": 669,
+  "text": "通过业务埋点， 将如 c.user.helloWorld 。各个业务代码通过埋点把消息通过MQ上报，有一个单独的服务，进行1-2秒聚合上报。这个埋点通过 MQ 发送到 DataDog 进行分析，给 AI 推荐算法以及其他业务做数据支撑，默认会拆分为多个指标\n\nc.user.helloWorld.execute_time.num 打点的数量。这种使用的是最多的。\n\nc.user.helloWorld.execute_time.total 总量，比如执行时间的总额。\n\nc.user.helloWorld.execute_time.avg 平均值，比如执行时间的平均值。\n\n不做数据埋点，就做不了数据分析，不做数据分析，就不知道产品上线情况，不知道产品上线情况，产品就会越做越差\n\n默认的tag:\n\nuid 用户的ID，但是在聚合的时候会忽略这个标签。\n\ndevice 终端，PC，WEB，android，iphone。部分的埋点没有去设置这个信息，统一上报的为PC。\n\nerror_code 错误号\n\nerr_message 错误文案。错误文案要聚合。比如us_43.00_away_from_the_promotion_of_the_coupon，不是一个太好的信息，相同类型的信息不易聚合。埋点*不是为了分析具体个例的，个例详细信息可以输出到日志中。\n\nSuccess 这个处理是否为成功。0 代表失败，1代表成功。\n\n后续会新增两个默认tag，分别是 country 和 version。\n\n[[Cider埋点体系]]\n\n埋点接入"
+ },
+ {
+  "n": 84,
+  "block_id": "0cbbb9b0ac26cc6dc2e012f20ac799fb::64ec94f04535cb1b::/H2/jvm-crash#1",
+  "file": "doc/c端/推荐/推荐服务重启问题排查.md",
+  "heading": "JVM Crash",
+  "chars": 470,
+  "text": "好在后来逐个节点审查重启期间日志的时候，从 sls 里面发现了一点 jvm crash 的记录\n\n日志显示 libc.so 发生了 SIGSEVG 错误，内存访问区域异常，但是因为 /data/ 文件夹下的文件会随着 pod 重启而丢失，所以无法查看具体的 .log 文件里面记录了什么东西\n\n查了一下发现可以通过 jvm 参数来将 error 文件输出到别的目录，配置如下\n\n-XX:ErrorFile=/usr/local/files/hs_err_pid%p.log\n\n/usr/local/files/ 路径在重启后仍然可以保留，并且会同步到 oss\n\n再又经历了数次节点重启之后，终于抓到了一份 crash 日志\n\n从日志里面终于看到导致节点 jvm 突然 crash 的元凶就是 libasyncProfiler 库\n\n而这个库是干嘛的呢？ 实际上这个库是利用 JVMTI 接口对对象分配进行采样（网上查到的）\n\n一般的用法就是用来监控性能、获取线程执行火焰图之类的\n\n我们的 Arms agent 里面应该就有这个......"
+ },
+ {
+  "n": 85,
+  "block_id": "0cbbb9b0ac26cc6dc2e012f20ac799fb::64ec94f04535cb1b::/H2/异常重启排查#1",
+  "file": "doc/c端/推荐/推荐服务重启问题排查.md",
+  "heading": "异常重启排查",
+  "chars": 253,
+  "text": "在快速解决了 ByteBuffer 导致的 oom 之后，推荐服务仍然存在不定期重启的问题，主要表现如下\n\n某个时间点服务突然无法访问，k8s 探针 503，之后 kill 掉机器\n\nGrafrance 看版可以看到短时间内内存和 cpu 飙升\n\n但是Arms 查看数据发现内存、gc 都正常\n\n因为此前有过一次 oom 的问题，所以排查的思路也一直沿着 oom 的方向去走，但是因为推荐服务内存使用很大，jvm dump 没法在节点 crash 后顺利执行，而且问题出现得非常无规律，导致问题原因难以找到"
+ },
+ {
+  "n": 86,
+  "block_id": "106d3b7dd763b73b3c36b44ad1ad5c5d::93edddeb57a673e8::/H2/一些基本的埋点常识/H3/3-事件数据event-data#1",
+  "file": "doc/c端/埋点/埋点基础.md",
+  "heading": "一些基本的埋点常识 > 3. 事件数据（Event Data）",
+  "chars": 433,
+  "text": "事件数据是用户在页面上提供的信息统计，通常是多个页面数据整合之后形成的。这类数据更为复杂和结构化，常用于构建用户画像和业务分析。\n\n事件数据包含的子类型和字段非常丰富，主要包括：\n\n（1）设备数据： 用户设备标识码、浏览器版本、浏览所用的终端、站点编码、屏幕分辨率等。\n\n（2）访问数据： 用户账号、用户会员编码、当前页面 URL、用户访问时间、上次访问时间、访问时长、页面停留时间、用户退出页面时间等。\n\n（3）页面来源数据： 广告来源、上一页面 URL 等。\n\n（4）页面去向数据： 去向页面 URL、去向页面标题等。\n\n（5）商品信息： 商品编码、供应商编码、店铺编码、商品名称、店铺名称等。\n\n计算独立访客应该贴近真实人数，这样算出的数据才有意义，cookie 不行，要用设备号来判定\n\n不要尝试收集绝对精确的数据\n\n一些经典的指标：\n\n页面停留时长，退出不算\n\n跳出率\n\n整个应用的跳出率\n\n关键词跳出率\n\n着陆页跳出率\n\n转换率 = 产出成本 / 访问量"
+ },
+ {
+  "n": 87,
+  "block_id": "ce3d1fdbfd552d03a18563ba17c2dc17::0853db7a93177a42::/H1/stage-和-prd-的区别是什么/H2/配置文件/H3/排查#1",
+  "file": "doc/数据库/Warebase 慢查询排查记录.md",
+  "heading": "stage 和 prd 的区别是什么 > 配置文件 > 排查",
+  "chars": 694,
+  "text": "翻来覆去，想到之前出过一次上传文件缓慢的问题，是因为 prd 和 stage 的日志输出级别不一致，导致 prd 上的问题无法再 stage 复现，于是看了一眼，结果发现是一样的：\n\n那有没有可能是其他文件？从 CICD 看起，JenkinsFile 上大同小异，主要区别是 prd 的 JenkinsFile 多了 yapi 的 token 配置、harbor 的地址不同、deployment 副本数不同等等，这些差异可以初步判断是与本次问题无关的\n\n继续看一下 dockerfile ，用的是同一份文件：\n\ndockerfile 里面指定容器启动的时候运行 entrypoint.sh ，这份文件主要干了两件事：\n\n获取应用名称和环境\n\n根据上面的变量，执行对应的 java -jar 启动服务\n\n通过对比 stage 和 prd 的启动参数，发现一个重要线索：prd 多了 skywalking 和 arms 的 agent\n\n-javaagent:/data/skywalking-agent/skywalking-agent.jar\n-Dskywalking.agent.service_name=${JOB_NAME}\n-Dskywalking.collector.backend_service=172.25.98.224:11800\n\n-javaagent:/data/ArmsAgent/arms-bootstrap-1.7.0-SNAPSHOT.jar\n-Darms.appName=dionysus-api\n-Darms.licenseKey=xxxxxxxxxx"
+ },
+ {
+  "n": 88,
+  "block_id": "ce3d1fdbfd552d03a18563ba17c2dc17::0853db7a93177a42::/H1/同一条-sqlstage-就是比-prd-快吗#1",
+  "file": "doc/数据库/Warebase 慢查询排查记录.md",
+  "heading": "同一条 SQL，stage 就是比 prd 快吗",
+  "chars": 398,
+  "text": "既然负载没有问题，那就不得不提出一个很恐怖的猜想：在 stage 跑 sql 比 prd 快\n\nstage 的用途之一就是复现 prd 上出现的问题，方便开发同学进行问题验证和修复，在部署同一套代码的前提下，理论上，两个环境不应该出现行为不一致的情况，但现实确实在把人往这个方向推\n\n为了验证这个猜想，把 stage 的后门接口也发到生产上进行测试，后门的伪码如下：\n\n经过多轮测试，结论如下：\n\n查询 adb 时， stage 和 prd 打印出来的耗时一致，都挺快的\n\n查询 warebase，stage 快，prd 慢，只有一个 id 时（num = 1）最为明显\n\nstage 耗时在 个位数到 100ms+ 之间浮动\n\nprd 耗时都在 1s 起\n\n看到这里已经可以基本确定，在 stage 和 prd 之间存在某种差异，导致两个环境往 warebase 跑 sql 的时候耗时出现问题"
+ },
+ {
+  "n": 89,
+  "block_id": "6ac6f80632af1d133a72a3f9cca43b7a::1a7ea6cd2aae7c91::/H1/三数据库映射逻辑关联业务数据/H2/32-数据映射流程#1",
+  "file": "doc/线下门店系统/RFID 16 进制编码方案.md",
+  "heading": "三、数据库映射逻辑（关联业务数据） > 3.2 数据映射流程",
+  "chars": 341,
+  "text": "编码写入时映射： ① 业务系统生成商品/采购信息（如SKU、采购单号）； ② 按本方案编码规则生成RFID 16进制编码； ③ 拆分编码为各字段，同步写入rfid_encoding_main表，并关联写入sku_map（或epc_ean_map）； ④ 关联采购订单表，更新订单关联的RFID标签数量。\n\n标签读取时映射： ① 读写器读取RFID标签的16进制编码； ② 业务系统查询rfid_encoding_main表，获取各字段的十进制/文本信息； ③ 若为SKU类型，关联rfid_sku_map获取商品详情；若为EAN类型，关联rfid_epc_ean_map获取EAN及商品信息； ④ 关联purchase_order_main表，获取采购订单详情，形成完整业务数据链。"
+ },
+ {
+  "n": 90,
+  "block_id": "d624573dd8ebaeb33b0011310d131c82::e70b19acd5735b17::/H2/三protonbase-在该跨境电商多条业务线的应用/H3/erp-线场景查询性能提速-10-倍冗余存储大幅减少/H4/一高效的查询性能相对-pg-提速-10-倍#1",
+  "file": "doc/数据库/Data Warebase 在 Cider 中的应用.md",
+  "heading": "三、ProtonBase 在该跨境电商多条业务线的应用 > ERP 线场景：查询性能提速 10+ 倍，冗余存储大幅减少 > 一、高效的查询性能，相对 PG 提速 10+ 倍",
+  "chars": 344,
+  "text": "ProtonBase 在该场景下，相对于 PostgreSQL 有明显的性能优势。下图是在 ERP 一个物流场景下的性能对比，根据线上一个时间范围内的查询日志，使用同样的数据在 ProtonBase 同资源规格下进行性能测试。从统计结果可以看出：\n\n在全量查询下，最慢的 query 查询性能从 147 秒提升到了 14 秒，是原来的 10.4 倍。\n\n在全量查询下，query 的平均查询性能从 18 ms 提升到了 2 ms，是原来的 9 倍。\n\n在原来的 top1000 的慢 query 范围内，平均性能从 8864ms 提升到 167ms，是原来的 53 倍。原因主要是慢 query 主要是 OLAP 的分析型 query，在该场景下 ProtonBase 有良好的查询性能。"
+ },
+ {
+  "n": 91,
+  "block_id": "d624573dd8ebaeb33b0011310d131c82::e70b19acd5735b17::/H3/架构-多数据库产品架构复杂#1",
+  "file": "doc/数据库/Data Warebase 在 Cider 中的应用.md",
+  "heading": "架构 - 多数据库产品架构复杂",
+  "chars": 331,
+  "text": "公司不同业务线在面临不同子场景问题时，使用了多种数据产品，如 PostgreSQL、MySQL、PolarDB、Elasticsearch、阿里云数仓 A 产品和阿里云数仓 C 产品等。采用越来越多数据产品解决业务问题的同时，也引入了新问题:\n\n研发门槛高：构建复杂的系统要求研发人员熟悉多种产品及其特性，这显著提高了开发的难度和门槛。\n\n运维复杂：多种产品的共存增加了运维工作的复杂性，尤其是在数据同步任务方面，给运维团队带来了额外的挑战。\n\n数据延迟与不一致：尽管整体数据架构是随着业务需求逐步演进而形成的，但随着业务的发展，也暴露出了一些问题。一方面，系统内部多点数据同步不可避免地会导致一定的数据延迟；另一方面，这样的架构设计也可能引发数据不一致的情况。"
+ },
+ {
+  "n": 92,
+  "block_id": "c5c78a40dbe5bfe9b4fb52fa8c4b5958::c2c6a6d9354606c1::/H1/复盘#1",
+  "file": "doc/事故报告/2024合集/2024年11月24日，调整自绘面单单号导致的问题.md",
+  "heading": "复盘",
+  "chars": 823,
+  "text": "@王浩轩 Hyiki\n\n为什么没有意识到会对合包和发货造成影响？\n\n缺少了合包渠道用【假面单】（ 包裹号=物流号）判断逻辑 的认知，这会影响后继仓的库内操作，造成了误判\n\n为什么没有做好改动的充分讨论和验证评估？\n\n事发周末，加上当时自己有事在身，发生问题的时候出于紧急，因此快速搞搞\n\n认为调整物流单号生成规则是物流模块内的动作，评估改动不会影响正常的打印面单、集箱出库等动作\n\n在问题群里同步了改动的内容，线上也没有发生异常，认为没有问题\n\n@李泽彬 zebin\n\n为什么当时没有按【业务影响最小改动】原则调整？*@王浩轩 Hyiki\n\n此次针对单号冲突的两个渠道进行了调整，可能逻辑会认为冲突的单号加“CD”，不冲突的不需要加，但是这种两套逻辑的做法会造成一个新的潜规则，因此最终还是按照统一加“CD”前缀的做法\n\n为什么没有走上线审批流程？*@王浩轩 Hyiki\n\n在周末处理紧急问题情况下，经过测试环境跑通流程之后，认为这是一个小的改动就直接上线了\n\n发现改动面比较大，为什么没有及时回滚？*@李泽彬 zebin\n\n当时看到信息，看到【批发和合包】跟【假面单】联系不到一起，整个群的讨论就变成了【前端如何兼容】，之后就没深入思考了\n\n隔了半个小时，我反应过来了。有这个潜规则，但是最后没有关联上文的改动，当时应该及时回滚\n\n@张子宽 为啥会导致C端多发发货邮件\n\nC端的发货邮件是通过消费ERP发货事件发的，ERP发发货事件逻辑中有一个潜规则，如果是假面单不发发货邮件，假面单的判断则是直接和包裹号进行对比\n\n当假面单新增了CD前缀后，就导致假面单判断失效，直接当成正常发货事件发了\n\n@张子宽 为啥发货事件会报警，假面单的判断逻辑是公共的，oms是怎么识别到异常的\n\n唯品会到肇庆的合包正常是集箱出库后才发货（普通包裹是先发货后出库），于是在判断真发货的逻辑中前序包裹还未发货（第一个分支），就不会走到真假面单的判断（第二个分支）中。"
+ },
+ {
+  "n": 93,
+  "block_id": "c5c78a40dbe5bfe9b4fb52fa8c4b5958::c2c6a6d9354606c1::/H1/如何避免#1",
+  "file": "doc/事故报告/2024合集/2024年11月24日，调整自绘面单单号导致的问题.md",
+  "heading": "如何避免",
+  "chars": 496,
+  "text": "@王浩轩 Hyiki\n\n单号生成规则的修改缺乏全局考虑，下次做相关的改动要确保与其他系统的兼容性\n\n提升自己对全局修改的意识，无论多紧急的情况确保做好团队之间的沟通和代码review工作\n\n同时这次事件暴露出来了一个问题：【物流单号】在物流主表里是唯一键。物流系统设计的历史遗留问题需要重构，合理的做法应该是【物流渠道 + 物流号】是唯一键\n\n@李泽彬 zebin\n\n对于自营渠道的【假面单】潜规则，从公司走自营渠道到合包（3年了），研发和产品都有共识，贯穿整个作业流程。带来的副作用是：WMS和TMS的系统耦合。后续加一个监控：【自营面单的面单号必须 == 包裹号】，发现违反了规则需要报警\n\n@张子宽\n\n假面单=包裹号这个潜规则，原先只用于自营换单，本身就是一个耦合WMS和TMS的不合理设计，后面又扩展到合包、Nykaa，这是一种把不合理设计扩大影响的动作，不合理的设计应该内化并且尽量封住，减小影响，而不是为了少写代码就直接用。\n\n复用并不是任何时候都是好的，复用的同时代表耦合，到了需要拆的时候可能就拆不开了，只有当两个事情的变化方向一致的时候，才可以复用，否则就是潜在的耦合炸弹。"
+ },
+ {
+  "n": 94,
+  "block_id": "f0f50f0882d6676187f1a8083038d128::900ac37a108d1cd5::/H2/技术栈-架构#1",
+  "file": "8f1def730e9845b9aa5641a28e5d705e/obsidian-valut-master/edream&实习/实习/非功能产出.md",
+  "heading": "技术栈-架构",
+  "chars": 486,
+  "text": "若依-cloud(重构) + DDD (待补充)\n\n为什么选择 DDD ？\n\n因为我们项目页面有个发布表格的功能，配置好表的相关属性之后点击按钮会通过 Jekins 打包更新到仓库，初始化controller, service, mapper，xml 基本的 CRUD ，list ，导入导出功能，配置表格基本上是在这上面配置的，所以说就不能在原有的类上写，怕被覆盖，所以新定义接口还需要新建一套controller, service, mapper 这些，就导致很混乱，不好维护和管理，所以也是最开始考虑到这个问题，用 DDD 架构来写，一个是重新生成的文件更少，只需要重写外层的逻辑，内层的领域层是不用动的。核心的聚合根，实体，值对象这些不用改动。第二个来说更清晰一点，因为光我这个业务都是30多w行，但是通过领域模型去区分真的很清晰，也更容易上手一点。一点都不混乱。\n\n自研框架\n\n(simulation-aps-cloud)\n\n为什么选择自研？\n\n很多客户要求定制化开发，将一些通用的功能抽象出来，如表格横向展示，每个项目引入框架的 JAR 包，能够很方便进行开发"
+ },
+ {
+  "n": 95,
+  "block_id": "f0f50f0882d6676187f1a8083038d128::900ac37a108d1cd5::/H2/上下游和那些部门对接#1",
+  "file": "8f1def730e9845b9aa5641a28e5d705e/obsidian-valut-master/edream&实习/实习/非功能产出.md",
+  "heading": "上下游和那些部门对接？",
+  "chars": 253,
+  "text": "一般我们周五拉一个评审会，对本地需求的 PRD 进行需求评审，前后端产品，测试都来，对接好需求之后就我们业务组有5个研发(其他业务组都是一样的)，他们会对需求进行拆分设计，对实现技术做一个评审。把实现思路和相关流程写到业务组的 PRD，产品通过禅道给他们下派，他们再将一些任务指派给我们。我们写完之后会将接口地址贴到禅道里面，前端进行对接，对接完毕之后进行测试，测试有问题的会更新到飞书的共享文档里面，在每周二会单独开一个会来根据需求完成者来说明和下派 fix 任务。就我们实习生一般不会和产品进行对接的。"
+ }
+]

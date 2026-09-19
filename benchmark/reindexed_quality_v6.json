@@ -1,0 +1,3425 @@
+{
+  "isolated_index": "C:\\Users\\22331\\Desktop\\everything-rag\\.tmp_probe\\rag-v6-eval-batch3",
+  "dataset_sha256": "16c5d3e670daca8dc7514f22b83f92550704989be377664171331b6b93a1dc0d",
+  "corpus_manifest_sha256": "1d35254a47aaf2aabfb7ba935f69dafdb97fef0b81488029f56df7a6c8a3a991",
+  "corpus_file_count": 1354,
+  "index_schema_version": 6,
+  "embedder_fingerprint": "cloud-Qwen-Qwen3-Embedding-8B-endpoint-dcfb966d818d",
+  "collection_name": "chunks__cloud-Qwen-Qwen3-Embedding-8B-endpoint-dcfb966d818d__v6",
+  "retriever": {
+    "type": "HybridRetriever",
+    "context_top_k": 8,
+    "min_similarity": 0.6
+  },
+  "ingestion": {
+    "reused_blocks": 3740,
+    "provenance_verified": true,
+    "healthy": true
+  },
+  "integrity": {
+    "healthy": true,
+    "logical_count": 3740,
+    "unique_id_count": 3740,
+    "embedding_count": 3740,
+    "unreadable_embedding_count": 0,
+    "invalid_dimension_count": 0,
+    "non_finite_embedding_count": 0,
+    "ann_result_count": 3740,
+    "ann_unique_id_count": 3740,
+    "errors": []
+  },
+  "quality": {
+    "healthy": true,
+    "min_hit_at_8": 1.0,
+    "max_negative_false_context_rate": 0.0,
+    "positive_total": 66,
+    "negative_total": 10,
+    "hit_at_1": 0.787879,
+    "hit_at_5": 1.0,
+    "hit_at_8": 1.0,
+    "mrr_at_8": 0.870455,
+    "negative_false_context_rate": 0.0,
+    "duration_seconds": 43.26
+  },
+  "retrieval_report": {
+    "generated_at_unix": 1788513360.356795,
+    "duration_seconds": 43.26,
+    "positive_total": 66,
+    "negative_total": 10,
+    "hit_at_1": 0.787879,
+    "hit_at_5": 1.0,
+    "hit_at_8": 1.0,
+    "mrr_at_8": 0.870455,
+    "negative_false_context_rate": 0.0,
+    "category_metrics": {
+      "agent_security": {
+        "total": 3,
+        "hit_at_1": 1.0,
+        "hit_at_5": 1.0,
+        "hit_at_8": 1.0
+      },
+      "experimentation": {
+        "total": 3,
+        "hit_at_1": 1.0,
+        "hit_at_5": 1.0,
+        "hit_at_8": 1.0
+      },
+      "gateway": {
+        "total": 2,
+        "hit_at_1": 0.5,
+        "hit_at_5": 1.0,
+        "hit_at_8": 1.0
+      },
+      "incident": {
+        "total": 9,
+        "hit_at_1": 0.888889,
+        "hit_at_5": 1.0,
+        "hit_at_8": 1.0
+      },
+      "middleware": {
+        "total": 3,
+        "hit_at_1": 1.0,
+        "hit_at_5": 1.0,
+        "hit_at_8": 1.0
+      },
+      "operations": {
+        "total": 8,
+        "hit_at_1": 0.75,
+        "hit_at_5": 1.0,
+        "hit_at_8": 1.0
+      },
+      "performance": {
+        "total": 3,
+        "hit_at_1": 0.666667,
+        "hit_at_5": 1.0,
+        "hit_at_8": 1.0
+      },
+      "risk_control": {
+        "total": 2,
+        "hit_at_1": 0.5,
+        "hit_at_5": 1.0,
+        "hit_at_8": 1.0
+      },
+      "search": {
+        "total": 2,
+        "hit_at_1": 0.5,
+        "hit_at_5": 1.0,
+        "hit_at_8": 1.0
+      },
+      "shopping_cart": {
+        "total": 20,
+        "hit_at_1": 0.85,
+        "hit_at_5": 1.0,
+        "hit_at_8": 1.0
+      },
+      "tracking": {
+        "total": 11,
+        "hit_at_1": 0.636364,
+        "hit_at_5": 1.0,
+        "hit_at_8": 1.0
+      }
+    },
+    "positive_outcomes": [
+      {
+        "id": "cart-001",
+        "query": "京东、淘宝、拼多多、eBay、SHEIN 等公司的未登录购物车交互方案分别是什么？",
+        "matched_rank": 1,
+        "retrieved_count": 7,
+        "candidates": [
+          {
+            "block_ref": "blk_8709c6f1fc8ff1eb",
+            "source": "购物车分表.md",
+            "heading": "交互",
+            "similarity": 0.738418
+          },
+          {
+            "block_ref": "blk_c6f536b7bbedc1f7",
+            "source": "购物车分表方案落地.md",
+            "heading": "二、购物车场景行为",
+            "similarity": 0.616622
+          },
+          {
+            "block_ref": "blk_e16b90feda97b8af",
+            "source": "购物车分表.md",
+            "heading": "方案对比",
+            "similarity": 0.570302
+          },
+          {
+            "block_ref": "blk_d26012e641d644b9",
+            "source": "购物车分表.md",
+            "heading": "购物车数据统计",
+            "similarity": 0.449213
+          },
+          {
+            "block_ref": "blk_b3b3eed0e9996132",
+            "source": "购物车分表.md",
+            "heading": "购物车数据统计",
+            "similarity": 0.419556
+          },
+          {
+            "block_ref": "blk_583b55688f8b3c14",
+            "source": "购物车分表.md",
+            "heading": "购物车数据统计",
+            "similarity": 0.420424
+          },
+          {
+            "block_ref": "blk_6554d4f5ad20584b",
+            "source": "购物车分表.md",
+            "heading": "分库分表中间件对比",
+            "similarity": 0.364628
+          }
+        ]
+      },
+      {
+        "id": "cart-002",
+        "query": "未登录购物车存在服务端、禁止加购和存在客户端三种方案各有什么优缺点？",
+        "matched_rank": 1,
+        "retrieved_count": 7,
+        "candidates": [
+          {
+            "block_ref": "blk_8709c6f1fc8ff1eb",
+            "source": "购物车分表.md",
+            "heading": "交互",
+            "similarity": 0.809753
+          },
+          {
+            "block_ref": "blk_c6f536b7bbedc1f7",
+            "source": "购物车分表方案落地.md",
+            "heading": "二、购物车场景行为",
+            "similarity": 0.661672
+          },
+          {
+            "block_ref": "blk_e16b90feda97b8af",
+            "source": "购物车分表.md",
+            "heading": "方案对比",
+            "similarity": 0.658507
+          },
+          {
+            "block_ref": "blk_583b55688f8b3c14",
+            "source": "购物车分表.md",
+            "heading": "购物车数据统计",
+            "similarity": 0.483697
+          },
+          {
+            "block_ref": "blk_b3b3eed0e9996132",
+            "source": "购物车分表.md",
+            "heading": "购物车数据统计",
+            "similarity": 0.46098
+          },
+          {
+            "block_ref": "blk_6554d4f5ad20584b",
+            "source": "购物车分表.md",
+            "heading": "分库分表中间件对比",
+            "similarity": 0.375917
+          },
+          {
+            "block_ref": "blk_d26012e641d644b9",
+            "source": "购物车分表.md",
+            "heading": "购物车数据统计",
+            "similarity": 0.477043
+          }
+        ]
+      },
+      {
+        "id": "cart-003",
+        "query": "Mycat 和 ShardingSphere-JDBC 在购物车分库分表中的部署、改造和运维成本如何对比？",
+        "matched_rank": 1,
+        "retrieved_count": 7,
+        "candidates": [
+          {
+            "block_ref": "blk_6554d4f5ad20584b",
+            "source": "购物车分表.md",
+            "heading": "分库分表中间件对比",
+            "similarity": 0.72995
+          },
+          {
+            "block_ref": "blk_c374c9fd2c346d3f",
+            "source": "购物车分表.md",
+            "heading": "开发设计 > ",
+            "similarity": 0.610436
+          },
+          {
+            "block_ref": "blk_8709c6f1fc8ff1eb",
+            "source": "购物车分表.md",
+            "heading": "交互",
+            "similarity": 0.50079
+          },
+          {
+            "block_ref": "blk_e16b90feda97b8af",
+            "source": "购物车分表.md",
+            "heading": "方案对比",
+            "similarity": 0.581212
+          },
+          {
+            "block_ref": "blk_d26012e641d644b9",
+            "source": "购物车分表.md",
+            "heading": "购物车数据统计",
+            "similarity": 0.474592
+          },
+          {
+            "block_ref": "blk_b3b3eed0e9996132",
+            "source": "购物车分表.md",
+            "heading": "购物车数据统计",
+            "similarity": 0.464172
+          },
+          {
+            "block_ref": "blk_583b55688f8b3c14",
+            "source": "购物车分表.md",
+            "heading": "购物车数据统计",
+            "similarity": 0.476118
+          }
+        ]
+      },
+      {
+        "id": "cart-004",
+        "query": "购物车分表使用 virtual_uid 单表方案和 cart、device_cart 双表方案各有什么优缺点？",
+        "matched_rank": 1,
+        "retrieved_count": 8,
+        "candidates": [
+          {
+            "block_ref": "blk_e16b90feda97b8af",
+            "source": "购物车分表.md",
+            "heading": "方案对比",
+            "similarity": 0.812897
+          },
+          {
+            "block_ref": "blk_efe7c9b15b6ef701",
+            "source": "购物车分表方案落地.md",
+            "heading": "三、方案 & 细节 > 3.1 方案",
+            "similarity": 0.718253
+          },
+          {
+            "block_ref": "blk_2b68368f37a2e6e1",
+            "source": "购物车分表方案落地.md",
+            "heading": "六、全量计划",
+            "similarity": 0.586788
+          },
+          {
+            "block_ref": "blk_dc534cb5ae3d97d6",
+            "source": "购物车分表分享V2.md",
+            "heading": "方案",
+            "similarity": 0.697847
+          },
+          {
+            "block_ref": "blk_c374c9fd2c346d3f",
+            "source": "购物车分表.md",
+            "heading": "开发设计 > ",
+            "similarity": 0.689086
+          },
+          {
+            "block_ref": "blk_b8ccd8b8ea531a92",
+            "source": "购物车分表分享V2.md",
+            "heading": "参考资料",
+            "similarity": 0.681367
+          },
+          {
+            "block_ref": "blk_0f3eef69e0d9f0e4",
+            "source": "购物车分表方案落地.md",
+            "heading": "一、背景",
+            "similarity": 0.626641
+          },
+          {
+            "block_ref": "blk_dd2d47c63314b046",
+            "source": "购物车分表分享V2.md",
+            "heading": "背景介绍",
+            "similarity": 0.654389
+          }
+        ]
+      },
+      {
+        "id": "cart-005",
+        "query": "购物车分表开发设计最终讨论确定了哪套分表和同步方案？",
+        "matched_rank": 1,
+        "retrieved_count": 8,
+        "candidates": [
+          {
+            "block_ref": "blk_c374c9fd2c346d3f",
+            "source": "购物车分表.md",
+            "heading": "开发设计 > ",
+            "similarity": 0.721969
+          },
+          {
+            "block_ref": "blk_fcdbdcadb8bff1ff",
+            "source": "购物车分表.md",
+            "heading": "开发设计 > 方案1",
+            "similarity": 0.723664
+          },
+          {
+            "block_ref": "blk_c9f511aa73167387",
+            "source": "购物车分表.md",
+            "heading": "开发设计 > 方案2",
+            "similarity": 0.671723
+          },
+          {
+            "block_ref": "blk_efe7c9b15b6ef701",
+            "source": "购物车分表方案落地.md",
+            "heading": "三、方案 & 细节 > 3.1 方案",
+            "similarity": 0.732044
+          },
+          {
+            "block_ref": "blk_dc534cb5ae3d97d6",
+            "source": "购物车分表分享V2.md",
+            "heading": "方案",
+            "similarity": 0.696037
+          },
+          {
+            "block_ref": "blk_b8ccd8b8ea531a92",
+            "source": "购物车分表分享V2.md",
+            "heading": "参考资料",
+            "similarity": 0.683299
+          },
+          {
+            "block_ref": "blk_7950a14e7451b3f9",
+            "source": "简历写法.md",
+            "heading": "3. 业务 > 3.2. C 端-购物车",
+            "similarity": 0.66077
+          },
+          {
+            "block_ref": "blk_e90807cdf37cda90",
+            "source": "购物车分表方案落地.md",
+            "heading": "三、方案 & 细节 > 3.3 数据迁移",
+            "similarity": 0.657515
+          }
+        ]
+      },
+      {
+        "id": "cart-006",
+        "query": "购物车为什么分成 32 张表，新表主键和 cartId 迁移有什么要求？",
+        "matched_rank": 1,
+        "retrieved_count": 8,
+        "candidates": [
+          {
+            "block_ref": "blk_efe7c9b15b6ef701",
+            "source": "购物车分表方案落地.md",
+            "heading": "三、方案 & 细节 > 3.1 方案",
+            "similarity": 0.77812
+          },
+          {
+            "block_ref": "blk_c65bb377420792fb",
+            "source": "购物车分表分享V2.md",
+            "heading": "技术选型",
+            "similarity": 0.748163
+          },
+          {
+            "block_ref": "blk_c374c9fd2c346d3f",
+            "source": "购物车分表.md",
+            "heading": "开发设计 > ",
+            "similarity": 0.737327
+          },
+          {
+            "block_ref": "blk_fcdbdcadb8bff1ff",
+            "source": "购物车分表.md",
+            "heading": "开发设计 > 方案1",
+            "similarity": 0.731463
+          },
+          {
+            "block_ref": "blk_4d3c3c781fd605d8",
+            "source": "购物车分表方案落地.md",
+            "heading": "三、方案 & 细节 > 3.3 数据迁移 > 3.3.1 存量迁移",
+            "similarity": 0.704609
+          },
+          {
+            "block_ref": "blk_583b55688f8b3c14",
+            "source": "购物车分表.md",
+            "heading": "购物车数据统计",
+            "similarity": 0.681842
+          },
+          {
+            "block_ref": "blk_dc534cb5ae3d97d6",
+            "source": "购物车分表分享V2.md",
+            "heading": "方案",
+            "similarity": 0.730515
+          },
+          {
+            "block_ref": "blk_2b68368f37a2e6e1",
+            "source": "购物车分表方案落地.md",
+            "heading": "六、全量计划",
+            "similarity": 0.692632
+          }
+        ]
+      },
+      {
+        "id": "cart-007",
+        "query": "购物车已登录和未登录场景分别使用什么分片键及算法？",
+        "matched_rank": 2,
+        "retrieved_count": 8,
+        "candidates": [
+          {
+            "block_ref": "blk_e16b90feda97b8af",
+            "source": "购物车分表.md",
+            "heading": "方案对比",
+            "similarity": 0.745726
+          },
+          {
+            "block_ref": "blk_efe7c9b15b6ef701",
+            "source": "购物车分表方案落地.md",
+            "heading": "三、方案 & 细节 > 3.1 方案",
+            "similarity": 0.696005
+          },
+          {
+            "block_ref": "blk_c65bb377420792fb",
+            "source": "购物车分表分享V2.md",
+            "heading": "技术选型",
+            "similarity": 0.702813
+          },
+          {
+            "block_ref": "blk_8709c6f1fc8ff1eb",
+            "source": "购物车分表.md",
+            "heading": "交互",
+            "similarity": 0.71186
+          },
+          {
+            "block_ref": "blk_c6f536b7bbedc1f7",
+            "source": "购物车分表方案落地.md",
+            "heading": "二、购物车场景行为",
+            "similarity": 0.663127
+          },
+          {
+            "block_ref": "blk_c374c9fd2c346d3f",
+            "source": "购物车分表.md",
+            "heading": "开发设计 > ",
+            "similarity": 0.661173
+          },
+          {
+            "block_ref": "blk_4d3c3c781fd605d8",
+            "source": "购物车分表方案落地.md",
+            "heading": "三、方案 & 细节 > 3.3 数据迁移 > 3.3.1 存量迁移",
+            "similarity": 0.649004
+          },
+          {
+            "block_ref": "blk_62226631ced3b0f1",
+            "source": "购物车分表分享V2.md",
+            "heading": "遇到的问题及处理",
+            "similarity": 0.623072
+          }
+        ]
+      },
+      {
+        "id": "cart-008",
+        "query": "购物车数据迁移的 AB 实验和灰度表机制如何工作？",
+        "matched_rank": 2,
+        "retrieved_count": 8,
+        "candidates": [
+          {
+            "block_ref": "blk_bfc651af2e714521",
+            "source": "购物车分表方案落地.md",
+            "heading": "三、方案 & 细节 > 3.4 回滚方案",
+            "similarity": 0.706303
+          },
+          {
+            "block_ref": "blk_39b20c364852bdd6",
+            "source": "购物车分表方案落地.md",
+            "heading": "三、方案 & 细节 > 3.2 灰度机制",
+            "similarity": 0.816662
+          },
+          {
+            "block_ref": "blk_4d3c3c781fd605d8",
+            "source": "购物车分表方案落地.md",
+            "heading": "三、方案 & 细节 > 3.3 数据迁移 > 3.3.1 存量迁移",
+            "similarity": 0.723871
+          },
+          {
+            "block_ref": "blk_734f8cd8a2d88587",
+            "source": "Recent Conversations.md",
+            "heading": "购物车灰度迁移全流程答疑",
+            "similarity": 0.766275
+          },
+          {
+            "block_ref": "blk_7950a14e7451b3f9",
+            "source": "简历写法.md",
+            "heading": "3. 业务 > 3.2. C 端-购物车",
+            "similarity": 0.757028
+          },
+          {
+            "block_ref": "blk_55aaf998e9427cb1",
+            "source": "购物车分表方案落地.md",
+            "heading": "三、方案 & 细节 > 3.3 数据迁移 > 3.3.2 增量同步",
+            "similarity": 0.725822
+          },
+          {
+            "block_ref": "blk_c65bb377420792fb",
+            "source": "购物车分表分享V2.md",
+            "heading": "技术选型",
+            "similarity": 0.639119
+          },
+          {
+            "block_ref": "blk_e720f01bc8575955",
+            "source": "购物车分表方案落地.md",
+            "heading": "三、方案 & 细节 > 3.3 数据迁移 > 3.3.3 全量",
+            "similarity": 0.660068
+          }
+        ]
+      },
+      {
+        "id": "cart-009",
+        "query": "购物车存量迁移在登录、未登录和访问购物车列表时分别怎样触发？",
+        "matched_rank": 1,
+        "retrieved_count": 8,
+        "candidates": [
+          {
+            "block_ref": "blk_4d3c3c781fd605d8",
+            "source": "购物车分表方案落地.md",
+            "heading": "三、方案 & 细节 > 3.3 数据迁移 > 3.3.1 存量迁移",
+            "similarity": 0.795329
+          },
+          {
+            "block_ref": "blk_e720f01bc8575955",
+            "source": "购物车分表方案落地.md",
+            "heading": "三、方案 & 细节 > 3.3 数据迁移 > 3.3.3 全量",
+            "similarity": 0.601883
+          },
+          {
+            "block_ref": "blk_efe7c9b15b6ef701",
+            "source": "购物车分表方案落地.md",
+            "heading": "三、方案 & 细节 > 3.1 方案",
+            "similarity": 0.59786
+          },
+          {
+            "block_ref": "blk_c6f536b7bbedc1f7",
+            "source": "购物车分表方案落地.md",
+            "heading": "二、购物车场景行为",
+            "similarity": 0.648078
+          },
+          {
+            "block_ref": "blk_e90807cdf37cda90",
+            "source": "购物车分表方案落地.md",
+            "heading": "三、方案 & 细节 > 3.3 数据迁移",
+            "similarity": 0.637301
+          },
+          {
+            "block_ref": "blk_aeae41d6a7a87e39",
+            "source": "购物车分表方案落地.md",
+            "heading": "四、交互流程图 > 4.3 购物车列表、MQ（数据同步）",
+            "similarity": 0.603783
+          },
+          {
+            "block_ref": "blk_c65bb377420792fb",
+            "source": "购物车分表分享V2.md",
+            "heading": "技术选型",
+            "similarity": 0.620374
+          },
+          {
+            "block_ref": "blk_55aaf998e9427cb1",
+            "source": "购物车分表方案落地.md",
+            "heading": "三、方案 & 细节 > 3.3 数据迁移 > 3.3.2 增量同步",
+            "similarity": 0.600254
+          }
+        ]
+      },
+      {
+        "id": "cart-010",
+        "query": "为什么购物车达到 100% 灰度后，数据层面仍不算真正全量迁移？",
+        "matched_rank": 1,
+        "retrieved_count": 8,
+        "candidates": [
+          {
+            "block_ref": "blk_e720f01bc8575955",
+            "source": "购物车分表方案落地.md",
+            "heading": "三、方案 & 细节 > 3.3 数据迁移 > 3.3.3 全量",
+            "similarity": 0.73029
+          },
+          {
+            "block_ref": "blk_c65bb377420792fb",
+            "source": "购物车分表分享V2.md",
+            "heading": "技术选型",
+            "similarity": 0.578905
+          },
+          {
+            "block_ref": "blk_efe7c9b15b6ef701",
+            "source": "购物车分表方案落地.md",
+            "heading": "三、方案 & 细节 > 3.1 方案",
+            "similarity": 0.515719
+          },
+          {
+            "block_ref": "blk_734f8cd8a2d88587",
+            "source": "Recent Conversations.md",
+            "heading": "购物车灰度迁移全流程答疑",
+            "similarity": 0.737103
+          },
+          {
+            "block_ref": "blk_2b68368f37a2e6e1",
+            "source": "购物车分表方案落地.md",
+            "heading": "六、全量计划",
+            "similarity": 0.719087
+          },
+          {
+            "block_ref": "blk_7950a14e7451b3f9",
+            "source": "简历写法.md",
+            "heading": "3. 业务 > 3.2. C 端-购物车",
+            "similarity": 0.631223
+          },
+          {
+            "block_ref": "blk_4d3c3c781fd605d8",
+            "source": "购物车分表方案落地.md",
+            "heading": "三、方案 & 细节 > 3.3 数据迁移 > 3.3.1 存量迁移",
+            "similarity": 0.681244
+          },
+          {
+            "block_ref": "blk_55aaf998e9427cb1",
+            "source": "购物车分表方案落地.md",
+            "heading": "三、方案 & 细节 > 3.3 数据迁移 > 3.3.2 增量同步",
+            "similarity": 0.668488
+          }
+        ]
+      },
+      {
+        "id": "cart-011",
+        "query": "购物车分表上线后数据异常时，AB 实验、Apollo 开关和旧表如何完成回滚？",
+        "matched_rank": 1,
+        "retrieved_count": 8,
+        "candidates": [
+          {
+            "block_ref": "blk_bfc651af2e714521",
+            "source": "购物车分表方案落地.md",
+            "heading": "三、方案 & 细节 > 3.4 回滚方案",
+            "similarity": 0.818702
+          },
+          {
+            "block_ref": "blk_4d3c3c781fd605d8",
+            "source": "购物车分表方案落地.md",
+            "heading": "三、方案 & 细节 > 3.3 数据迁移 > 3.3.1 存量迁移",
+            "similarity": 0.582994
+          },
+          {
+            "block_ref": "blk_e720f01bc8575955",
+            "source": "购物车分表方案落地.md",
+            "heading": "三、方案 & 细节 > 3.3 数据迁移 > 3.3.3 全量",
+            "similarity": 0.560989
+          },
+          {
+            "block_ref": "blk_7950a14e7451b3f9",
+            "source": "简历写法.md",
+            "heading": "3. 业务 > 3.2. C 端-购物车",
+            "similarity": 0.636697
+          },
+          {
+            "block_ref": "blk_fcdbdcadb8bff1ff",
+            "source": "购物车分表.md",
+            "heading": "开发设计 > 方案1",
+            "similarity": 0.629791
+          },
+          {
+            "block_ref": "blk_734f8cd8a2d88587",
+            "source": "Recent Conversations.md",
+            "heading": "购物车灰度迁移全流程答疑",
+            "similarity": 0.605188
+          },
+          {
+            "block_ref": "blk_39b20c364852bdd6",
+            "source": "购物车分表方案落地.md",
+            "heading": "三、方案 & 细节 > 3.2 灰度机制",
+            "similarity": 0.573865
+          },
+          {
+            "block_ref": "blk_efe7c9b15b6ef701",
+            "source": "购物车分表方案落地.md",
+            "heading": "三、方案 & 细节 > 3.1 方案",
+            "similarity": 0.58349
+          }
+        ]
+      },
+      {
+        "id": "cart-012",
+        "query": "未登录加购后登录与购物车列表并发同步时，为什么要按 uid 加分布式锁？",
+        "matched_rank": 1,
+        "retrieved_count": 8,
+        "candidates": [
+          {
+            "block_ref": "blk_aeae41d6a7a87e39",
+            "source": "购物车分表方案落地.md",
+            "heading": "四、交互流程图 > 4.3 购物车列表、MQ（数据同步）",
+            "similarity": 0.728663
+          },
+          {
+            "block_ref": "blk_c6f536b7bbedc1f7",
+            "source": "购物车分表方案落地.md",
+            "heading": "二、购物车场景行为",
+            "similarity": 0.644499
+          },
+          {
+            "block_ref": "blk_efe7c9b15b6ef701",
+            "source": "购物车分表方案落地.md",
+            "heading": "三、方案 & 细节 > 3.1 方案",
+            "similarity": 0.530597
+          },
+          {
+            "block_ref": "blk_8709c6f1fc8ff1eb",
+            "source": "购物车分表.md",
+            "heading": "交互",
+            "similarity": 0.66238
+          },
+          {
+            "block_ref": "blk_62226631ced3b0f1",
+            "source": "购物车分表分享V2.md",
+            "heading": "遇到的问题及处理",
+            "similarity": 0.64055
+          },
+          {
+            "block_ref": "blk_4d3c3c781fd605d8",
+            "source": "购物车分表方案落地.md",
+            "heading": "三、方案 & 细节 > 3.3 数据迁移 > 3.3.1 存量迁移",
+            "similarity": 0.615203
+          },
+          {
+            "block_ref": "blk_7af6411effaca338",
+            "source": "购物车分表分享V2.md",
+            "heading": "数据同步 > 存量同步",
+            "similarity": 0.632847
+          },
+          {
+            "block_ref": "blk_21d795af8a73d5db",
+            "source": "购物车分表方案落地.md",
+            "heading": "四、交互流程图 > 4.2 获取购物车、购物车商品数量",
+            "similarity": 0.492553
+          }
+        ]
+      },
+      {
+        "id": "cart-013",
+        "query": "购物车分表分享中最终采用了什么技术选型？",
+        "matched_rank": 1,
+        "retrieved_count": 8,
+        "candidates": [
+          {
+            "block_ref": "blk_c65bb377420792fb",
+            "source": "购物车分表分享V2.md",
+            "heading": "技术选型",
+            "similarity": 0.734835
+          },
+          {
+            "block_ref": "blk_b8ccd8b8ea531a92",
+            "source": "购物车分表分享V2.md",
+            "heading": "参考资料",
+            "similarity": 0.704429
+          },
+          {
+            "block_ref": "blk_07f8ef9e3652be33",
+            "source": "购物车分表分享V2.md",
+            "heading": "数据同步 > 增量同步(新注册用户)",
+            "similarity": 0.456108
+          },
+          {
+            "block_ref": "blk_efe7c9b15b6ef701",
+            "source": "购物车分表方案落地.md",
+            "heading": "三、方案 & 细节 > 3.1 方案",
+            "similarity": 0.721931
+          },
+          {
+            "block_ref": "blk_dd2d47c63314b046",
+            "source": "购物车分表分享V2.md",
+            "heading": "背景介绍",
+            "similarity": 0.716764
+          },
+          {
+            "block_ref": "blk_c374c9fd2c346d3f",
+            "source": "购物车分表.md",
+            "heading": "开发设计 > ",
+            "similarity": 0.699072
+          },
+          {
+            "block_ref": "blk_0f3eef69e0d9f0e4",
+            "source": "购物车分表方案落地.md",
+            "heading": "一、背景",
+            "similarity": 0.653309
+          },
+          {
+            "block_ref": "blk_dc534cb5ae3d97d6",
+            "source": "购物车分表分享V2.md",
+            "heading": "方案",
+            "similarity": 0.695624
+          }
+        ]
+      },
+      {
+        "id": "cart-014",
+        "query": "购物车分表分享的背景是什么，为什么原有单表需要治理？",
+        "matched_rank": 1,
+        "retrieved_count": 8,
+        "candidates": [
+          {
+            "block_ref": "blk_dd2d47c63314b046",
+            "source": "购物车分表分享V2.md",
+            "heading": "背景介绍",
+            "similarity": 0.808083
+          },
+          {
+            "block_ref": "blk_e16b90feda97b8af",
+            "source": "购物车分表.md",
+            "heading": "方案对比",
+            "similarity": 0.6809
+          },
+          {
+            "block_ref": "blk_b8ccd8b8ea531a92",
+            "source": "购物车分表分享V2.md",
+            "heading": "参考资料",
+            "similarity": 0.729132
+          },
+          {
+            "block_ref": "blk_dc534cb5ae3d97d6",
+            "source": "购物车分表分享V2.md",
+            "heading": "方案",
+            "similarity": 0.729278
+          },
+          {
+            "block_ref": "blk_efe7c9b15b6ef701",
+            "source": "购物车分表方案落地.md",
+            "heading": "三、方案 & 细节 > 3.1 方案",
+            "similarity": 0.724249
+          },
+          {
+            "block_ref": "blk_0f3eef69e0d9f0e4",
+            "source": "购物车分表方案落地.md",
+            "heading": "一、背景",
+            "similarity": 0.684344
+          },
+          {
+            "block_ref": "blk_c374c9fd2c346d3f",
+            "source": "购物车分表.md",
+            "heading": "开发设计 > ",
+            "similarity": 0.712754
+          },
+          {
+            "block_ref": "blk_d26012e641d644b9",
+            "source": "购物车分表.md",
+            "heading": "购物车数据统计",
+            "similarity": 0.688162
+          }
+        ]
+      },
+      {
+        "id": "cart-015",
+        "query": "购物车存量数据同步的具体做法是什么？",
+        "matched_rank": 4,
+        "retrieved_count": 8,
+        "candidates": [
+          {
+            "block_ref": "blk_c65bb377420792fb",
+            "source": "购物车分表分享V2.md",
+            "heading": "技术选型",
+            "similarity": 0.627852
+          },
+          {
+            "block_ref": "blk_efe7c9b15b6ef701",
+            "source": "购物车分表方案落地.md",
+            "heading": "三、方案 & 细节 > 3.1 方案",
+            "similarity": 0.561509
+          },
+          {
+            "block_ref": "blk_4d3c3c781fd605d8",
+            "source": "购物车分表方案落地.md",
+            "heading": "三、方案 & 细节 > 3.3 数据迁移 > 3.3.1 存量迁移",
+            "similarity": 0.680447
+          },
+          {
+            "block_ref": "blk_7af6411effaca338",
+            "source": "购物车分表分享V2.md",
+            "heading": "数据同步 > 存量同步",
+            "similarity": 0.720776
+          },
+          {
+            "block_ref": "blk_e720f01bc8575955",
+            "source": "购物车分表方案落地.md",
+            "heading": "三、方案 & 细节 > 3.3 数据迁移 > 3.3.3 全量",
+            "similarity": 0.635318
+          },
+          {
+            "block_ref": "blk_aeae41d6a7a87e39",
+            "source": "购物车分表方案落地.md",
+            "heading": "四、交互流程图 > 4.3 购物车列表、MQ（数据同步）",
+            "similarity": 0.635278
+          },
+          {
+            "block_ref": "blk_e90807cdf37cda90",
+            "source": "购物车分表方案落地.md",
+            "heading": "三、方案 & 细节 > 3.3 数据迁移",
+            "similarity": 0.635256
+          },
+          {
+            "block_ref": "blk_55aaf998e9427cb1",
+            "source": "购物车分表方案落地.md",
+            "heading": "三、方案 & 细节 > 3.3 数据迁移 > 3.3.2 增量同步",
+            "similarity": 0.622494
+          }
+        ]
+      },
+      {
+        "id": "cart-016",
+        "query": "购物车分表落地过程中遇到了哪些问题，分别如何处理？",
+        "matched_rank": 1,
+        "retrieved_count": 8,
+        "candidates": [
+          {
+            "block_ref": "blk_62226631ced3b0f1",
+            "source": "购物车分表分享V2.md",
+            "heading": "遇到的问题及处理",
+            "similarity": 0.698172
+          },
+          {
+            "block_ref": "blk_a5e248374e288d1f",
+            "source": "cider-基建2023.md",
+            "heading": "2023-03-30 > 服务端基建 > 运维基建 @吕佳 Haon @贾铮",
+            "similarity": null
+          },
+          {
+            "block_ref": "blk_b8ccd8b8ea531a92",
+            "source": "购物车分表分享V2.md",
+            "heading": "参考资料",
+            "similarity": 0.659925
+          },
+          {
+            "block_ref": "blk_efe7c9b15b6ef701",
+            "source": "购物车分表方案落地.md",
+            "heading": "三、方案 & 细节 > 3.1 方案",
+            "similarity": 0.722453
+          },
+          {
+            "block_ref": "blk_0f3eef69e0d9f0e4",
+            "source": "购物车分表方案落地.md",
+            "heading": "一、背景",
+            "similarity": 0.696455
+          },
+          {
+            "block_ref": "blk_fcdbdcadb8bff1ff",
+            "source": "购物车分表.md",
+            "heading": "开发设计 > 方案1",
+            "similarity": 0.672539
+          },
+          {
+            "block_ref": "blk_ba1cdca6f3c1c7b1",
+            "source": "购物车分表方案落地.md",
+            "heading": "五、改造影响",
+            "similarity": 0.651553
+          },
+          {
+            "block_ref": "blk_dd2d47c63314b046",
+            "source": "购物车分表分享V2.md",
+            "heading": "背景介绍",
+            "similarity": 0.661226
+          }
+        ]
+      },
+      {
+        "id": "cart-017",
+        "query": "购物车分表落地需要覆盖哪些常见购物车行为？",
+        "matched_rank": 1,
+        "retrieved_count": 8,
+        "candidates": [
+          {
+            "block_ref": "blk_c6f536b7bbedc1f7",
+            "source": "购物车分表方案落地.md",
+            "heading": "二、购物车场景行为",
+            "similarity": 0.7431
+          },
+          {
+            "block_ref": "blk_b8ccd8b8ea531a92",
+            "source": "购物车分表分享V2.md",
+            "heading": "参考资料",
+            "similarity": 0.685752
+          },
+          {
+            "block_ref": "blk_21d795af8a73d5db",
+            "source": "购物车分表方案落地.md",
+            "heading": "四、交互流程图 > 4.2 获取购物车、购物车商品数量",
+            "similarity": 0.636048
+          },
+          {
+            "block_ref": "blk_efe7c9b15b6ef701",
+            "source": "购物车分表方案落地.md",
+            "heading": "三、方案 & 细节 > 3.1 方案",
+            "similarity": 0.717568
+          },
+          {
+            "block_ref": "blk_0f3eef69e0d9f0e4",
+            "source": "购物车分表方案落地.md",
+            "heading": "一、背景",
+            "similarity": 0.70753
+          },
+          {
+            "block_ref": "blk_ba1cdca6f3c1c7b1",
+            "source": "购物车分表方案落地.md",
+            "heading": "五、改造影响",
+            "similarity": 0.672921
+          },
+          {
+            "block_ref": "blk_d26012e641d644b9",
+            "source": "购物车分表.md",
+            "heading": "购物车数据统计",
+            "similarity": 0.65043
+          },
+          {
+            "block_ref": "blk_dd2d47c63314b046",
+            "source": "购物车分表分享V2.md",
+            "heading": "背景介绍",
+            "similarity": 0.680437
+          }
+        ]
+      },
+      {
+        "id": "cart-018",
+        "query": "购物车分表后，SPU 加购数量等需要全表统计的功能如何兼容？",
+        "matched_rank": 1,
+        "retrieved_count": 8,
+        "candidates": [
+          {
+            "block_ref": "blk_ba1cdca6f3c1c7b1",
+            "source": "购物车分表方案落地.md",
+            "heading": "五、改造影响",
+            "similarity": 0.811493
+          },
+          {
+            "block_ref": "blk_dc534cb5ae3d97d6",
+            "source": "购物车分表分享V2.md",
+            "heading": "方案",
+            "similarity": 0.692865
+          },
+          {
+            "block_ref": "blk_c374c9fd2c346d3f",
+            "source": "购物车分表.md",
+            "heading": "开发设计 > ",
+            "similarity": 0.682052
+          },
+          {
+            "block_ref": "blk_d26012e641d644b9",
+            "source": "购物车分表.md",
+            "heading": "购物车数据统计",
+            "similarity": 0.66663
+          },
+          {
+            "block_ref": "blk_583b55688f8b3c14",
+            "source": "购物车分表.md",
+            "heading": "购物车数据统计",
+            "similarity": 0.670292
+          },
+          {
+            "block_ref": "blk_b8ccd8b8ea531a92",
+            "source": "购物车分表分享V2.md",
+            "heading": "参考资料",
+            "similarity": 0.659308
+          },
+          {
+            "block_ref": "blk_dd2d47c63314b046",
+            "source": "购物车分表分享V2.md",
+            "heading": "背景介绍",
+            "similarity": 0.678197
+          },
+          {
+            "block_ref": "blk_c6f536b7bbedc1f7",
+            "source": "购物车分表方案落地.md",
+            "heading": "二、购物车场景行为",
+            "similarity": 0.623938
+          }
+        ]
+      },
+      {
+        "id": "cart-019",
+        "query": "购物车全量切换后，历史非活跃数据和变化后的 cart ID 如何处理？",
+        "matched_rank": 1,
+        "retrieved_count": 8,
+        "candidates": [
+          {
+            "block_ref": "blk_2b68368f37a2e6e1",
+            "source": "购物车分表方案落地.md",
+            "heading": "六、全量计划",
+            "similarity": 0.668424
+          },
+          {
+            "block_ref": "blk_efe7c9b15b6ef701",
+            "source": "购物车分表方案落地.md",
+            "heading": "三、方案 & 细节 > 3.1 方案",
+            "similarity": 0.576187
+          },
+          {
+            "block_ref": "blk_bfc651af2e714521",
+            "source": "购物车分表方案落地.md",
+            "heading": "三、方案 & 细节 > 3.4 回滚方案",
+            "similarity": 0.550781
+          },
+          {
+            "block_ref": "blk_4d3c3c781fd605d8",
+            "source": "购物车分表方案落地.md",
+            "heading": "三、方案 & 细节 > 3.3 数据迁移 > 3.3.1 存量迁移",
+            "similarity": 0.6404
+          },
+          {
+            "block_ref": "blk_e720f01bc8575955",
+            "source": "购物车分表方案落地.md",
+            "heading": "三、方案 & 细节 > 3.3 数据迁移 > 3.3.3 全量",
+            "similarity": 0.639581
+          },
+          {
+            "block_ref": "blk_fcdbdcadb8bff1ff",
+            "source": "购物车分表.md",
+            "heading": "开发设计 > 方案1",
+            "similarity": 0.623639
+          },
+          {
+            "block_ref": "blk_62226631ced3b0f1",
+            "source": "购物车分表分享V2.md",
+            "heading": "遇到的问题及处理",
+            "similarity": 0.590431
+          },
+          {
+            "block_ref": "blk_c374c9fd2c346d3f",
+            "source": "购物车分表.md",
+            "heading": "开发设计 > ",
+            "similarity": 0.573266
+          }
+        ]
+      },
+      {
+        "id": "cart-020",
+        "query": "好像有用一些厂商的分表对比，比如说京东、淘宝等对比，和公司的对比，我想问一下这些对比的详情是什么样的",
+        "matched_rank": 1,
+        "retrieved_count": 1,
+        "candidates": [
+          {
+            "block_ref": "blk_8709c6f1fc8ff1eb",
+            "source": "购物车分表.md",
+            "heading": "交互",
+            "similarity": 0.411153
+          }
+        ]
+      },
+      {
+        "id": "ops-001",
+        "query": "Java 服务 OOM 后如何生成、下载并分析 heap dump？",
+        "matched_rank": 3,
+        "retrieved_count": 4,
+        "candidates": [
+          {
+            "block_ref": "blk_0d200cbd9b1c490a",
+            "source": "AWS集群如何下载, 保存线上文件以及dump.md",
+            "heading": "Dump 方式 > 手动 dump",
+            "similarity": 0.577069
+          },
+          {
+            "block_ref": "blk_2ee8bc5005c34eae",
+            "source": "八股文随笔.md",
+            "heading": "场景面经",
+            "similarity": 0.404408
+          },
+          {
+            "block_ref": "blk_a92318f3aa2dcb68",
+            "source": "CPU和内存溢出排查.md",
+            "heading": "内存溢出排查",
+            "similarity": 0.623522
+          },
+          {
+            "block_ref": "blk_6716fe3aecf469fb",
+            "source": "推荐服务重启问题排查.md",
+            "heading": "ByteBuffer 引发的 OOM 问题",
+            "similarity": 0.532572
+          }
+        ]
+      },
+      {
+        "id": "ops-002",
+        "query": "发生 OOM 时自动记录堆快照需要配置哪些 JVM 参数？",
+        "matched_rank": 2,
+        "retrieved_count": 3,
+        "candidates": [
+          {
+            "block_ref": "blk_8480ed4f10be94f8",
+            "source": "CPU和内存溢出排查.md",
+            "heading": "Jvm信息 > 参数说明",
+            "similarity": 0.619879
+          },
+          {
+            "block_ref": "blk_a92318f3aa2dcb68",
+            "source": "CPU和内存溢出排查.md",
+            "heading": "内存溢出排查",
+            "similarity": 0.568888
+          },
+          {
+            "block_ref": "blk_52dd247d03ee6131",
+            "source": "推荐服务重启问题排查.md",
+            "heading": "JVM Crash",
+            "similarity": 0.456654
+          }
+        ]
+      },
+      {
+        "id": "ops-003",
+        "query": "CPU 过载时如何从 top 的进程和线程定位到 jstack 中的具体代码？",
+        "matched_rank": 1,
+        "retrieved_count": 8,
+        "candidates": [
+          {
+            "block_ref": "blk_4cf1c8cf8dae356c",
+            "source": "CPU和内存溢出排查.md",
+            "heading": "CPU过载排查",
+            "similarity": 0.751237
+          },
+          {
+            "block_ref": "blk_2ee8bc5005c34eae",
+            "source": "八股文随笔.md",
+            "heading": "场景面经",
+            "similarity": 0.487276
+          },
+          {
+            "block_ref": "blk_cb1e5fd003cc0141",
+            "source": "线上死循环导致MQ消息堆积问题排查.md",
+            "heading": "",
+            "similarity": 0.463355
+          },
+          {
+            "block_ref": "blk_867bb75b7a474621",
+            "source": "0324.md",
+            "heading": "",
+            "similarity": 0.660221
+          },
+          {
+            "block_ref": "blk_c87fff10f82dca26",
+            "source": "推荐服务CPU高占用排查一一GSON并发修改导致的死循环.md",
+            "heading": "问题定位 > Arthash 确认 > 打印火焰图",
+            "similarity": 0.506944
+          },
+          {
+            "block_ref": "blk_2dfd5c1536c1e979",
+            "source": "推荐服务CPU高占用排查一一GSON并发修改导致的死循环.md",
+            "heading": "问题定位 > 异常线程分析",
+            "similarity": 0.505586
+          },
+          {
+            "block_ref": "blk_a92318f3aa2dcb68",
+            "source": "CPU和内存溢出排查.md",
+            "heading": "内存溢出排查",
+            "similarity": 0.50754
+          },
+          {
+            "block_ref": "blk_917e9af4071a6f8d",
+            "source": "CPU和内存溢出排查.md",
+            "heading": "常见场景排查思路",
+            "similarity": 0.515486
+          }
+        ]
+      },
+      {
+        "id": "ops-004",
+        "query": "不能使用 ping 时怎样用 hping3、nc、tcping 或 curl 检查网络和端口？",
+        "matched_rank": 1,
+        "retrieved_count": 1,
+        "candidates": [
+          {
+            "block_ref": "blk_0be0f897cbc55f53",
+            "source": "CPU和内存溢出排查.md",
+            "heading": "网络查询",
+            "similarity": 0.54192
+          }
+        ]
+      },
+      {
+        "id": "ops-005",
+        "query": "jstat -gc 输出中的 S0、E、O、YGC、FGC 和 GCT 分别是什么意思？",
+        "matched_rank": 1,
+        "retrieved_count": 2,
+        "candidates": [
+          {
+            "block_ref": "blk_6d21cdc6ddc8d8d2",
+            "source": "CPU和内存溢出排查.md",
+            "heading": "Jvm信息 > 参数说明 > jstat -gc",
+            "similarity": 0.712129
+          },
+          {
+            "block_ref": "blk_40fe644a5685c4e2",
+            "source": "CPU和内存溢出排查.md",
+            "heading": "Jvm信息 > 参数说明 > 排查参数",
+            "similarity": 0.375501
+          }
+        ]
+      },
+      {
+        "id": "ops-006",
+        "query": "Arthas 如何使用 watch 查看方法参数和返回值？",
+        "matched_rank": 1,
+        "retrieved_count": 5,
+        "candidates": [
+          {
+            "block_ref": "blk_c88f744b931db091",
+            "source": "CPU和内存溢出排查.md",
+            "heading": "通过arthas进行排查 > 查看返回值等",
+            "similarity": 0.648496
+          },
+          {
+            "block_ref": "blk_30259d901110a585",
+            "source": "实时在线Debug问题定位与解决实战分享.md",
+            "heading": "Arthas 调试 > watch命令",
+            "similarity": 0.736889
+          },
+          {
+            "block_ref": "blk_cb1e5fd003cc0141",
+            "source": "线上死循环导致MQ消息堆积问题排查.md",
+            "heading": "",
+            "similarity": null
+          },
+          {
+            "block_ref": "blk_0e2782343b3b7205",
+            "source": "CPU和内存溢出排查.md",
+            "heading": "通过arthas进行排查 > 执行spring实例方法（动态方法）",
+            "similarity": 0.536582
+          },
+          {
+            "block_ref": "blk_aa1800bc1335c179",
+            "source": "实时在线Debug问题定位与解决实战分享.md",
+            "heading": "Arthas 调试 > 缺点",
+            "similarity": 0.560196
+          }
+        ]
+      },
+      {
+        "id": "ops-007",
+        "query": "Arthas 如何获取类加载器 hash 并动态修改 ROOT 日志级别？",
+        "matched_rank": 1,
+        "retrieved_count": 2,
+        "candidates": [
+          {
+            "block_ref": "blk_3fb5ecae0eaf0d76",
+            "source": "CPU和内存溢出排查.md",
+            "heading": "通过arthas进行排查 > 修改日志级别",
+            "similarity": 0.623318
+          },
+          {
+            "block_ref": "blk_dfc0ae129776d1ad",
+            "source": "CPU和内存溢出排查.md",
+            "heading": "通过arthas进行排查 > 类加载器的哈希值",
+            "similarity": 0.57757
+          }
+        ]
+      },
+      {
+        "id": "ops-008",
+        "query": "如何用 vmtool 获取 Spring ApplicationContext 并执行实例 Bean 方法？",
+        "matched_rank": 1,
+        "retrieved_count": 2,
+        "candidates": [
+          {
+            "block_ref": "blk_0e2782343b3b7205",
+            "source": "CPU和内存溢出排查.md",
+            "heading": "通过arthas进行排查 > 执行spring实例方法（动态方法）",
+            "similarity": 0.602314
+          },
+          {
+            "block_ref": "blk_d30780a2d361f27d",
+            "source": "CPU和内存溢出排查.md",
+            "heading": "通过arthas进行排查 > 执行spring实例方法（动态方法）",
+            "similarity": 0.669935
+          }
+        ]
+      },
+      {
+        "id": "incident-001",
+        "query": "内网 APISIX 发版后所有服务无法访问的最根本原因是什么？",
+        "matched_rank": 1,
+        "retrieved_count": 8,
+        "candidates": [
+          {
+            "block_ref": "blk_3ab20730b915ac0f",
+            "source": "2024年11月26日，内网apisix发版服务访问失败.md",
+            "heading": "发生原因",
+            "similarity": 0.784109
+          },
+          {
+            "block_ref": "blk_8dd3b5e384bef718",
+            "source": "2024年11月26日，内网apisix发版服务访问失败.md",
+            "heading": "时间线 > 2024-11-26 > 20: 46",
+            "similarity": 0.71306
+          },
+          {
+            "block_ref": "blk_87e3437bf4c0413c",
+            "source": "2024年11月26日，内网apisix发版服务访问失败.md",
+            "heading": "发生原因 > 为什么configMap不对了？",
+            "similarity": 0.596291
+          },
+          {
+            "block_ref": "blk_01cb3a4d5c0ba490",
+            "source": "2024年11月26日，内网apisix发版服务访问失败.md",
+            "heading": "解决过程",
+            "similarity": 0.767139
+          },
+          {
+            "block_ref": "blk_e0966604e073af2f",
+            "source": "2024年11月26日，内网apisix发版服务访问失败.md",
+            "heading": "如何避免 > 1、服务探活逻辑增加路由验证",
+            "similarity": 0.725355
+          },
+          {
+            "block_ref": "blk_e24ea66629293d7c",
+            "source": "2024年11月26日，内网apisix发版服务访问失败.md",
+            "heading": "时间线 > 2024-11-26 > 20: 41",
+            "similarity": 0.690857
+          },
+          {
+            "block_ref": "blk_31d343781481ddda",
+            "source": "2024年11月26日，内网apisix发版服务访问失败.md",
+            "heading": "时间线 > 2024-11-26 > 20: 38",
+            "similarity": 0.698369
+          },
+          {
+            "block_ref": "blk_df6f687c85c005cd",
+            "source": "2024年11月26日，内网apisix发版服务访问失败.md",
+            "heading": "时间线 > 2024-11-26 > 20: 23",
+            "similarity": 0.705601
+          }
+        ]
+      },
+      {
+        "id": "incident-002",
+        "query": "为什么 APISIX 使用的 ConfigMap 会不可信且无法追查历史？",
+        "matched_rank": 1,
+        "retrieved_count": 8,
+        "candidates": [
+          {
+            "block_ref": "blk_87e3437bf4c0413c",
+            "source": "2024年11月26日，内网apisix发版服务访问失败.md",
+            "heading": "发生原因 > 为什么configMap不对了？",
+            "similarity": 0.715724
+          },
+          {
+            "block_ref": "blk_3ab20730b915ac0f",
+            "source": "2024年11月26日，内网apisix发版服务访问失败.md",
+            "heading": "发生原因",
+            "similarity": 0.527833
+          },
+          {
+            "block_ref": "blk_a700c481868a4b6d",
+            "source": "2024年11月26日，内网apisix发版服务访问失败.md",
+            "heading": "附录 > configMap 格式化失败导致apisix未能正确初始化",
+            "similarity": 0.661661
+          },
+          {
+            "block_ref": "blk_05f1c0720e46daeb",
+            "source": "2024年11月26日，内网apisix发版服务访问失败.md",
+            "heading": "如何避免 > 2、k8s中apisix configMap的管理规范化",
+            "similarity": 0.66932
+          },
+          {
+            "block_ref": "blk_8dd3b5e384bef718",
+            "source": "2024年11月26日，内网apisix发版服务访问失败.md",
+            "heading": "时间线 > 2024-11-26 > 20: 46",
+            "similarity": 0.581887
+          },
+          {
+            "block_ref": "blk_75277fea28e1e978",
+            "source": "2024年11月26日，内网apisix发版服务访问失败.md",
+            "heading": "如何避免 > 3、核心服务发版延长更新周期 / 4、网关发版时，扩大验证范围 / 5、发布平台支持configMap管理",
+            "similarity": 0.541313
+          },
+          {
+            "block_ref": "blk_87fb190671d9bd61",
+            "source": "2024年11月26日，内网apisix发版服务访问失败.md",
+            "heading": "时间线 > 2024-11-26 > 20: 55 / 21: 09",
+            "similarity": 0.514104
+          },
+          {
+            "block_ref": "blk_7f6dac46b2a24587",
+            "source": "2024年11月26日，内网apisix发版服务访问失败.md",
+            "heading": "发生原因 > 为何回滚失败",
+            "similarity": 0.514192
+          }
+        ]
+      },
+      {
+        "id": "incident-003",
+        "query": "APISIX 灰度发布为什么没有提前验证出路由问题？",
+        "matched_rank": 1,
+        "retrieved_count": 8,
+        "candidates": [
+          {
+            "block_ref": "blk_36fe6b731dafe03d",
+            "source": "2024年11月26日，内网apisix发版服务访问失败.md",
+            "heading": "发生原因 > 为何灰度发布没有验证出问题",
+            "similarity": 0.828679
+          },
+          {
+            "block_ref": "blk_1cc692973d980be2",
+            "source": "2025年05月29日，K8S路由异常导致商品服务无法访问.md",
+            "heading": "事故复盘 > 为什么灰度路由存在，而灰度POD不存在？",
+            "similarity": 0.686134
+          },
+          {
+            "block_ref": "blk_c126a2bf9fa40f34",
+            "source": "cider-基建2023.md",
+            "heading": "2023-04-20 > 服务端基建 > 网关服务Apisix @孟宪超",
+            "similarity": 0.56349
+          },
+          {
+            "block_ref": "blk_0355a47eede098d4",
+            "source": "ApiSix 网关介绍.md",
+            "heading": "灰度路由",
+            "similarity": 0.685142
+          },
+          {
+            "block_ref": "blk_ee2fe412542d0eef",
+            "source": "2024年11月26日，内网apisix发版服务访问失败.md",
+            "heading": "时间线 > 2024-11-26 > 19: 26",
+            "similarity": 0.644187
+          },
+          {
+            "block_ref": "blk_5be45e0328618315",
+            "source": "cider-基建2023.md",
+            "heading": "2023-11-30 > 服务端基础服务 > 缓存 > APISIX网关",
+            "similarity": 0.607166
+          },
+          {
+            "block_ref": "blk_b26a7e38fbaf34a5",
+            "source": "cider-基建2023.md",
+            "heading": "2023-04-27 > 服务端基建 > 网关服务Apisix @孟宪超",
+            "similarity": 0.576801
+          },
+          {
+            "block_ref": "blk_3f5cd2cdfaacaf8f",
+            "source": "2025年05月29日，K8S路由异常导致商品服务无法访问.md",
+            "heading": "事故复盘 > 未解之谜",
+            "similarity": 0.564378
+          }
+        ]
+      },
+      {
+        "id": "incident-004",
+        "query": "APISIX 发布平台回滚为什么失败，k8s-app 标签和 OpenKruise 带来了什么影响？",
+        "matched_rank": 1,
+        "retrieved_count": 8,
+        "candidates": [
+          {
+            "block_ref": "blk_7f6dac46b2a24587",
+            "source": "2024年11月26日，内网apisix发版服务访问失败.md",
+            "heading": "发生原因 > 为何回滚失败",
+            "similarity": 0.819032
+          },
+          {
+            "block_ref": "blk_78d9cb503a73b93f",
+            "source": "2024年11月26日，内网apisix发版服务访问失败.md",
+            "heading": "时间线 > 2024-11-26 > 20: 40",
+            "similarity": 0.682322
+          },
+          {
+            "block_ref": "blk_75277fea28e1e978",
+            "source": "2024年11月26日，内网apisix发版服务访问失败.md",
+            "heading": "如何避免 > 3、核心服务发版延长更新周期 / 4、网关发版时，扩大验证范围 / 5、发布平台支持configMap管理",
+            "similarity": 0.559447
+          },
+          {
+            "block_ref": "blk_3fa168df717122e3",
+            "source": "2024年12月02日，支付收银台异常.md",
+            "heading": "发生原因 > 为什么回滚失败？",
+            "similarity": 0.649738
+          },
+          {
+            "block_ref": "blk_0995ee3bece21272",
+            "source": "2023年01月05日，plutus-prd环境不可用.md",
+            "heading": "事故复盘",
+            "similarity": 0.622906
+          },
+          {
+            "block_ref": "blk_b549d5ece398a7a8",
+            "source": "2025年05月29日，K8S路由异常导致商品服务无法访问.md",
+            "heading": "事故复盘 > 为什么Product服务的标签会丢失？",
+            "similarity": 0.603915
+          },
+          {
+            "block_ref": "blk_0355a47eede098d4",
+            "source": "ApiSix 网关介绍.md",
+            "heading": "灰度路由",
+            "similarity": 0.584222
+          },
+          {
+            "block_ref": "blk_e24ea66629293d7c",
+            "source": "2024年11月26日，内网apisix发版服务访问失败.md",
+            "heading": "时间线 > 2024-11-26 > 20: 41",
+            "similarity": 0.561034
+          }
+        ]
+      },
+      {
+        "id": "incident-005",
+        "query": "APISIX 服务探活流程应该怎样增加路由验证？",
+        "matched_rank": 1,
+        "retrieved_count": 8,
+        "candidates": [
+          {
+            "block_ref": "blk_e0966604e073af2f",
+            "source": "2024年11月26日，内网apisix发版服务访问失败.md",
+            "heading": "如何避免 > 1、服务探活逻辑增加路由验证",
+            "similarity": 0.691122
+          },
+          {
+            "block_ref": "blk_36fe6b731dafe03d",
+            "source": "2024年11月26日，内网apisix发版服务访问失败.md",
+            "heading": "发生原因 > 为何灰度发布没有验证出问题",
+            "similarity": 0.504572
+          },
+          {
+            "block_ref": "blk_54ded9ff03a77432",
+            "source": "cider-基建2023.md",
+            "heading": "2023-04-05 > 服务端基建 > 网关服务Apisix @孟宪超",
+            "similarity": 0.552551
+          },
+          {
+            "block_ref": "blk_11342d8964302d8f",
+            "source": "基础服务_QA.md",
+            "heading": "APISIX网关",
+            "similarity": 0.565003
+          },
+          {
+            "block_ref": "blk_ffd6de3db29ec1ce",
+            "source": "cider-基建2023.md",
+            "heading": "2023-03-23 > 服务端基建 > 网关服务Apisix @孟宪超",
+            "similarity": 0.555082
+          },
+          {
+            "block_ref": "blk_b26a7e38fbaf34a5",
+            "source": "cider-基建2023.md",
+            "heading": "2023-04-27 > 服务端基建 > 网关服务Apisix @孟宪超",
+            "similarity": 0.534829
+          },
+          {
+            "block_ref": "blk_4b50bbba8be31806",
+            "source": "cider-基建2023.md",
+            "heading": "2023-06-01 > 服务端基建 > 网关服务Apisix @孟宪超",
+            "similarity": 0.537098
+          },
+          {
+            "block_ref": "blk_75277fea28e1e978",
+            "source": "2024年11月26日，内网apisix发版服务访问失败.md",
+            "heading": "如何避免 > 3、核心服务发版延长更新周期 / 4、网关发版时，扩大验证范围 / 5、发布平台支持configMap管理",
+            "similarity": 0.51013
+          }
+        ]
+      },
+      {
+        "id": "incident-006",
+        "query": "APISIX 的 ConfigMap 应如何通过 GitLab 和发布平台进行版本化管理？",
+        "matched_rank": 1,
+        "retrieved_count": 8,
+        "candidates": [
+          {
+            "block_ref": "blk_05f1c0720e46daeb",
+            "source": "2024年11月26日，内网apisix发版服务访问失败.md",
+            "heading": "如何避免 > 2、k8s中apisix configMap的管理规范化",
+            "similarity": 0.767392
+          },
+          {
+            "block_ref": "blk_75277fea28e1e978",
+            "source": "2024年11月26日，内网apisix发版服务访问失败.md",
+            "heading": "如何避免 > 3、核心服务发版延长更新周期 / 4、网关发版时，扩大验证范围 / 5、发布平台支持configMap管理",
+            "similarity": 0.609555
+          },
+          {
+            "block_ref": "blk_87e3437bf4c0413c",
+            "source": "2024年11月26日，内网apisix发版服务访问失败.md",
+            "heading": "发生原因 > 为什么configMap不对了？",
+            "similarity": 0.596516
+          },
+          {
+            "block_ref": "blk_44643e423fdc7e3d",
+            "source": "cider-基建2023.md",
+            "heading": "2023-09-21 > 服务端基础服务 > 云原生的架构 > APISIX网关",
+            "similarity": 0.620812
+          },
+          {
+            "block_ref": "blk_11342d8964302d8f",
+            "source": "基础服务_QA.md",
+            "heading": "APISIX网关",
+            "similarity": 0.615694
+          },
+          {
+            "block_ref": "blk_6f87d31456f89b0f",
+            "source": "cider-基建2023.md",
+            "heading": "2023-09-28 > 服务端基础服务 > 云原生的架构 > APISIX网关 / API管理平台",
+            "similarity": 0.573571
+          },
+          {
+            "block_ref": "blk_3fce3a642b6d8c12",
+            "source": "cider-基建2023.md",
+            "heading": "2022-11-31 > 服务端基建 > 运维基建 @吕佳 Haon @贾铮",
+            "similarity": 0.511291
+          },
+          {
+            "block_ref": "blk_e0966604e073af2f",
+            "source": "2024年11月26日，内网apisix发版服务访问失败.md",
+            "heading": "如何避免 > 1、服务探活逻辑增加路由验证",
+            "similarity": 0.469813
+          }
+        ]
+      },
+      {
+        "id": "incident-007",
+        "query": "内网 APISIX 事故最终通过哪些步骤恢复服务？",
+        "matched_rank": 3,
+        "retrieved_count": 8,
+        "candidates": [
+          {
+            "block_ref": "blk_fe86fa54c4c430fd",
+            "source": "2024年11月26日，内网apisix发版服务访问失败.md",
+            "heading": "事故影响",
+            "similarity": 0.636834
+          },
+          {
+            "block_ref": "blk_78cd0b80b2914da1",
+            "source": "2024年11月26日，内网apisix发版服务访问失败.md",
+            "heading": "时间线 > 2024-11-26 > 20: 49",
+            "similarity": 0.630979
+          },
+          {
+            "block_ref": "blk_01cb3a4d5c0ba490",
+            "source": "2024年11月26日，内网apisix发版服务访问失败.md",
+            "heading": "解决过程",
+            "similarity": 0.732615
+          },
+          {
+            "block_ref": "blk_3ab20730b915ac0f",
+            "source": "2024年11月26日，内网apisix发版服务访问失败.md",
+            "heading": "发生原因",
+            "similarity": 0.650573
+          },
+          {
+            "block_ref": "blk_e0966604e073af2f",
+            "source": "2024年11月26日，内网apisix发版服务访问失败.md",
+            "heading": "如何避免 > 1、服务探活逻辑增加路由验证",
+            "similarity": 0.639872
+          },
+          {
+            "block_ref": "blk_87fb190671d9bd61",
+            "source": "2024年11月26日，内网apisix发版服务访问失败.md",
+            "heading": "时间线 > 2024-11-26 > 20: 55 / 21: 09",
+            "similarity": 0.624288
+          },
+          {
+            "block_ref": "blk_df6f687c85c005cd",
+            "source": "2024年11月26日，内网apisix发版服务访问失败.md",
+            "heading": "时间线 > 2024-11-26 > 20: 23",
+            "similarity": 0.614112
+          },
+          {
+            "block_ref": "blk_ee2fe412542d0eef",
+            "source": "2024年11月26日，内网apisix发版服务访问失败.md",
+            "heading": "时间线 > 2024-11-26 > 19: 26",
+            "similarity": 0.614739
+          }
+        ]
+      },
+      {
+        "id": "tracking-001",
+        "query": "埋点 SPM 的站点、页面、区块和点位基础组成规则是什么？",
+        "matched_rank": 1,
+        "retrieved_count": 8,
+        "candidates": [
+          {
+            "block_ref": "blk_c06b20a46d08bc32",
+            "source": "埋点2.0设计文档V2.0.1.md",
+            "heading": "二、SPM及SCM设计 > 1、SPM > 1.1 规则",
+            "similarity": 0.86077
+          },
+          {
+            "block_ref": "blk_30309d0338d5be4c",
+            "source": "埋点后台一期2.0.md",
+            "heading": "4.spm scm",
+            "similarity": 0.774117
+          },
+          {
+            "block_ref": "blk_9f8012990ed0df24",
+            "source": "埋点2.0设计文档V2.0.1.md",
+            "heading": "三、事件设计 > 2、商品曝光&点击 > 2.1 spm",
+            "similarity": 0.800058
+          },
+          {
+            "block_ref": "blk_a94f831e78144506",
+            "source": "埋点2.0设计文档V2.0.2.md",
+            "heading": "二、SPM及SCM设计 > 1、SPM > 1.1 规则",
+            "similarity": 0.831379
+          },
+          {
+            "block_ref": "blk_319dde31cec4afbc",
+            "source": "埋点2.0设计文档V2.0.1.md",
+            "heading": "二、SPM及SCM设计 > 1、SPM > 1.1 规则",
+            "similarity": 0.829304
+          },
+          {
+            "block_ref": "blk_1750bdf8b8fbfc22",
+            "source": "埋点2.0设计文档V2.0.1.md",
+            "heading": "三、事件设计 > 1、首页运营位曝光&点击 > 1.1 spm",
+            "similarity": 0.770688
+          },
+          {
+            "block_ref": "blk_a148e9361bb0f82f",
+            "source": "埋点2.0设计文档V2.0.1.md",
+            "heading": "三、事件设计 > 3、添加心愿单 & 添加购物车 > 3.1 spm",
+            "similarity": 0.723018
+          },
+          {
+            "block_ref": "blk_f8403b3272da8ace",
+            "source": "埋点2.0改造计划.md",
+            "heading": "SPM设计",
+            "similarity": 0.721679
+          }
+        ]
+      },
+      {
+        "id": "tracking-002",
+        "query": "埋点 SCM 的模块、AB 实验和内容 ID 如何组成？",
+        "matched_rank": 2,
+        "retrieved_count": 8,
+        "candidates": [
+          {
+            "block_ref": "blk_53187b32f549ef94",
+            "source": "埋点2.0设计文档V2.0.2.md",
+            "heading": "二、SPM及SCM设计 > 2、SCM > 2.1 规则",
+            "similarity": 0.801868
+          },
+          {
+            "block_ref": "blk_8dbe96ed072f5ab4",
+            "source": "埋点2.0设计文档V2.0.1.md",
+            "heading": "二、SPM及SCM设计 > 2、SCM > 2.1 规则",
+            "similarity": 0.804611
+          },
+          {
+            "block_ref": "blk_b811f7d256550590",
+            "source": "埋点2.0设计文档V2.0.1.md",
+            "heading": "三、事件设计 > 1、首页运营位曝光&点击 > 1.3 字段映射",
+            "similarity": 0.609069
+          },
+          {
+            "block_ref": "blk_452b9b3d3c9a644d",
+            "source": "埋点2.0设计文档V2.0.1.md",
+            "heading": "二、SPM及SCM设计 > 2、SCM > 2.1 规则",
+            "similarity": 0.820759
+          },
+          {
+            "block_ref": "blk_3fa32cbca564f682",
+            "source": "埋点2.0设计文档V2.0.1.md",
+            "heading": "三、事件设计 > 1、首页运营位曝光&点击 > 1.2 scm",
+            "similarity": 0.792601
+          },
+          {
+            "block_ref": "blk_b76fdb832f8c8c6a",
+            "source": "埋点2.0设计文档V2.0.1.md",
+            "heading": "三、事件设计 > 2、商品曝光&点击 > 2.2 scm",
+            "similarity": 0.724835
+          },
+          {
+            "block_ref": "blk_30309d0338d5be4c",
+            "source": "埋点后台一期2.0.md",
+            "heading": "4.spm scm",
+            "similarity": 0.68023
+          },
+          {
+            "block_ref": "blk_6bf43ded7711d182",
+            "source": "埋点2.0设计文档V2.0.1.md",
+            "heading": "三、事件设计 > 1、首页运营位曝光&点击 > 1.2 scm",
+            "similarity": 0.735084
+          }
+        ]
+      },
+      {
+        "id": "tracking-003",
+        "query": "首页运营位曝光和点击事件的 SPM 如何拼接？",
+        "matched_rank": 2,
+        "retrieved_count": 8,
+        "candidates": [
+          {
+            "block_ref": "blk_fe4a39ac6779ff87",
+            "source": "埋点2.0设计文档V2.0.2.md",
+            "heading": "三、事件设计 > 1、首页运营位曝光&点击 > 1.1 spm",
+            "similarity": 0.815832
+          },
+          {
+            "block_ref": "blk_3e16adf71abe0b92",
+            "source": "埋点2.0设计文档V2.0.1.md",
+            "heading": "三、事件设计 > 1、首页运营位曝光&点击 > 1.1 spm",
+            "similarity": 0.8211
+          },
+          {
+            "block_ref": "blk_b811f7d256550590",
+            "source": "埋点2.0设计文档V2.0.1.md",
+            "heading": "三、事件设计 > 1、首页运营位曝光&点击 > 1.3 字段映射",
+            "similarity": 0.804858
+          },
+          {
+            "block_ref": "blk_1750bdf8b8fbfc22",
+            "source": "埋点2.0设计文档V2.0.1.md",
+            "heading": "三、事件设计 > 1、首页运营位曝光&点击 > 1.1 spm",
+            "similarity": 0.855319
+          },
+          {
+            "block_ref": "blk_57fd211a09410eb0",
+            "source": "埋点2.0设计文档V2.0.1.md",
+            "heading": "三、事件设计 > 1、首页运营位曝光&点击",
+            "similarity": 0.776263
+          },
+          {
+            "block_ref": "blk_a46de43531cfc000",
+            "source": "埋点2.0设计文档V2.0.2.md",
+            "heading": "三、事件设计 > 2、商品曝光&点击 > 2.1 spm",
+            "similarity": 0.750994
+          },
+          {
+            "block_ref": "blk_b5863e59917cf591",
+            "source": "埋点2.0设计文档V2.0.1.md",
+            "heading": "三、事件设计 > 2、商品曝光&点击 > 2.3 字段映射",
+            "similarity": 0.753318
+          },
+          {
+            "block_ref": "blk_3fa32cbca564f682",
+            "source": "埋点2.0设计文档V2.0.1.md",
+            "heading": "三、事件设计 > 1、首页运营位曝光&点击 > 1.2 scm",
+            "similarity": 0.696299
+          }
+        ]
+      },
+      {
+        "id": "tracking-004",
+        "query": "首页运营位的 SCM 内容 ID 从哪里生成和查询？",
+        "matched_rank": 1,
+        "retrieved_count": 8,
+        "candidates": [
+          {
+            "block_ref": "blk_6bf43ded7711d182",
+            "source": "埋点2.0设计文档V2.0.1.md",
+            "heading": "三、事件设计 > 1、首页运营位曝光&点击 > 1.2 scm",
+            "similarity": 0.815264
+          },
+          {
+            "block_ref": "blk_fe4a39ac6779ff87",
+            "source": "埋点2.0设计文档V2.0.2.md",
+            "heading": "三、事件设计 > 1、首页运营位曝光&点击 > 1.1 spm",
+            "similarity": 0.640428
+          },
+          {
+            "block_ref": "blk_3e16adf71abe0b92",
+            "source": "埋点2.0设计文档V2.0.1.md",
+            "heading": "三、事件设计 > 1、首页运营位曝光&点击 > 1.1 spm",
+            "similarity": 0.638935
+          },
+          {
+            "block_ref": "blk_53187b32f549ef94",
+            "source": "埋点2.0设计文档V2.0.2.md",
+            "heading": "二、SPM及SCM设计 > 2、SCM > 2.1 规则",
+            "similarity": 0.735731
+          },
+          {
+            "block_ref": "blk_8dbe96ed072f5ab4",
+            "source": "埋点2.0设计文档V2.0.1.md",
+            "heading": "二、SPM及SCM设计 > 2、SCM > 2.1 规则",
+            "similarity": 0.729517
+          },
+          {
+            "block_ref": "blk_3fa32cbca564f682",
+            "source": "埋点2.0设计文档V2.0.1.md",
+            "heading": "三、事件设计 > 1、首页运营位曝光&点击 > 1.2 scm",
+            "similarity": 0.700276
+          },
+          {
+            "block_ref": "blk_7456549dfcd0dcb1",
+            "source": "C端埋点的春天--SPM新埋点初探.md",
+            "heading": "各种ID从哪儿来 > 实验名 / scmId",
+            "similarity": 0.65396
+          },
+          {
+            "block_ref": "blk_b811f7d256550590",
+            "source": "埋点2.0设计文档V2.0.1.md",
+            "heading": "三、事件设计 > 1、首页运营位曝光&点击 > 1.3 字段映射",
+            "similarity": 0.647865
+          }
+        ]
+      },
+      {
+        "id": "tracking-005",
+        "query": "首页运营位埋点的 spm_site、spm_page、spm_area 等字段如何映射？",
+        "matched_rank": 1,
+        "retrieved_count": 8,
+        "candidates": [
+          {
+            "block_ref": "blk_b811f7d256550590",
+            "source": "埋点2.0设计文档V2.0.1.md",
+            "heading": "三、事件设计 > 1、首页运营位曝光&点击 > 1.3 字段映射",
+            "similarity": 0.849241
+          },
+          {
+            "block_ref": "blk_4b38b934962ab601",
+            "source": "埋点2.0设计文档V2.0.1.md",
+            "heading": "三、事件设计 > 2、商品曝光&点击 > 2.3 字段映射",
+            "similarity": 0.785363
+          },
+          {
+            "block_ref": "blk_98122e127c94cfba",
+            "source": "埋点2.0设计文档V2.0.1.md",
+            "heading": "三、事件设计 > 3、添加心愿单 & 添加购物车 > 3.3 字段映射",
+            "similarity": 0.751891
+          },
+          {
+            "block_ref": "blk_3e16adf71abe0b92",
+            "source": "埋点2.0设计文档V2.0.1.md",
+            "heading": "三、事件设计 > 1、首页运营位曝光&点击 > 1.1 spm",
+            "similarity": 0.805759
+          },
+          {
+            "block_ref": "blk_fe4a39ac6779ff87",
+            "source": "埋点2.0设计文档V2.0.2.md",
+            "heading": "三、事件设计 > 1、首页运营位曝光&点击 > 1.1 spm",
+            "similarity": 0.804505
+          },
+          {
+            "block_ref": "blk_1750bdf8b8fbfc22",
+            "source": "埋点2.0设计文档V2.0.1.md",
+            "heading": "三、事件设计 > 1、首页运营位曝光&点击 > 1.1 spm",
+            "similarity": 0.80361
+          },
+          {
+            "block_ref": "blk_b5863e59917cf591",
+            "source": "埋点2.0设计文档V2.0.1.md",
+            "heading": "三、事件设计 > 2、商品曝光&点击 > 2.3 字段映射",
+            "similarity": 0.762049
+          },
+          {
+            "block_ref": "blk_57fd211a09410eb0",
+            "source": "埋点2.0设计文档V2.0.1.md",
+            "heading": "三、事件设计 > 1、首页运营位曝光&点击",
+            "similarity": 0.690676
+          }
+        ]
+      },
+      {
+        "id": "tracking-006",
+        "query": "商品曝光和点击事件的页面类型、页面 ID、区块 ID 如何上报？",
+        "matched_rank": 2,
+        "retrieved_count": 8,
+        "candidates": [
+          {
+            "block_ref": "blk_a46de43531cfc000",
+            "source": "埋点2.0设计文档V2.0.2.md",
+            "heading": "三、事件设计 > 2、商品曝光&点击 > 2.1 spm",
+            "similarity": 0.660181
+          },
+          {
+            "block_ref": "blk_fe5aeb547e2fde47",
+            "source": "埋点2.0设计文档V2.0.1.md",
+            "heading": "三、事件设计 > 2、商品曝光&点击 > 2.1 spm",
+            "similarity": 0.658806
+          },
+          {
+            "block_ref": "blk_fe4a39ac6779ff87",
+            "source": "埋点2.0设计文档V2.0.2.md",
+            "heading": "三、事件设计 > 1、首页运营位曝光&点击 > 1.1 spm",
+            "similarity": 0.610983
+          },
+          {
+            "block_ref": "blk_f996acdc10a8462f",
+            "source": "埋点2.0设计文档V2.0.1.md",
+            "heading": "三、事件设计 > 2、商品曝光&点击",
+            "similarity": 0.773749
+          },
+          {
+            "block_ref": "blk_4b38b934962ab601",
+            "source": "埋点2.0设计文档V2.0.1.md",
+            "heading": "三、事件设计 > 2、商品曝光&点击 > 2.3 字段映射",
+            "similarity": 0.711596
+          },
+          {
+            "block_ref": "blk_2551a3abeae9314c",
+            "source": "Cider埋点体系.md",
+            "heading": "1、埋点架构 > [[商品曝光事件]]",
+            "similarity": 0.701487
+          },
+          {
+            "block_ref": "blk_9f8012990ed0df24",
+            "source": "埋点2.0设计文档V2.0.1.md",
+            "heading": "三、事件设计 > 2、商品曝光&点击 > 2.1 spm",
+            "similarity": 0.645104
+          },
+          {
+            "block_ref": "blk_8079a7d06e0a84a3",
+            "source": "Cider埋点体系.md",
+            "heading": "1、埋点架构 > [[商品点击事件]]",
+            "similarity": 0.662092
+          }
+        ]
+      },
+      {
+        "id": "tracking-007",
+        "query": "商品曝光埋点如何把页面类型和页面 ID 清洗到 list_id、list_title？",
+        "matched_rank": 1,
+        "retrieved_count": 8,
+        "candidates": [
+          {
+            "block_ref": "blk_4b38b934962ab601",
+            "source": "埋点2.0设计文档V2.0.1.md",
+            "heading": "三、事件设计 > 2、商品曝光&点击 > 2.3 字段映射",
+            "similarity": 0.670931
+          },
+          {
+            "block_ref": "blk_98122e127c94cfba",
+            "source": "埋点2.0设计文档V2.0.1.md",
+            "heading": "三、事件设计 > 3、添加心愿单 & 添加购物车 > 3.3 字段映射",
+            "similarity": 0.569193
+          },
+          {
+            "block_ref": "blk_a46de43531cfc000",
+            "source": "埋点2.0设计文档V2.0.2.md",
+            "heading": "三、事件设计 > 2、商品曝光&点击 > 2.1 spm",
+            "similarity": 0.588881
+          },
+          {
+            "block_ref": "blk_7abe2bd3294307b5",
+            "source": "商品曝光事件.md",
+            "heading": "1、事件属性列表",
+            "similarity": 0.734392
+          },
+          {
+            "block_ref": "blk_ed6d6ecd3d4e817e",
+            "source": "商品曝光事件.md",
+            "heading": "格式:",
+            "similarity": 0.723731
+          },
+          {
+            "block_ref": "blk_f996acdc10a8462f",
+            "source": "埋点2.0设计文档V2.0.1.md",
+            "heading": "三、事件设计 > 2、商品曝光&点击",
+            "similarity": 0.662184
+          },
+          {
+            "block_ref": "blk_2551a3abeae9314c",
+            "source": "Cider埋点体系.md",
+            "heading": "1、埋点架构 > [[商品曝光事件]]",
+            "similarity": 0.665573
+          },
+          {
+            "block_ref": "blk_fe5aeb547e2fde47",
+            "source": "埋点2.0设计文档V2.0.1.md",
+            "heading": "三、事件设计 > 2、商品曝光&点击 > 2.1 spm",
+            "similarity": 0.593149
+          }
+        ]
+      },
+      {
+        "id": "tracking-008",
+        "query": "添加心愿单和购物车事件的 SPM 规则是什么？",
+        "matched_rank": 1,
+        "retrieved_count": 8,
+        "candidates": [
+          {
+            "block_ref": "blk_a148e9361bb0f82f",
+            "source": "埋点2.0设计文档V2.0.1.md",
+            "heading": "三、事件设计 > 3、添加心愿单 & 添加购物车 > 3.1 spm",
+            "similarity": 0.830584
+          },
+          {
+            "block_ref": "blk_0c2a20497f18b4a7",
+            "source": "埋点2.0设计文档V2.0.1.md",
+            "heading": "三、事件设计 > 3、添加心愿单 & 添加购物车 > 3.3 字段映射",
+            "similarity": 0.705981
+          },
+          {
+            "block_ref": "blk_7ef478d4546c01fe",
+            "source": "埋点2.0设计文档V2.0.1.md",
+            "heading": "三、事件设计 > 3、添加心愿单 & 添加购物车 > 3.2 scm",
+            "similarity": 0.808567
+          },
+          {
+            "block_ref": "blk_b8f3b63b95fe2166",
+            "source": "埋点2.0设计文档V2.0.1.md",
+            "heading": "三、事件设计 > 3、添加心愿单 & 添加购物车",
+            "similarity": 0.731475
+          },
+          {
+            "block_ref": "blk_a50e45d87930736c",
+            "source": "Cider埋点体系.md",
+            "heading": "1、埋点架构 > [[商品点击事件]] > [[商品心愿单事件]] / [[商品购物车事件]]",
+            "similarity": 0.717081
+          },
+          {
+            "block_ref": "blk_ebba9a97f6e02318",
+            "source": "商品心愿单事件.md",
+            "heading": "格式:",
+            "similarity": 0.669147
+          },
+          {
+            "block_ref": "blk_2c54d260dba5dfef",
+            "source": "商品购物车事件.md",
+            "heading": "1、事件属性列表",
+            "similarity": 0.653748
+          },
+          {
+            "block_ref": "blk_1029af38e7a41940",
+            "source": "埋点2.0设计文档V2.0.1.md",
+            "heading": "三、事件设计 > 3、添加心愿单 & 添加购物车 > 3.1 spm",
+            "similarity": 0.783221
+          }
+        ]
+      },
+      {
+        "id": "tracking-009",
+        "query": "添加购物车埋点的 spm 和 SCM 字段怎样映射到清洗结果？",
+        "matched_rank": 1,
+        "retrieved_count": 8,
+        "candidates": [
+          {
+            "block_ref": "blk_98122e127c94cfba",
+            "source": "埋点2.0设计文档V2.0.1.md",
+            "heading": "三、事件设计 > 3、添加心愿单 & 添加购物车 > 3.3 字段映射",
+            "similarity": 0.770412
+          },
+          {
+            "block_ref": "blk_4b38b934962ab601",
+            "source": "埋点2.0设计文档V2.0.1.md",
+            "heading": "三、事件设计 > 2、商品曝光&点击 > 2.3 字段映射",
+            "similarity": 0.691699
+          },
+          {
+            "block_ref": "blk_b811f7d256550590",
+            "source": "埋点2.0设计文档V2.0.1.md",
+            "heading": "三、事件设计 > 1、首页运营位曝光&点击 > 1.3 字段映射",
+            "similarity": 0.655844
+          },
+          {
+            "block_ref": "blk_1c14e2d04440b757",
+            "source": "埋点2.0设计文档V2.0.1.md",
+            "heading": "三、事件设计 > 3、添加心愿单 & 添加购物车 > 3.3 字段映射",
+            "similarity": 0.74521
+          },
+          {
+            "block_ref": "blk_e5b69e5dc57f8c51",
+            "source": "埋点2.0设计文档V2.0.1.md",
+            "heading": "三、事件设计 > 3、添加心愿单 & 添加购物车 > 3.2 scm",
+            "similarity": 0.726851
+          },
+          {
+            "block_ref": "blk_b5863e59917cf591",
+            "source": "埋点2.0设计文档V2.0.1.md",
+            "heading": "三、事件设计 > 2、商品曝光&点击 > 2.3 字段映射",
+            "similarity": 0.653482
+          },
+          {
+            "block_ref": "blk_353f60b349aa20a2",
+            "source": "埋点2.0大数据宽表.md",
+            "heading": "",
+            "similarity": 0.723729
+          },
+          {
+            "block_ref": "blk_0c2a20497f18b4a7",
+            "source": "埋点2.0设计文档V2.0.1.md",
+            "heading": "三、事件设计 > 3、添加心愿单 & 添加购物车 > 3.3 字段映射",
+            "similarity": 0.692185
+          }
+        ]
+      },
+      {
+        "id": "tracking-010",
+        "query": "商品瀑布流和多 Tab 商品瀑布流的 blockId 拼接新规则是什么？",
+        "matched_rank": 1,
+        "retrieved_count": 1,
+        "candidates": [
+          {
+            "block_ref": "blk_2e386407be5c96f9",
+            "source": "埋点2.0设计文档V2.0.2.md",
+            "heading": "五、商品瀑布流及多tab商品瀑布流spm补充定义",
+            "similarity": 0.819628
+          }
+        ]
+      },
+      {
+        "id": "mq-001",
+        "query": "自建 RocketMQ 的 NameServer 应部署几台、分布在哪些可用区？",
+        "matched_rank": 1,
+        "retrieved_count": 8,
+        "candidates": [
+          {
+            "block_ref": "blk_dac61e06a249aed0",
+            "source": "阿里云 RocketMQ 迁移自建的 MQ.md",
+            "heading": "机器 > nameserver / Broker",
+            "similarity": 0.791867
+          },
+          {
+            "block_ref": "blk_441f2842597f3e79",
+            "source": "cider-基建2023.md",
+            "heading": "2023-04-27 > 服务端基建 > AWS-MQ迁移",
+            "similarity": 0.524931
+          },
+          {
+            "block_ref": "blk_d357afdc8f500cb5",
+            "source": "rocketMQ自研之路.md",
+            "heading": "自建RocketMQ一路心酸路 > 改进的同步服务",
+            "similarity": 0.497643
+          },
+          {
+            "block_ref": "blk_43117bfcf8e0a638",
+            "source": "cider-基建2023.md",
+            "heading": "2023-05-18 > 服务端基建 > AWS-MQ建设",
+            "similarity": 0.575348
+          },
+          {
+            "block_ref": "blk_a9fa6b78f455a94b",
+            "source": "cider-基建2023.md",
+            "heading": "2023-05-25 > 服务端基建 > AWS-MQ建设",
+            "similarity": 0.567205
+          },
+          {
+            "block_ref": "blk_efde2b3ff4cf26be",
+            "source": "cider-基建2023.md",
+            "heading": "2023-06-01 > 服务端基建 > AWS-MQ建设",
+            "similarity": 0.55664
+          },
+          {
+            "block_ref": "blk_c98b1b0ae30bf692",
+            "source": "cider-基建2023.md",
+            "heading": "2023-08-31 > 服务端基础服务 > 云原生的架构 > 自建MQ",
+            "similarity": 0.553061
+          },
+          {
+            "block_ref": "blk_91b9dec3bf815656",
+            "source": "cider-基建2023.md",
+            "heading": "2023-03-23 > 服务端基建 > AWS-MQ迁移",
+            "similarity": 0.530082
+          }
+        ]
+      },
+      {
+        "id": "mq-002",
+        "query": "从阿里云 RocketMQ 切到自建集群时，生产者和消费者怎样分阶段切割？",
+        "matched_rank": 1,
+        "retrieved_count": 8,
+        "candidates": [
+          {
+            "block_ref": "blk_3dae4bfe10653d5e",
+            "source": "阿里云 RocketMQ 迁移自建的 MQ.md",
+            "heading": "切割方案",
+            "similarity": 0.815387
+          },
+          {
+            "block_ref": "blk_24665f3baeeafb31",
+            "source": "cider-基建2023.md",
+            "heading": "2023-03-30 > 服务端基建 > AWS-MQ迁移",
+            "similarity": 0.654367
+          },
+          {
+            "block_ref": "blk_ec8940c2b64161be",
+            "source": "cider-基建2023.md",
+            "heading": "2023-04-13 > 服务端基建 > AWS-MQ迁移",
+            "similarity": 0.615038
+          },
+          {
+            "block_ref": "blk_725c8a54d0f43246",
+            "source": "阿里云 RocketMQ 迁移自建的 MQ.md",
+            "heading": "切割系统",
+            "similarity": 0.670008
+          },
+          {
+            "block_ref": "blk_681e247bb4bac44a",
+            "source": "cider-基建2023.md",
+            "heading": "2023-03-16 > 服务端基建 > AWS-MQ迁移",
+            "similarity": 0.6488
+          },
+          {
+            "block_ref": "blk_91b9dec3bf815656",
+            "source": "cider-基建2023.md",
+            "heading": "2023-03-23 > 服务端基建 > AWS-MQ迁移",
+            "similarity": 0.641841
+          },
+          {
+            "block_ref": "blk_62436b5cd5654634",
+            "source": "cider-基建2023.md",
+            "heading": "2023-06-08 > 服务端基础服务 > 降本增效 > ERP生产环境的MQ从云服务切换到自建",
+            "similarity": 0.633072
+          },
+          {
+            "block_ref": "blk_484769582a764e4d",
+            "source": "阿里云 RocketMQ 迁移自建的 MQ.md",
+            "heading": "性能调研",
+            "similarity": 0.611468
+          }
+        ]
+      },
+      {
+        "id": "mq-003",
+        "query": "自建 RocketMQ 的 Broker 应部署几台，主从节点怎样跨可用区分布？",
+        "matched_rank": 1,
+        "retrieved_count": 8,
+        "candidates": [
+          {
+            "block_ref": "blk_dac61e06a249aed0",
+            "source": "阿里云 RocketMQ 迁移自建的 MQ.md",
+            "heading": "机器 > nameserver / Broker",
+            "similarity": 0.71081
+          },
+          {
+            "block_ref": "blk_d357afdc8f500cb5",
+            "source": "rocketMQ自研之路.md",
+            "heading": "自建RocketMQ一路心酸路 > 改进的同步服务",
+            "similarity": 0.52532
+          },
+          {
+            "block_ref": "blk_6a8b4146e078a3c8",
+            "source": "cider-基建2023.md",
+            "heading": "2023-11-02 > 服务端基础服务 > 云原生的架构 > 自建MQ",
+            "similarity": 0.54288
+          },
+          {
+            "block_ref": "blk_484769582a764e4d",
+            "source": "阿里云 RocketMQ 迁移自建的 MQ.md",
+            "heading": "性能调研",
+            "similarity": 0.607159
+          },
+          {
+            "block_ref": "blk_43117bfcf8e0a638",
+            "source": "cider-基建2023.md",
+            "heading": "2023-05-18 > 服务端基建 > AWS-MQ建设",
+            "similarity": 0.587306
+          },
+          {
+            "block_ref": "blk_4aa9a6384a07ffd7",
+            "source": "cider-基建2023.md",
+            "heading": "2023-03-02 > 服务端基建 > AWS-MQ迁移",
+            "similarity": 0.567311
+          },
+          {
+            "block_ref": "blk_a9fa6b78f455a94b",
+            "source": "cider-基建2023.md",
+            "heading": "2023-05-25 > 服务端基建 > AWS-MQ建设",
+            "similarity": 0.586503
+          },
+          {
+            "block_ref": "blk_89efd203a797d7e9",
+            "source": "cider-基建2023.md",
+            "heading": "2023-09-14 > 服务端基础服务 > 云原生的架构 > 自建MQ / 服务树",
+            "similarity": 0.550145
+          }
+        ]
+      },
+      {
+        "id": "risk-001",
+        "query": "实时风控支持 userId、deviceId、IP 哪些维度以及哪些接口策略？",
+        "matched_rank": 1,
+        "retrieved_count": 8,
+        "candidates": [
+          {
+            "block_ref": "blk_d4f937d2c72ed65c",
+            "source": "实时风控方案.md",
+            "heading": "支持的策略",
+            "similarity": 0.81764
+          },
+          {
+            "block_ref": "blk_3dbb8753982d58cf",
+            "source": "Recent Conversations.md",
+            "heading": "行为风控与爬虫检测技术分析",
+            "similarity": 0.461728
+          },
+          {
+            "block_ref": "blk_a39b7bcfbc2464e1",
+            "source": "cider-基建2023.md",
+            "heading": "2023-09-07 > 服务端基础服务 > 安全&稳定 > 行为风控",
+            "similarity": 0.596933
+          },
+          {
+            "block_ref": "blk_7a204e220dc138d2",
+            "source": "cider-基建2023.md",
+            "heading": "2023-10-12 > 服务端基础服务 > 安全&稳定 > 行为风控",
+            "similarity": 0.64494
+          },
+          {
+            "block_ref": "blk_4c4ee1c9d20253dd",
+            "source": "实时风控方案.md",
+            "heading": "TODO",
+            "similarity": 0.622649
+          },
+          {
+            "block_ref": "blk_706cc0cae89ba6ad",
+            "source": "cider-基建2023.md",
+            "heading": "2023-08-10 > 服务端基础服务 > 安全&稳定 > 行为风控",
+            "similarity": 0.601619
+          },
+          {
+            "block_ref": "blk_df6d20fbf6dba94d",
+            "source": "支付风控.md",
+            "heading": "为了风控做了什么 > 策略规则",
+            "similarity": 0.580912
+          },
+          {
+            "block_ref": "blk_04eee1591a8c4707",
+            "source": "实时风控方案.md",
+            "heading": "SOURCE和SINK",
+            "similarity": 0.53034
+          }
+        ]
+      },
+      {
+        "id": "risk-002",
+        "query": "实时风控有哪些时间窗口，Source 和 Sink 分别使用什么？",
+        "matched_rank": 4,
+        "retrieved_count": 6,
+        "candidates": [
+          {
+            "block_ref": "blk_04eee1591a8c4707",
+            "source": "实时风控方案.md",
+            "heading": "SOURCE和SINK",
+            "similarity": 0.773016
+          },
+          {
+            "block_ref": "blk_9e44edab850d76c4",
+            "source": "cider-基建2023.md",
+            "heading": "2023-06-15 > 服务端基础服务 > 安全&稳定 > 实时风控（6月上线第一期，识别爬虫，拦截爬虫流量）",
+            "similarity": 0.577867
+          },
+          {
+            "block_ref": "blk_bf4e13b96b291fd2",
+            "source": "cider-基建2023.md",
+            "heading": "2023-07-06 > 服务端基础服务 > 安全&稳定 > 实时风控（6月上线第一期，识别爬虫，拦截爬虫流量）",
+            "similarity": 0.579536
+          },
+          {
+            "block_ref": "blk_d4f937d2c72ed65c",
+            "source": "实时风控方案.md",
+            "heading": "支持的策略",
+            "similarity": 0.606766
+          },
+          {
+            "block_ref": "blk_6214c9544620acc6",
+            "source": "实时风控方案.md",
+            "heading": "目标",
+            "similarity": 0.541427
+          },
+          {
+            "block_ref": "blk_4c4ee1c9d20253dd",
+            "source": "实时风控方案.md",
+            "heading": "TODO",
+            "similarity": 0.526161
+          }
+        ]
+      },
+      {
+        "id": "perf-001",
+        "query": "黑五压测中如何启动 JMeter，并把 jmx 文件导入？",
+        "matched_rank": 5,
+        "retrieved_count": 8,
+        "candidates": [
+          {
+            "block_ref": "blk_1f2587eff8ff4d22",
+            "source": "黑五压测白皮书.md",
+            "heading": "进入PTS > 选择并打开任意一个测试计划",
+            "similarity": 0.793451
+          },
+          {
+            "block_ref": "blk_e8cfafdd6010b31e",
+            "source": "黑五压测白皮书.md",
+            "heading": "进入PTS > 调整jmx脚本",
+            "similarity": 0.728005
+          },
+          {
+            "block_ref": "blk_3e8e909a65f1d08b",
+            "source": "黑五压测白皮书.md",
+            "heading": "下载Jmeter > 链接： https://jmeter.apache.org/download_jmeter.cgi",
+            "similarity": 0.720508
+          },
+          {
+            "block_ref": "blk_5d3912dc33b8520d",
+            "source": "黑五压测白皮书.md",
+            "heading": "下载Jmeter",
+            "similarity": 0.73214
+          },
+          {
+            "block_ref": "blk_4dd0466324e85c06",
+            "source": "黑五压测白皮书.md",
+            "heading": "打开Jmeter > 环境: 必须要有Java环境 最好是Java8（这个就不教安装了） / 命令截图:",
+            "similarity": 0.694888
+          },
+          {
+            "block_ref": "blk_e1ab363de3b05b5b",
+            "source": "黑五压测白皮书.md",
+            "heading": "查看报告获取结论",
+            "similarity": 0.609032
+          },
+          {
+            "block_ref": "blk_20d181759984f66d",
+            "source": "黑五压测白皮书.md",
+            "heading": "进入PTS > 下载压测场景",
+            "similarity": 0.648714
+          },
+          {
+            "block_ref": "blk_a8f8fdae00ae0331",
+            "source": "黑五压测白皮书.md",
+            "heading": "进入PTS > 链接: https://pts.console.aliyun.com/#/overviewpage",
+            "similarity": 0.621965
+          }
+        ]
+      },
+      {
+        "id": "perf-002",
+        "query": "上传 PTS 前需要怎样调整 jmx 的 CSV、线程池、断言和请求头？",
+        "matched_rank": 1,
+        "retrieved_count": 5,
+        "candidates": [
+          {
+            "block_ref": "blk_e8cfafdd6010b31e",
+            "source": "黑五压测白皮书.md",
+            "heading": "进入PTS > 调整jmx脚本",
+            "similarity": 0.812561
+          },
+          {
+            "block_ref": "blk_50bde294b56dc8f2",
+            "source": "黑五压测白皮书.md",
+            "heading": "帮助 > 如何设置jmeter中的线程数和rampup?",
+            "similarity": 0.505054
+          },
+          {
+            "block_ref": "blk_1f2587eff8ff4d22",
+            "source": "黑五压测白皮书.md",
+            "heading": "进入PTS > 选择并打开任意一个测试计划",
+            "similarity": 0.632229
+          },
+          {
+            "block_ref": "blk_a8f8fdae00ae0331",
+            "source": "黑五压测白皮书.md",
+            "heading": "进入PTS > 链接: https://pts.console.aliyun.com/#/overviewpage",
+            "similarity": 0.485914
+          },
+          {
+            "block_ref": "blk_20d181759984f66d",
+            "source": "黑五压测白皮书.md",
+            "heading": "进入PTS > 下载压测场景",
+            "similarity": 0.486349
+          }
+        ]
+      },
+      {
+        "id": "perf-003",
+        "query": "JMeter 线程数和 rampup 应怎样根据 TPS、RT 和压测倍数计算？",
+        "matched_rank": 1,
+        "retrieved_count": 3,
+        "candidates": [
+          {
+            "block_ref": "blk_50bde294b56dc8f2",
+            "source": "黑五压测白皮书.md",
+            "heading": "帮助 > 如何设置jmeter中的线程数和rampup?",
+            "similarity": 0.74956
+          },
+          {
+            "block_ref": "blk_e8cfafdd6010b31e",
+            "source": "黑五压测白皮书.md",
+            "heading": "进入PTS > 调整jmx脚本",
+            "similarity": 0.543522
+          },
+          {
+            "block_ref": "blk_1f2587eff8ff4d22",
+            "source": "黑五压测白皮书.md",
+            "heading": "进入PTS > 选择并打开任意一个测试计划",
+            "similarity": 0.518238
+          }
+        ]
+      },
+      {
+        "id": "agent-001",
+        "query": "客服 Agent 如何通过 PreToolUse Hook、黑白名单限制危险工具？",
+        "matched_rank": 1,
+        "retrieved_count": 4,
+        "candidates": [
+          {
+            "block_ref": "blk_defc428809d2bb7b",
+            "source": "客服 Agent 构建.md",
+            "heading": "2. 安全性：工具安全性、数据安全性、数据隔离 > 工具安全性",
+            "similarity": 0.847093
+          },
+          {
+            "block_ref": "blk_52d47aa5b1dcc967",
+            "source": "客服 Agent 构建.md",
+            "heading": "2. 安全性：工具安全性、数据安全性、数据隔离",
+            "similarity": 0.59242
+          },
+          {
+            "block_ref": "blk_0b819c08e79f9435",
+            "source": "客服 Agent 构建.md",
+            "heading": "2. 安全性：工具安全性、数据安全性、数据隔离 > 数据安全性",
+            "similarity": 0.568984
+          },
+          {
+            "block_ref": "blk_f80be9c2038fec24",
+            "source": "客服 Agent 构建.md",
+            "heading": "2. 安全性：工具安全性、数据安全性、数据隔离 > 数据隔离",
+            "similarity": 0.537779
+          }
+        ]
+      },
+      {
+        "id": "agent-002",
+        "query": "客服 Agent 如何校验 UID 和订单所有权，防止查询其他用户订单？",
+        "matched_rank": 1,
+        "retrieved_count": 5,
+        "candidates": [
+          {
+            "block_ref": "blk_0b819c08e79f9435",
+            "source": "客服 Agent 构建.md",
+            "heading": "2. 安全性：工具安全性、数据安全性、数据隔离 > 数据安全性",
+            "similarity": 0.786384
+          },
+          {
+            "block_ref": "blk_defc428809d2bb7b",
+            "source": "客服 Agent 构建.md",
+            "heading": "2. 安全性：工具安全性、数据安全性、数据隔离 > 工具安全性",
+            "similarity": 0.468415
+          },
+          {
+            "block_ref": "blk_39b20c364852bdd6",
+            "source": "购物车分表方案落地.md",
+            "heading": "三、方案 & 细节 > 3.2 灰度机制",
+            "similarity": 0.384671
+          },
+          {
+            "block_ref": "blk_e16b90feda97b8af",
+            "source": "购物车分表.md",
+            "heading": "方案对比",
+            "similarity": 0.404936
+          },
+          {
+            "block_ref": "blk_f80be9c2038fec24",
+            "source": "客服 Agent 构建.md",
+            "heading": "2. 安全性：工具安全性、数据安全性、数据隔离 > 数据隔离",
+            "similarity": 0.461527
+          }
+        ]
+      },
+      {
+        "id": "agent-003",
+        "query": "客服 Agent 的会话工作区、Redis key 和 OSS 路径如何实现数据隔离？",
+        "matched_rank": 1,
+        "retrieved_count": 7,
+        "candidates": [
+          {
+            "block_ref": "blk_f80be9c2038fec24",
+            "source": "客服 Agent 构建.md",
+            "heading": "2. 安全性：工具安全性、数据安全性、数据隔离 > 数据隔离",
+            "similarity": 0.770737
+          },
+          {
+            "block_ref": "blk_0b819c08e79f9435",
+            "source": "客服 Agent 构建.md",
+            "heading": "2. 安全性：工具安全性、数据安全性、数据隔离 > 数据安全性",
+            "similarity": 0.539126
+          },
+          {
+            "block_ref": "blk_52d47aa5b1dcc967",
+            "source": "客服 Agent 构建.md",
+            "heading": "2. 安全性：工具安全性、数据安全性、数据隔离",
+            "similarity": 0.563643
+          },
+          {
+            "block_ref": "blk_defc428809d2bb7b",
+            "source": "客服 Agent 构建.md",
+            "heading": "2. 安全性：工具安全性、数据安全性、数据隔离 > 工具安全性",
+            "similarity": 0.442877
+          },
+          {
+            "block_ref": "blk_02a6524ae8c2bc27",
+            "source": "cider-基建2023.md",
+            "heading": "2023-09-21 > 运维建设 @吕佳 Haon @贾铮 @张宇 > IT资产管理系统 / 数据库备份恢复 / 服务树 / 监控",
+            "similarity": 0.409127
+          },
+          {
+            "block_ref": "blk_22cedbd10cf5ec36",
+            "source": "八股文随笔.md",
+            "heading": "Redis > 集群",
+            "similarity": null
+          },
+          {
+            "block_ref": "blk_9835206e9b817641",
+            "source": "八股文随笔.md",
+            "heading": "Redis > 生产问题",
+            "similarity": null
+          }
+        ]
+      },
+      {
+        "id": "incident-008",
+        "query": "2024 年 9 月推荐接口超时问题的最终发生原因是什么？",
+        "matched_rank": 1,
+        "retrieved_count": 7,
+        "candidates": [
+          {
+            "block_ref": "blk_79aac9959adff856",
+            "source": "2024年09月05日，推荐接口超时问题复盘.md",
+            "heading": "3、发生原因",
+            "similarity": 0.765791
+          },
+          {
+            "block_ref": "blk_067ccb1f245ebcb2",
+            "source": "2024年09月05日，推荐接口超时问题复盘.md",
+            "heading": "1、时间线",
+            "similarity": 0.76971
+          },
+          {
+            "block_ref": "blk_665b30b0c8dbbfd1",
+            "source": "2024年09月05日，推荐接口超时问题复盘.md",
+            "heading": "4、解决过程",
+            "similarity": 0.82002
+          },
+          {
+            "block_ref": "blk_c649f458c9c59cb4",
+            "source": "首发加深功能优化复盘.md",
+            "heading": "一次接口耗时从 30s 到秒开的优化复盘 —— 我做对了什么，又踩了什么坑 > 写在前面",
+            "similarity": 0.606534
+          },
+          {
+            "block_ref": "blk_c6ca1a365364b410",
+            "source": "README.md",
+            "heading": "首单加深 · 面试 STAR 素材库（C端商详页版） > 🎯 一句话结论（面试开场直接说）",
+            "similarity": 0.490111
+          },
+          {
+            "block_ref": "blk_db100fc78b11069b",
+            "source": "2024年09月05日，推荐接口超时问题复盘.md",
+            "heading": "2、事故影响",
+            "similarity": 0.752911
+          },
+          {
+            "block_ref": "blk_18a6f55f383b43bc",
+            "source": "2024年09月05日，推荐接口超时问题复盘.md",
+            "heading": "5、如何避免",
+            "similarity": 0.72871
+          }
+        ]
+      },
+      {
+        "id": "incident-009",
+        "query": "验证码邮件为什么会被重复发送，事故根因是什么？",
+        "matched_rank": 1,
+        "retrieved_count": 8,
+        "candidates": [
+          {
+            "block_ref": "blk_5884783d144052d6",
+            "source": "2024年12月03日，验证码邮件重复发送.md",
+            "heading": "发生原因",
+            "similarity": 0.785172
+          },
+          {
+            "block_ref": "blk_7fc953efec31148c",
+            "source": "2024 年黑五复盘总结.md",
+            "heading": "有待改进的部分 > 错误日志数量未监控，第三方监控不足",
+            "similarity": 0.521348
+          },
+          {
+            "block_ref": "blk_1f8a1ee80ffd3f05",
+            "source": "2024 年黑五复盘总结.md",
+            "heading": "黑五总体可用性指标 > 黑五期间事故报告",
+            "similarity": 0.440783
+          },
+          {
+            "block_ref": "blk_ad46bbc8448e361e",
+            "source": "2024年12月03日，验证码邮件重复发送.md",
+            "heading": "如何避免 > 代码鲁棒性",
+            "similarity": 0.727471
+          },
+          {
+            "block_ref": "blk_dffe51c1ccbb3b7a",
+            "source": "2024年12月03日，验证码邮件重复发送.md",
+            "heading": "影响范围",
+            "similarity": 0.726624
+          },
+          {
+            "block_ref": "blk_f2fb7d1ed493caa3",
+            "source": "2024年12月03日，验证码邮件重复发送.md",
+            "heading": "时间线 > 04:05 Oncall 反馈用户一直收到相同的验证码邮件。",
+            "similarity": 0.634155
+          },
+          {
+            "block_ref": "blk_67bb65a7fb376388",
+            "source": "2024年12月03日，验证码邮件重复发送.md",
+            "heading": "如何避免 > 加强监控报警",
+            "similarity": 0.722764
+          },
+          {
+            "block_ref": "blk_b4d4a7a06847ce51",
+            "source": "2024年12月03日，验证码邮件重复发送.md",
+            "heading": "如何避免 > 举一反三",
+            "similarity": 0.665192
+          }
+        ]
+      },
+      {
+        "id": "search-001",
+        "query": "搜索无结果场景的技术方案是什么？",
+        "matched_rank": 3,
+        "retrieved_count": 8,
+        "candidates": [
+          {
+            "block_ref": "blk_2c19b50e55ba75ab",
+            "source": "搜索无结果-技术方案.md",
+            "heading": "目标",
+            "similarity": 0.693318
+          },
+          {
+            "block_ref": "blk_49df731f6a0280e0",
+            "source": "搜索无结果-技术方案.md",
+            "heading": "背景：目前有的搜索词是无搜索召回结果，主要问题是：",
+            "similarity": 0.781886
+          },
+          {
+            "block_ref": "blk_aa99bc40d5ba81ef",
+            "source": "搜索无结果-技术方案.md",
+            "heading": "方案",
+            "similarity": 0.735558
+          },
+          {
+            "block_ref": "blk_e1bdd8a4ebed5f1a",
+            "source": "8~9月搜索优化总结.md",
+            "heading": "4、做的好的",
+            "similarity": 0.48921
+          },
+          {
+            "block_ref": "blk_4af5df1d2d48d521",
+            "source": "8~9月搜索优化总结.md",
+            "heading": "3、产研侧的动作 > 3.3、召回的优化 > 3.3.1、Query优化",
+            "similarity": 0.487763
+          },
+          {
+            "block_ref": "blk_5d5c41e6282c8cf4",
+            "source": "2023年02月17日，PC_搜索异常.md",
+            "heading": "如何避免",
+            "similarity": 0.454206
+          },
+          {
+            "block_ref": "blk_9737fc65c507b7d0",
+            "source": "2023年02月17日，PC_搜索异常.md",
+            "heading": "事故复盘 > 为什么会没有理解参数含义？",
+            "similarity": 0.386333
+          },
+          {
+            "block_ref": "blk_fb9b8a938918144c",
+            "source": "搜索无结果-技术方案.md",
+            "heading": "背景：目前有的搜索词是无搜索召回结果，主要问题是：",
+            "similarity": 0.749289
+          }
+        ]
+      },
+      {
+        "id": "search-002",
+        "query": "搜索无结果优化希望达到什么目标？",
+        "matched_rank": 1,
+        "retrieved_count": 8,
+        "candidates": [
+          {
+            "block_ref": "blk_2c19b50e55ba75ab",
+            "source": "搜索无结果-技术方案.md",
+            "heading": "目标",
+            "similarity": 0.688419
+          },
+          {
+            "block_ref": "blk_49df731f6a0280e0",
+            "source": "搜索无结果-技术方案.md",
+            "heading": "背景：目前有的搜索词是无搜索召回结果，主要问题是：",
+            "similarity": 0.737201
+          },
+          {
+            "block_ref": "blk_4af5df1d2d48d521",
+            "source": "8~9月搜索优化总结.md",
+            "heading": "3、产研侧的动作 > 3.3、召回的优化 > 3.3.1、Query优化",
+            "similarity": 0.586978
+          },
+          {
+            "block_ref": "blk_fb9b8a938918144c",
+            "source": "搜索无结果-技术方案.md",
+            "heading": "背景：目前有的搜索词是无搜索召回结果，主要问题是：",
+            "similarity": 0.633053
+          },
+          {
+            "block_ref": "blk_69b3dea1c4d0430e",
+            "source": "8~9月搜索优化总结.md",
+            "heading": "6、总结 > 6.1、目标完成度 / 6.2、为什么没完成",
+            "similarity": 0.630501
+          },
+          {
+            "block_ref": "blk_da498010314dd9a9",
+            "source": "8~9月搜索优化总结.md",
+            "heading": "2、双月成绩 > 2.6、搜索无结果接推荐列表",
+            "similarity": 0.597982
+          },
+          {
+            "block_ref": "blk_420738c323ebf588",
+            "source": "8~9月搜索优化总结.md",
+            "heading": "5、待改进",
+            "similarity": 0.58724
+          },
+          {
+            "block_ref": "blk_aa99bc40d5ba81ef",
+            "source": "搜索无结果-技术方案.md",
+            "heading": "方案",
+            "similarity": 0.603516
+          }
+        ]
+      },
+      {
+        "id": "experiment-001",
+        "query": "AB 实验需要观察哪些基础指标？",
+        "matched_rank": 1,
+        "retrieved_count": 7,
+        "candidates": [
+          {
+            "block_ref": "blk_330f1ffe1c660bcc",
+            "source": "AB实验 观察指标和分流规则.md",
+            "heading": "基础指标：",
+            "similarity": 0.737947
+          },
+          {
+            "block_ref": "blk_42cde9d90c8002e9",
+            "source": "AB实验 观察指标和分流规则.md",
+            "heading": "业务指标：",
+            "similarity": 0.62831
+          },
+          {
+            "block_ref": "blk_d9e14bba206bfee0",
+            "source": "AB实验 观察指标和分流规则.md",
+            "heading": "分流比例",
+            "similarity": 0.549785
+          },
+          {
+            "block_ref": "blk_88fa71419efdb0b9",
+            "source": "cider-基建2023.md",
+            "heading": "2023-09-07 > 服务端基础服务 > 安全&稳定 > ABTEST服务",
+            "similarity": 0.583741
+          },
+          {
+            "block_ref": "blk_c82c7cf5fd8b3e29",
+            "source": "cider-基建2023.md",
+            "heading": "2023-09-14 > 服务端基础服务 > 安全&稳定 > ABTEST服务",
+            "similarity": 0.569913
+          },
+          {
+            "block_ref": "blk_1c78ef9a618be4b9",
+            "source": "cider-基建2023.md",
+            "heading": "2023-09-21 > 服务端基础服务 > 安全&稳定 > ABTEST服务",
+            "similarity": 0.568883
+          },
+          {
+            "block_ref": "blk_8e3d83d9fd09baf2",
+            "source": "cider-基建2023.md",
+            "heading": "2023-09-28 > 服务端基础服务 > 安全&稳定 > ABTEST服务",
+            "similarity": 0.568812
+          }
+        ]
+      },
+      {
+        "id": "experiment-002",
+        "query": "AB 实验的分流比例如何设置？",
+        "matched_rank": 1,
+        "retrieved_count": 8,
+        "candidates": [
+          {
+            "block_ref": "blk_d9e14bba206bfee0",
+            "source": "AB实验 观察指标和分流规则.md",
+            "heading": "分流比例",
+            "similarity": 0.833733
+          },
+          {
+            "block_ref": "blk_39b20c364852bdd6",
+            "source": "购物车分表方案落地.md",
+            "heading": "三、方案 & 细节 > 3.2 灰度机制",
+            "similarity": 0.467173
+          },
+          {
+            "block_ref": "blk_f8b9f9352aac4aa2",
+            "source": "AB测试服务技术方案-V0.1.md",
+            "heading": "二、模块设计 > 2.2 分流策略：",
+            "similarity": 0.687863
+          },
+          {
+            "block_ref": "blk_adc2bac5abf8b397",
+            "source": "Recent Conversations.md",
+            "heading": "AB测试系统原理与实现",
+            "similarity": 0.70688
+          },
+          {
+            "block_ref": "blk_f6057f140e3908dd",
+            "source": "Sprint01-上线清单.md",
+            "heading": "",
+            "similarity": 0.69639
+          },
+          {
+            "block_ref": "blk_330f1ffe1c660bcc",
+            "source": "AB实验 观察指标和分流规则.md",
+            "heading": "基础指标：",
+            "similarity": 0.656308
+          },
+          {
+            "block_ref": "blk_9627bd345bd5217b",
+            "source": "AB测试系统-操作手册.md",
+            "heading": "3.使用流程 > (7) 试验数据看板 / (8) 关于缓存时间",
+            "similarity": 0.60493
+          },
+          {
+            "block_ref": "blk_e1552e124c791543",
+            "source": "AB测试服务技术方案-V0.1.md",
+            "heading": "二、模块设计 > 2.3 调试设备",
+            "similarity": 0.5921
+          }
+        ]
+      },
+      {
+        "id": "experiment-003",
+        "query": "AB 实验需要观察哪些业务指标？",
+        "matched_rank": 1,
+        "retrieved_count": 4,
+        "candidates": [
+          {
+            "block_ref": "blk_42cde9d90c8002e9",
+            "source": "AB实验 观察指标和分流规则.md",
+            "heading": "业务指标：",
+            "similarity": 0.711989
+          },
+          {
+            "block_ref": "blk_330f1ffe1c660bcc",
+            "source": "AB实验 观察指标和分流规则.md",
+            "heading": "基础指标：",
+            "similarity": 0.660695
+          },
+          {
+            "block_ref": "blk_d9e14bba206bfee0",
+            "source": "AB实验 观察指标和分流规则.md",
+            "heading": "分流比例",
+            "similarity": 0.526042
+          },
+          {
+            "block_ref": "blk_88fa71419efdb0b9",
+            "source": "cider-基建2023.md",
+            "heading": "2023-09-07 > 服务端基础服务 > 安全&稳定 > ABTEST服务",
+            "similarity": 0.553432
+          }
+        ]
+      },
+      {
+        "id": "gateway-001",
+        "query": "APISIX 网关在系统中承担什么作用？",
+        "matched_rank": 4,
+        "retrieved_count": 8,
+        "candidates": [
+          {
+            "block_ref": "blk_ac917396fbb58ccb",
+            "source": "cider-基建2023.md",
+            "heading": "2023-11-09 > 服务端基础服务 > 云原生的架构 > APISIX网关",
+            "similarity": 0.599993
+          },
+          {
+            "block_ref": "blk_11342d8964302d8f",
+            "source": "基础服务_QA.md",
+            "heading": "APISIX网关",
+            "similarity": 0.648399
+          },
+          {
+            "block_ref": "blk_59f33484df005578",
+            "source": "cider-基建2023.md",
+            "heading": "2023-09-07 > 服务端基础服务 > 云原生的架构 > APISIX网关 / API管理平台",
+            "similarity": 0.621047
+          },
+          {
+            "block_ref": "blk_897094d2a932af24",
+            "source": "ApiSix 网关介绍.md",
+            "heading": "介绍",
+            "similarity": 0.67584
+          },
+          {
+            "block_ref": "blk_44643e423fdc7e3d",
+            "source": "cider-基建2023.md",
+            "heading": "2023-09-21 > 服务端基础服务 > 云原生的架构 > APISIX网关",
+            "similarity": 0.64995
+          },
+          {
+            "block_ref": "blk_a2349fb6ae793858",
+            "source": "cider-基建2023.md",
+            "heading": "2023-08-31 > 服务端基础服务 > 云原生的架构 > APISIX网关 / API管理平台",
+            "similarity": 0.643428
+          },
+          {
+            "block_ref": "blk_9cc8ee88072c6f67",
+            "source": "cider-基建2023.md",
+            "heading": "2023-12-21 > 缓存 > APISIX网关",
+            "similarity": 0.6278
+          },
+          {
+            "block_ref": "blk_9a8ed1bd5e386532",
+            "source": "cider-基建2023.md",
+            "heading": "2023-07-27 > 服务端基础服务 > 云原生的架构 > APISIX网关 / API管理平台",
+            "similarity": 0.632974
+          }
+        ]
+      },
+      {
+        "id": "gateway-002",
+        "query": "APISIX 网关如何进行灰度路由？",
+        "matched_rank": 1,
+        "retrieved_count": 8,
+        "candidates": [
+          {
+            "block_ref": "blk_0355a47eede098d4",
+            "source": "ApiSix 网关介绍.md",
+            "heading": "灰度路由",
+            "similarity": 0.706094
+          },
+          {
+            "block_ref": "blk_3fa168df717122e3",
+            "source": "2024年12月02日，支付收银台异常.md",
+            "heading": "发生原因 > 为什么回滚失败？",
+            "similarity": 0.360716
+          },
+          {
+            "block_ref": "blk_1cc692973d980be2",
+            "source": "2025年05月29日，K8S路由异常导致商品服务无法访问.md",
+            "heading": "事故复盘 > 为什么灰度路由存在，而灰度POD不存在？",
+            "similarity": 0.566611
+          },
+          {
+            "block_ref": "blk_11342d8964302d8f",
+            "source": "基础服务_QA.md",
+            "heading": "APISIX网关",
+            "similarity": 0.63714
+          },
+          {
+            "block_ref": "blk_3749571e209cd939",
+            "source": "Recent Conversations.md",
+            "heading": "详细剖析灰度环境架构",
+            "similarity": 0.626988
+          },
+          {
+            "block_ref": "blk_54ded9ff03a77432",
+            "source": "cider-基建2023.md",
+            "heading": "2023-04-05 > 服务端基建 > 网关服务Apisix @孟宪超",
+            "similarity": 0.603033
+          },
+          {
+            "block_ref": "blk_5be45e0328618315",
+            "source": "cider-基建2023.md",
+            "heading": "2023-11-30 > 服务端基础服务 > 缓存 > APISIX网关",
+            "similarity": 0.626059
+          },
+          {
+            "block_ref": "blk_897094d2a932af24",
+            "source": "ApiSix 网关介绍.md",
+            "heading": "介绍",
+            "similarity": 0.578293
+          }
+        ]
+      },
+      {
+        "id": "tracking-011",
+        "query": "新的 SPM 和 SCM 拼接规则以及新旧方案优缺点是什么？",
+        "matched_rank": 2,
+        "retrieved_count": 8,
+        "candidates": [
+          {
+            "block_ref": "blk_3844a7cc39262160",
+            "source": "C端埋点的春天--SPM新埋点初探.md",
+            "heading": "总结： > 新旧方案的 优缺点对比",
+            "similarity": 0.658308
+          },
+          {
+            "block_ref": "blk_9f17fb6c541a6ac6",
+            "source": "C端埋点的春天--SPM新埋点初探.md",
+            "heading": "SPM和SCM拼接规则",
+            "similarity": 0.712367
+          },
+          {
+            "block_ref": "blk_30309d0338d5be4c",
+            "source": "埋点后台一期2.0.md",
+            "heading": "4.spm scm",
+            "similarity": 0.598356
+          },
+          {
+            "block_ref": "blk_a06e4bfd9c5f70d0",
+            "source": "C端埋点的春天--SPM新埋点初探.md",
+            "heading": "SPM和SCM拼接规则",
+            "similarity": 0.709365
+          },
+          {
+            "block_ref": "blk_546df1a74b662634",
+            "source": "C端埋点的春天--SPM新埋点初探.md",
+            "heading": "SpmRefer 和 ScmRefer的由来 > 拼接规则",
+            "similarity": 0.640458
+          },
+          {
+            "block_ref": "blk_204e73f2a5cbfcea",
+            "source": "C端埋点的春天--SPM新埋点初探.md",
+            "heading": "SpmRefer 和 ScmRefer的由来 > 拼接准则",
+            "similarity": 0.618621
+          },
+          {
+            "block_ref": "blk_917a2610795abd62",
+            "source": "C端埋点的春天--SPM新埋点初探.md",
+            "heading": "SpmRefer 和 ScmRefer的由来 > 拼接准则",
+            "similarity": 0.586606
+          },
+          {
+            "block_ref": "blk_7ca404698ad42fb8",
+            "source": "C端埋点的春天--SPM新埋点初探.md",
+            "heading": "核心宗旨",
+            "similarity": 0.457693
+          }
+        ]
+      }
+    ],
+    "negative_outcomes": [
+      {
+        "id": "negative-001",
+        "query": "量子纠缠在量子计算退相干控制中的应用",
+        "matched_rank": null,
+        "retrieved_count": 0,
+        "candidates": []
+      },
+      {
+        "id": "negative-002",
+        "query": "火星殖民地生态系统如何实现自维持",
+        "matched_rank": null,
+        "retrieved_count": 0,
+        "candidates": []
+      },
+      {
+        "id": "negative-003",
+        "query": "巴赫平均律中的对位法与和声分析",
+        "matched_rank": null,
+        "retrieved_count": 0,
+        "candidates": []
+      },
+      {
+        "id": "negative-004",
+        "query": "线粒体 DNA 在细胞衰老中的作用机制",
+        "matched_rank": null,
+        "retrieved_count": 0,
+        "candidates": []
+      },
+      {
+        "id": "negative-005",
+        "query": "如何在家中培育蓝色兰花新品种",
+        "matched_rank": null,
+        "retrieved_count": 0,
+        "candidates": []
+      },
+      {
+        "id": "negative-006",
+        "query": "古埃及中王国时期的灌溉税制度",
+        "matched_rank": null,
+        "retrieved_count": 0,
+        "candidates": []
+      },
+      {
+        "id": "negative-007",
+        "query": "超导量子比特的表面码纠错阈值",
+        "matched_rank": null,
+        "retrieved_count": 0,
+        "candidates": []
+      },
+      {
+        "id": "negative-008",
+        "query": "南极磷虾种群的季节性迁徙规律",
+        "matched_rank": null,
+        "retrieved_count": 0,
+        "candidates": []
+      },
+      {
+        "id": "negative-009",
+        "query": "十二平均律与纯律在弦乐四重奏中的差别",
+        "matched_rank": null,
+        "retrieved_count": 0,
+        "candidates": []
+      },
+      {
+        "id": "negative-010",
+        "query": "月球背面射电望远镜阵列如何部署",
+        "matched_rank": null,
+        "retrieved_count": 0,
+        "candidates": []
+      }
+    ]
+  }
+}

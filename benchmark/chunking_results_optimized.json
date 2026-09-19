@@ -1,0 +1,661 @@
+{
+ "corpus_files": 1750,
+ "parsed_files": 1728,
+ "skipped_files": 22,
+ "production_scanned_files": 1354,
+ "production": {
+  "tag": "max=2000,min=120",
+  "raw_chunks_including_image_tasks": 38416,
+  "pending_image_tasks": 9998,
+  "n_docs": 1728,
+  "n_chunks": 28418,
+  "chunks_per_doc_mean": 16.45,
+  "chunks_per_doc_median": 13.0,
+  "chunks_per_doc_max": 789,
+  "top1_doc_share_pct": 2.78,
+  "top10_doc_share_pct": 19.24,
+  "len_min": 1,
+  "len_p10": 30,
+  "len_p25": 69,
+  "len_median": 138,
+  "len_mean": 281.2,
+  "len_p75": 248,
+  "len_p90": 652,
+  "len_max": 2000,
+  "frag_lt50_pct": 17.92,
+  "frag_lt100_pct": 35.06,
+  "frag_lt150_pct": 53.4,
+  "frag_lt200_pct": 67.71,
+  "empty_lt5_pct": 0.65,
+  "over_max_pct": 0.0,
+  "hard_cut_pct_at_ceiling": 85.71,
+  "hard_cut_pct_all": 0.0211,
+  "ceiling_chunks": 7,
+  "hard_cut_by_type": {
+   "text": {
+    "ceiling": 7,
+    "hard_cut": 6
+   }
+  },
+  "dup_text_blocks": 1086,
+  "dup_text_pct": 3.82,
+  "no_heading_pct": 2.23,
+  "text_mixed_with_table_pct": 0.0,
+  "types": {
+   "text": 21741,
+   "code": 1839,
+   "table": 4838
+  },
+  "chunk_seconds": 0.66,
+  "parse_seconds": 15.75
+ },
+ "production_scan": {
+  "tag": "max=2000,min=120",
+  "raw_chunks_including_image_tasks": 27001,
+  "pending_image_tasks": 9998,
+  "n_docs": 1354,
+  "n_chunks": 17003,
+  "chunks_per_doc_mean": 12.56,
+  "chunks_per_doc_median": 9.0,
+  "chunks_per_doc_max": 789,
+  "top1_doc_share_pct": 4.64,
+  "top10_doc_share_pct": 32.16,
+  "len_min": 1,
+  "len_p10": 27,
+  "len_p25": 70,
+  "len_median": 158,
+  "len_mean": 362.7,
+  "len_p75": 352,
+  "len_p90": 1210,
+  "len_max": 2000,
+  "frag_lt50_pct": 17.9,
+  "frag_lt100_pct": 33.16,
+  "frag_lt150_pct": 47.6,
+  "frag_lt200_pct": 59.11,
+  "empty_lt5_pct": 0.96,
+  "over_max_pct": 0.0,
+  "hard_cut_pct_at_ceiling": 85.71,
+  "hard_cut_pct_all": 0.0353,
+  "ceiling_chunks": 7,
+  "hard_cut_by_type": {
+   "text": {
+    "ceiling": 7,
+    "hard_cut": 6
+   }
+  },
+  "dup_text_blocks": 1070,
+  "dup_text_pct": 6.29,
+  "no_heading_pct": 3.78,
+  "text_mixed_with_table_pct": 0.0,
+  "types": {
+   "text": 14120,
+   "code": 809,
+   "table": 2074
+  }
+ },
+ "production_unique_documents": {
+  "tag": "max=2000,min=120",
+  "raw_chunks_including_image_tasks": 5552,
+  "pending_image_tasks": 1819,
+  "n_docs": 298,
+  "n_chunks": 3733,
+  "chunks_per_doc_mean": 12.53,
+  "chunks_per_doc_median": 8.0,
+  "chunks_per_doc_max": 789,
+  "top1_doc_share_pct": 21.14,
+  "top10_doc_share_pct": 51.94,
+  "len_min": 1,
+  "len_p10": 23,
+  "len_p25": 67,
+  "len_median": 158,
+  "len_mean": 359.3,
+  "len_p75": 366,
+  "len_p90": 1100,
+  "len_max": 2000,
+  "frag_lt50_pct": 19.13,
+  "frag_lt100_pct": 33.81,
+  "frag_lt150_pct": 47.71,
+  "frag_lt200_pct": 58.51,
+  "empty_lt5_pct": 1.42,
+  "over_max_pct": 0.0,
+  "hard_cut_pct_at_ceiling": 50.0,
+  "hard_cut_pct_all": 0.0268,
+  "ceiling_chunks": 2,
+  "hard_cut_by_type": {
+   "text": {
+    "ceiling": 2,
+    "hard_cut": 1
+   }
+  },
+  "dup_text_blocks": 211,
+  "dup_text_pct": 5.65,
+  "no_heading_pct": 4.26,
+  "text_mixed_with_table_pct": 0.0,
+  "types": {
+   "text": 3040,
+   "code": 264,
+   "table": 429
+  }
+ },
+ "exhaustive_unique_documents": {
+  "tag": "max=2000,min=120",
+  "raw_chunks_including_image_tasks": 8836,
+  "pending_image_tasks": 1819,
+  "n_docs": 404,
+  "n_chunks": 7017,
+  "chunks_per_doc_mean": 17.37,
+  "chunks_per_doc_median": 12.0,
+  "chunks_per_doc_max": 789,
+  "top1_doc_share_pct": 11.24,
+  "top10_doc_share_pct": 27.68,
+  "len_min": 1,
+  "len_p10": 28,
+  "len_p25": 69,
+  "len_median": 140,
+  "len_mean": 269.7,
+  "len_p75": 247,
+  "len_p90": 588,
+  "len_max": 2000,
+  "frag_lt50_pct": 18.24,
+  "frag_lt100_pct": 34.87,
+  "frag_lt150_pct": 53.11,
+  "frag_lt200_pct": 67.51,
+  "empty_lt5_pct": 0.81,
+  "over_max_pct": 0.0,
+  "hard_cut_pct_at_ceiling": 50.0,
+  "hard_cut_pct_all": 0.0143,
+  "ceiling_chunks": 2,
+  "hard_cut_by_type": {
+   "text": {
+    "ceiling": 2,
+    "hard_cut": 1
+   }
+  },
+  "dup_text_blocks": 213,
+  "dup_text_pct": 3.04,
+  "no_heading_pct": 2.24,
+  "text_mixed_with_table_pct": 0.0,
+  "types": {
+   "text": 5219,
+   "code": 554,
+   "table": 1244
+  }
+ },
+ "ablations": [
+  {
+   "tag": "max=2000,min=120",
+   "raw_chunks_including_image_tasks": 38416,
+   "pending_image_tasks": 9998,
+   "n_docs": 1728,
+   "n_chunks": 28418,
+   "chunks_per_doc_mean": 16.45,
+   "chunks_per_doc_median": 13.0,
+   "chunks_per_doc_max": 789,
+   "top1_doc_share_pct": 2.78,
+   "top10_doc_share_pct": 19.24,
+   "len_min": 1,
+   "len_p10": 30,
+   "len_p25": 69,
+   "len_median": 138,
+   "len_mean": 281.2,
+   "len_p75": 248,
+   "len_p90": 652,
+   "len_max": 2000,
+   "frag_lt50_pct": 17.92,
+   "frag_lt100_pct": 35.06,
+   "frag_lt150_pct": 53.4,
+   "frag_lt200_pct": 67.71,
+   "empty_lt5_pct": 0.65,
+   "over_max_pct": 0.0,
+   "hard_cut_pct_at_ceiling": 85.71,
+   "hard_cut_pct_all": 0.0211,
+   "ceiling_chunks": 7,
+   "hard_cut_by_type": {
+    "text": {
+     "ceiling": 7,
+     "hard_cut": 6
+    }
+   },
+   "dup_text_blocks": 1086,
+   "dup_text_pct": 3.82,
+   "no_heading_pct": 2.23,
+   "text_mixed_with_table_pct": 0.0,
+   "types": {
+    "text": 21741,
+    "code": 1839,
+    "table": 4838
+   }
+  },
+  {
+   "tag": "max=2000,min=300",
+   "raw_chunks_including_image_tasks": 35119,
+   "pending_image_tasks": 9998,
+   "n_docs": 1728,
+   "n_chunks": 25121,
+   "chunks_per_doc_mean": 14.54,
+   "chunks_per_doc_median": 12.0,
+   "chunks_per_doc_max": 642,
+   "top1_doc_share_pct": 2.56,
+   "top10_doc_share_pct": 18.16,
+   "len_min": 1,
+   "len_p10": 30,
+   "len_p25": 69,
+   "len_median": 165,
+   "len_mean": 321.1,
+   "len_p75": 345,
+   "len_p90": 760,
+   "len_max": 2000,
+   "frag_lt50_pct": 18.03,
+   "frag_lt100_pct": 34.26,
+   "frag_lt150_pct": 46.89,
+   "frag_lt200_pct": 56.3,
+   "empty_lt5_pct": 0.62,
+   "over_max_pct": 0.0,
+   "hard_cut_pct_at_ceiling": 85.71,
+   "hard_cut_pct_all": 0.0239,
+   "ceiling_chunks": 7,
+   "hard_cut_by_type": {
+    "text": {
+     "ceiling": 7,
+     "hard_cut": 6
+    }
+   },
+   "dup_text_blocks": 819,
+   "dup_text_pct": 3.26,
+   "no_heading_pct": 2.52,
+   "text_mixed_with_table_pct": 0.0,
+   "types": {
+    "text": 18655,
+    "code": 1839,
+    "table": 4627
+   }
+  },
+  {
+   "tag": "max=1200,min=200",
+   "raw_chunks_including_image_tasks": 37848,
+   "pending_image_tasks": 9998,
+   "n_docs": 1728,
+   "n_chunks": 27850,
+   "chunks_per_doc_mean": 16.12,
+   "chunks_per_doc_median": 13.0,
+   "chunks_per_doc_max": 702,
+   "top1_doc_share_pct": 2.52,
+   "top10_doc_share_pct": 17.85,
+   "len_min": 1,
+   "len_p10": 31,
+   "len_p25": 74,
+   "len_median": 175,
+   "len_mean": 288.7,
+   "len_p75": 325,
+   "len_p90": 886,
+   "len_max": 1200,
+   "frag_lt50_pct": 16.95,
+   "frag_lt100_pct": 32.32,
+   "frag_lt150_pct": 44.93,
+   "frag_lt200_pct": 54.89,
+   "empty_lt5_pct": 0.64,
+   "over_max_pct": 0.0,
+   "hard_cut_pct_at_ceiling": 69.23,
+   "hard_cut_pct_all": 0.0969,
+   "ceiling_chunks": 39,
+   "hard_cut_by_type": {
+    "code": {
+     "ceiling": 18,
+     "hard_cut": 12
+    },
+    "table": {
+     "ceiling": 6,
+     "hard_cut": 6
+    },
+    "text": {
+     "ceiling": 15,
+     "hard_cut": 9
+    }
+   },
+   "dup_text_blocks": 916,
+   "dup_text_pct": 3.29,
+   "no_heading_pct": 2.69,
+   "text_mixed_with_table_pct": 0.0,
+   "types": {
+    "text": 20453,
+    "code": 1977,
+    "table": 5420
+   }
+  },
+  {
+   "tag": "max=800,min=200",
+   "raw_chunks_including_image_tasks": 39925,
+   "pending_image_tasks": 9998,
+   "n_docs": 1728,
+   "n_chunks": 29927,
+   "chunks_per_doc_mean": 17.32,
+   "chunks_per_doc_median": 14.0,
+   "chunks_per_doc_max": 703,
+   "top1_doc_share_pct": 2.35,
+   "top10_doc_share_pct": 16.87,
+   "len_min": 1,
+   "len_p10": 33,
+   "len_p25": 79,
+   "len_median": 190,
+   "len_mean": 268.6,
+   "len_p75": 377,
+   "len_p90": 713,
+   "len_max": 800,
+   "frag_lt50_pct": 15.87,
+   "frag_lt100_pct": 30.44,
+   "frag_lt150_pct": 42.39,
+   "frag_lt200_pct": 51.91,
+   "empty_lt5_pct": 0.6,
+   "over_max_pct": 0.0,
+   "hard_cut_pct_at_ceiling": 91.67,
+   "hard_cut_pct_all": 0.3676,
+   "ceiling_chunks": 120,
+   "hard_cut_by_type": {
+    "code": {
+     "ceiling": 38,
+     "hard_cut": 30
+    },
+    "table": {
+     "ceiling": 18,
+     "hard_cut": 18
+    },
+    "text": {
+     "ceiling": 64,
+     "hard_cut": 62
+    }
+   },
+   "dup_text_blocks": 1001,
+   "dup_text_pct": 3.34,
+   "no_heading_pct": 2.93,
+   "text_mixed_with_table_pct": 0.0,
+   "types": {
+    "text": 21418,
+    "code": 2183,
+    "table": 6326
+   }
+  },
+  {
+   "tag": "max=3000,min=400",
+   "raw_chunks_including_image_tasks": 33703,
+   "pending_image_tasks": 9998,
+   "n_docs": 1728,
+   "n_chunks": 23705,
+   "chunks_per_doc_mean": 13.72,
+   "chunks_per_doc_median": 11.0,
+   "chunks_per_doc_max": 612,
+   "top1_doc_share_pct": 2.58,
+   "top10_doc_share_pct": 18.39,
+   "len_min": 1,
+   "len_p10": 29,
+   "len_p25": 67,
+   "len_median": 159,
+   "len_mean": 341.0,
+   "len_p75": 356,
+   "len_p90": 658,
+   "len_max": 2999,
+   "frag_lt50_pct": 18.71,
+   "frag_lt100_pct": 35.34,
+   "frag_lt150_pct": 48.09,
+   "frag_lt200_pct": 57.78,
+   "empty_lt5_pct": 0.65,
+   "over_max_pct": 3.86,
+   "hard_cut_pct_at_ceiling": 0.0,
+   "hard_cut_pct_all": 0.0,
+   "ceiling_chunks": 0,
+   "hard_cut_by_type": {},
+   "dup_text_blocks": 752,
+   "dup_text_pct": 3.17,
+   "no_heading_pct": 2.51,
+   "text_mixed_with_table_pct": 0.0,
+   "types": {
+    "text": 17643,
+    "code": 1801,
+    "table": 4261
+   }
+  }
+ ],
+ "worst_fragments": [
+  {
+   "file": "208c88257fff4532815867d5d87178ff\\doc\\经验分享与总结\\如何测试你的代码.md",
+   "heading": "单元测试的好处",
+   "kind": "text",
+   "text": "略"
+  },
+  {
+   "file": "208c88257fff4532815867d5d87178ff\\doc\\风控\\行为风控数据分析.md",
+   "heading": "2024-03-04 > 明细 > 是否需要将通过人机识别v2的用户加入白名单 > 2.2.2 通过v2识别且触发v2次数 >= 2次 的 uid",
+   "kind": "text",
+   "text": "无"
+  },
+  {
+   "file": "64265bf0f80349baaacae80d27701cdd\\doc\\经验分享与总结\\如何测试你的代码.md",
+   "heading": "单元测试的好处",
+   "kind": "text",
+   "text": "略"
+  },
+  {
+   "file": "64265bf0f80349baaacae80d27701cdd\\doc\\风控\\行为风控数据分析.md",
+   "heading": "2024-03-04 > 明细 > 是否需要将通过人机识别v2的用户加入白名单 > 2.2.2 通过v2识别且触发v2次数 >= 2次 的 uid",
+   "kind": "text",
+   "text": "无"
+  },
+  {
+   "file": "8f1def730e9845b9aa5641a28e5d705e\\obsidian-valut-master\\cider\\doc\\经验分享与总结\\如何测试你的代码.md",
+   "heading": "单元测试的好处",
+   "kind": "text",
+   "text": "略"
+  },
+  {
+   "file": "8f1def730e9845b9aa5641a28e5d705e\\obsidian-valut-master\\cider\\doc\\风控\\行为风控数据分析.md",
+   "heading": "2024-03-04 > 明细 > 是否需要将通过人机识别v2的用户加入白名单 > 2.2.2 通过v2识别且触发v2次数 >= 2次 的 uid",
+   "kind": "text",
+   "text": "无"
+  },
+  {
+   "file": "acf46255e1f147b8a36a19f2d065c978\\doc\\经验分享与总结\\如何测试你的代码.md",
+   "heading": "单元测试的好处",
+   "kind": "text",
+   "text": "略"
+  },
+  {
+   "file": "acf46255e1f147b8a36a19f2d065c978\\doc\\风控\\行为风控数据分析.md",
+   "heading": "2024-03-04 > 明细 > 是否需要将通过人机识别v2的用户加入白名单 > 2.2.2 通过v2识别且触发v2次数 >= 2次 的 uid",
+   "kind": "text",
+   "text": "无"
+  },
+  {
+   "file": "d2bdda24a7f44a67bb2128d0c2218da4\\doc\\经验分享与总结\\如何测试你的代码.md",
+   "heading": "单元测试的好处",
+   "kind": "text",
+   "text": "略"
+  },
+  {
+   "file": "d2bdda24a7f44a67bb2128d0c2218da4\\doc\\风控\\行为风控数据分析.md",
+   "heading": "2024-03-04 > 明细 > 是否需要将通过人机识别v2的用户加入白名单 > 2.2.2 通过v2识别且触发v2次数 >= 2次 的 uid",
+   "kind": "text",
+   "text": "无"
+  },
+  {
+   "file": "doc\\经验分享与总结\\如何测试你的代码.md",
+   "heading": "单元测试的好处",
+   "kind": "text",
+   "text": "略"
+  },
+  {
+   "file": "doc\\风控\\行为风控数据分析.md",
+   "heading": "2024-03-04 > 明细 > 是否需要将通过人机识别v2的用户加入白名单 > 2.2.2 通过v2识别且触发v2次数 >= 2次 的 uid",
+   "kind": "text",
+   "text": "无"
+  },
+  {
+   "file": "208c88257fff4532815867d5d87178ff\\doc\\基础服务\\cider-基建2023.md",
+   "heading": "2023-09-28 > 服务端基础服务 > 安全&稳定 > 熔断限流",
+   "kind": "text",
+   "text": "暂无"
+  },
+  {
+   "file": "208c88257fff4532815867d5d87178ff\\doc\\基础服务\\cider-基建2023.md",
+   "heading": "2023-09-28 > 服务端基础服务 > 降本增效",
+   "kind": "text",
+   "text": "暂无"
+  },
+  {
+   "file": "208c88257fff4532815867d5d87178ff\\doc\\基础服务\\cider-基建2023.md",
+   "heading": "2023-09-21 > 服务端基础服务 > 安全&稳定 > 熔断限流",
+   "kind": "text",
+   "text": "暂无"
+  },
+  {
+   "file": "208c88257fff4532815867d5d87178ff\\doc\\基础服务\\cider-基建2023.md",
+   "heading": "2023-09-21 > 服务端基础服务 > 降本增效",
+   "kind": "text",
+   "text": "暂无"
+  },
+  {
+   "file": "208c88257fff4532815867d5d87178ff\\doc\\基础服务\\statsig使用宣导.md",
+   "heading": "QA > 白名单的数据会放到实验指标计算里么",
+   "kind": "text",
+   "text": "不会"
+  },
+  {
+   "file": "208c88257fff4532815867d5d87178ff\\doc\\风控\\行为风控数据分析.md",
+   "heading": "2024-04-07",
+   "kind": "text",
+   "text": "时间"
+  },
+  {
+   "file": "64265bf0f80349baaacae80d27701cdd\\doc\\基础服务\\cider-基建2023.md",
+   "heading": "2023-09-28 > 服务端基础服务 > 安全&稳定 > 熔断限流",
+   "kind": "text",
+   "text": "暂无"
+  },
+  {
+   "file": "64265bf0f80349baaacae80d27701cdd\\doc\\基础服务\\cider-基建2023.md",
+   "heading": "2023-09-28 > 服务端基础服务 > 降本增效",
+   "kind": "text",
+   "text": "暂无"
+  },
+  {
+   "file": "64265bf0f80349baaacae80d27701cdd\\doc\\基础服务\\cider-基建2023.md",
+   "heading": "2023-09-21 > 服务端基础服务 > 安全&稳定 > 熔断限流",
+   "kind": "text",
+   "text": "暂无"
+  },
+  {
+   "file": "64265bf0f80349baaacae80d27701cdd\\doc\\基础服务\\cider-基建2023.md",
+   "heading": "2023-09-21 > 服务端基础服务 > 降本增效",
+   "kind": "text",
+   "text": "暂无"
+  },
+  {
+   "file": "64265bf0f80349baaacae80d27701cdd\\doc\\基础服务\\statsig使用宣导.md",
+   "heading": "QA > 白名单的数据会放到实验指标计算里么",
+   "kind": "text",
+   "text": "不会"
+  },
+  {
+   "file": "64265bf0f80349baaacae80d27701cdd\\doc\\风控\\行为风控数据分析.md",
+   "heading": "2024-04-07",
+   "kind": "text",
+   "text": "时间"
+  },
+  {
+   "file": "8f1def730e9845b9aa5641a28e5d705e\\obsidian-valut-master\\cider\\doc\\基础服务\\cider-基建2023.md",
+   "heading": "2023-09-28 > 服务端基础服务 > 安全&稳定 > 熔断限流",
+   "kind": "text",
+   "text": "暂无"
+  },
+  {
+   "file": "8f1def730e9845b9aa5641a28e5d705e\\obsidian-valut-master\\cider\\doc\\基础服务\\cider-基建2023.md",
+   "heading": "2023-09-28 > 服务端基础服务 > 降本增效",
+   "kind": "text",
+   "text": "暂无"
+  },
+  {
+   "file": "8f1def730e9845b9aa5641a28e5d705e\\obsidian-valut-master\\cider\\doc\\基础服务\\cider-基建2023.md",
+   "heading": "2023-09-21 > 服务端基础服务 > 安全&稳定 > 熔断限流",
+   "kind": "text",
+   "text": "暂无"
+  },
+  {
+   "file": "8f1def730e9845b9aa5641a28e5d705e\\obsidian-valut-master\\cider\\doc\\基础服务\\cider-基建2023.md",
+   "heading": "2023-09-21 > 服务端基础服务 > 降本增效",
+   "kind": "text",
+   "text": "暂无"
+  },
+  {
+   "file": "8f1def730e9845b9aa5641a28e5d705e\\obsidian-valut-master\\cider\\doc\\基础服务\\statsig使用宣导.md",
+   "heading": "QA > 白名单的数据会放到实验指标计算里么",
+   "kind": "text",
+   "text": "不会"
+  },
+  {
+   "file": "8f1def730e9845b9aa5641a28e5d705e\\obsidian-valut-master\\cider\\doc\\风控\\行为风控数据分析.md",
+   "heading": "2024-04-07",
+   "kind": "text",
+   "text": "时间"
+  }
+ ],
+ "top_docs_by_chunks": [
+  [
+   "208c88257fff4532815867d5d87178ff\\doc\\基础服务\\cider-基建2023.md",
+   789
+  ],
+  [
+   "64265bf0f80349baaacae80d27701cdd\\doc\\基础服务\\cider-基建2023.md",
+   789
+  ],
+  [
+   "8f1def730e9845b9aa5641a28e5d705e\\obsidian-valut-master\\cider\\doc\\基础服务\\cider-基建2023.md",
+   789
+  ],
+  [
+   "acf46255e1f147b8a36a19f2d065c978\\doc\\基础服务\\cider-基建2023.md",
+   789
+  ],
+  [
+   "d2bdda24a7f44a67bb2128d0c2218da4\\doc\\基础服务\\cider-基建2023.md",
+   789
+  ],
+  [
+   "doc\\基础服务\\cider-基建2023.md",
+   789
+  ],
+  [
+   "8f1def730e9845b9aa5641a28e5d705e\\obsidian-valut-master\\edream&实习\\公司业务\\PRD\\BTN.md",
+   229
+  ],
+  [
+   "8f1def730e9845b9aa5641a28e5d705e\\obsidian-valut-master\\reading\\ai碎碎念\\ECC学习解读第一篇.md",
+   173
+  ],
+  [
+   "208c88257fff4532815867d5d87178ff\\doc\\风控\\行为风控数据分析.md",
+   166
+  ],
+  [
+   "64265bf0f80349baaacae80d27701cdd\\doc\\风控\\行为风控数据分析.md",
+   166
+  ],
+  [
+   "8f1def730e9845b9aa5641a28e5d705e\\obsidian-valut-master\\cider\\doc\\风控\\行为风控数据分析.md",
+   166
+  ],
+  [
+   "acf46255e1f147b8a36a19f2d065c978\\doc\\风控\\行为风控数据分析.md",
+   166
+  ],
+  [
+   "d2bdda24a7f44a67bb2128d0c2218da4\\doc\\风控\\行为风控数据分析.md",
+   166
+  ],
+  [
+   "doc\\风控\\行为风控数据分析.md",
+   166
+  ],
+  [
+   "208c88257fff4532815867d5d87178ff\\doc\\排查bug的真实案例.md",
+   163
+  ]
+ ]
+}

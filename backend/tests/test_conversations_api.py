@@ -351,6 +351,33 @@ def test_default_workspace_cannot_be_deleted() -> None:
     assert client.delete("/api/workspaces/nope").status_code == 404
 
 
+def test_pin_and_reorder_workspaces() -> None:
+    client = _client()
+    first = client.post("/api/workspaces", json={"name": "A"}).json()["id"]
+    second = client.post("/api/workspaces", json={"name": "B"}).json()["id"]
+
+    # 重排：B 最前
+    reordered = client.put("/api/workspaces/order", json={"ids": [second, "default", first]})
+    assert reordered.status_code == 200
+    assert [item["id"] for item in reordered.json()] == [second, "default", first]
+
+    # 置顶：A 到最前（pinned 落库）
+    pinned = client.put(f"/api/workspaces/{first}/pin", json={"pinned": True})
+    assert pinned.status_code == 200
+    assert pinned.json()["pinned"] is True
+    assert [item["id"] for item in client.get("/api/workspaces").json()] == [first, second, "default"]
+
+    # 取消置顶回到手工位次
+    client.put(f"/api/workspaces/{first}/pin", json={"pinned": False})
+    assert [item["id"] for item in client.get("/api/workspaces").json()] == [second, "default", first]
+    assert client.put("/api/workspaces/nope/pin", json={"pinned": True}).status_code == 404
+
+
+def test_reorder_workspaces_requires_ids() -> None:
+    client = _client()
+    assert client.put("/api/workspaces/order", json={"ids": []}).status_code == 422
+
+
 def test_new_conversation_lands_in_requested_workspace() -> None:
     client = _client()
     workspace_id = client.post("/api/workspaces", json={"name": "研究"}).json()["id"]

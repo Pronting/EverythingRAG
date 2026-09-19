@@ -2718,6 +2718,67 @@ body {
   color: var(--text);
 }
 
+/* 工作区置顶（别针）：默认只在悬浮 / 已置顶时显形 */
+.ws-folder-pin {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  padding: 0;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s, background 0.12s, color 0.12s;
+}
+
+.ws-folder-header:hover .ws-folder-pin,
+.ws-folder-pin.active,
+.ws-folder-pin:focus-visible {
+  opacity: 1;
+}
+
+.ws-folder-pin:hover {
+  background: var(--hover-strong);
+  color: var(--text);
+}
+
+.ws-folder-pin.active {
+  color: var(--accent);
+}
+
+/* 工作区拖拽排序：被拖项半透明，落点上方画插入线 */
+.ws-folder.dragging {
+  opacity: 0.45;
+}
+
+.ws-folder.drop-before {
+  box-shadow: inset 0 2px 0 var(--accent);
+}
+
+/* 「展开显示」：每个分区默认 5 条，每次追加 10 条 */
+.ws-folder-more {
+  margin-top: 2px;
+  padding: 5px 8px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-tertiary);
+  font: inherit;
+  font-size: 11.5px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ws-folder-more:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
 /* 删除工作区的二次确认 */
 .workspace-confirm {
   margin-top: 8px;

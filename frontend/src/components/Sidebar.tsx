@@ -42,6 +42,10 @@ interface SidebarProps {
   onCreateWorkspace: () => Promise<void>;
   /** 拖拽落点：把会话移动/排序到目标位置。 */
   onDropConversation: (conversationId: string, target: DropTarget) => void;
+  /** 拖拽工作区排序（按新顺序落库）。 */
+  onReorderWorkspaces: (orderedIds: string[]) => void;
+  /** 置顶 / 取消置顶工作区。 */
+  onToggleWorkspacePin: (workspace: Workspace) => void;
 }
 
 /**
@@ -60,6 +64,8 @@ export default function Sidebar({
   onDeleteWorkspace,
   onCreateWorkspace,
   onDropConversation,
+  onReorderWorkspaces,
+  onToggleWorkspacePin,
 }: SidebarProps) {
   // 整个侧边栏可折叠为图标栏
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(readSidebarCollapsed);
@@ -179,6 +185,8 @@ export default function Sidebar({
               onDeleteWorkspace={onDeleteWorkspace}
               onCreateWorkspace={onCreateWorkspace}
               onDropConversation={onDropConversation}
+              onReorderWorkspaces={onReorderWorkspaces}
+              onToggleWorkspacePin={onToggleWorkspacePin}
             />
           )}
         </nav>

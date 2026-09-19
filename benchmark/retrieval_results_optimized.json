@@ -1,0 +1,7432 @@
+[
+ {
+  "id": "C01",
+  "cat": "semantic",
+  "diff": "medium",
+  "query": "上新进度管控里，二级风格线和产品标签之间的映射是怎么建立的？",
+  "gold": [
+   "b0d9e228a82b04d4d79a6f08ac2d75af::c60cc123dc7ff599::/H1/3-需求设计说明/H2/32-开款时明确产品分类风格线/H3/33-修改数企监控看板drop-看板#6"
+  ],
+  "n_gold": 1,
+  "hybrid": {
+   "n_out": 8,
+   "latency_ms": 180.1,
+   "top1_sim": 0.7679,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "recall": {
+    "1": 1.0,
+    "3": 1.0,
+    "5": 1.0,
+    "8": 1.0,
+    "10": 1.0
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0,
+   "ev_cov_ctx": 1.0,
+   "pollution": 0.125,
+   "dup": 0.0,
+   "top_files": [
+    "上新进度过程管控—分类&风格线维度.md",
+    "上新进度过程管控—分类&风格线维度.md",
+    "上新进度过程管控—分类&风格线维度.md",
+    "上新进度过程管控—分类&风格线维度.md",
+    "上新进度过程管控—分类&风格线维度.md",
+    "上新进度过程&风格线纬度思路整理.md",
+    "上新进度过程管控—分类&风格线维度.md",
+    "上新进度过程管控—分类&风格线维度.md"
+   ],
+   "top_block_ids": [
+    "b0d9e228a82b04d4d79a6f08ac2d75af::c60cc123dc7ff599::/H1/3-需求设计说明/H2/32-开款时明确产品分类风格线/H3/33-修改数企监控看板drop-看板#6",
+    "b0d9e228a82b04d4d79a6f08ac2d75af::c60cc123dc7ff599::/H1/3-需求设计说明/H2/32-开款时明确产品分类风格线#1",
+    "b0d9e228a82b04d4d79a6f08ac2d75af::c60cc123dc7ff599::/H1/3-需求设计说明/H2/3-1-数字企划#1",
+    "b0d9e228a82b04d4d79a6f08ac2d75af::c60cc123dc7ff599::/H1/1-需求背景及目的#1",
+    "b0d9e228a82b04d4d79a6f08ac2d75af::c60cc123dc7ff599::/H1/3-需求设计说明/H2/32-开款时明确产品分类风格线/H3/33-修改数企监控看板drop-看板#3",
+    "dcdb469f33c419a4550fab90b03acf28::31cb2121bb93ff32::/H1/数企看板/H2/关于筛选#1",
+    "b0d9e228a82b04d4d79a6f08ac2d75af::c60cc123dc7ff599::/H1/3-需求设计说明/H2/3-1-数字企划#2",
+    "b0d9e228a82b04d4d79a6f08ac2d75af::c60cc123dc7ff599::/H1/3-需求设计说明/H2/32-开款时明确产品分类风格线/H3/33-修改数企监控看板drop-看板#7"
+   ]
+  },
+  "dense": {
+   "latency_ms": 6.2,
+   "top1_sim": 0.7679,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0
+  },
+  "bm25": {
+   "latency_ms": 23.1,
+   "top1_score": 101.801,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0
+  },
+  "ablation": {
+   "0.60": {
+    "n_out": 8,
+    "hit5": 1,
+    "ev_cov_ctx": 1.0
+   }
+  }
+ },
+ {
+  "id": "C02",
+  "cat": "fact_lookup",
+  "diff": "easy",
+  "query": "验证码邮件为什么会重复发送给用户？",
+  "gold": [
+   "57d5335f2b40ff160db5521f0d69d103::f4f40bdd2afc5362::/H2/发生原因#1"
+  ],
+  "n_gold": 1,
+  "hybrid": {
+   "n_out": 8,
+   "latency_ms": 107.6,
+   "top1_sim": 0.8273,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "recall": {
+    "1": 1.0,
+    "3": 1.0,
+    "5": 1.0,
+    "8": 1.0,
+    "10": 1.0
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0,
+   "ev_cov_ctx": 1.0,
+   "pollution": 0.0,
+   "dup": 0.0,
+   "top_files": [
+    "2024年12月03日，验证码邮件重复发送.md",
+    "2024年12月03日，验证码邮件重复发送.md",
+    "2024年12月03日，验证码邮件重复发送.md",
+    "2024年12月03日，验证码邮件重复发送.md",
+    "2024年12月03日，验证码邮件重复发送.md",
+    "2024年12月03日，验证码邮件重复发送.md",
+    "2024年12月03日，验证码邮件重复发送.md",
+    "2024年12月03日，验证码邮件重复发送.md"
+   ],
+   "top_block_ids": [
+    "57d5335f2b40ff160db5521f0d69d103::f4f40bdd2afc5362::/H2/发生原因#1",
+    "57d5335f2b40ff160db5521f0d69d103::f4f40bdd2afc5362::/H2/影响范围#1",
+    "57d5335f2b40ff160db5521f0d69d103::f4f40bdd2afc5362::/H2/时间线/H3/0405-oncall-反馈用户一直收到相同的验证码邮件#1",
+    "57d5335f2b40ff160db5521f0d69d103::f4f40bdd2afc5362::/H2/如何避免/H3/代码鲁棒性#1",
+    "57d5335f2b40ff160db5521f0d69d103::f4f40bdd2afc5362::/H2/如何避免/H3/加强监控报警#1",
+    "57d5335f2b40ff160db5521f0d69d103::f4f40bdd2afc5362::/H2/时间线/H3/1005-上线后继续观察日志发现无日志报错问题解决#1",
+    "57d5335f2b40ff160db5521f0d69d103::f4f40bdd2afc5362::/H2/如何避免/H3/举一反三#1",
+    "57d5335f2b40ff160db5521f0d69d103::f4f40bdd2afc5362::/H2/时间线/H3/0659-贾铮-at-潘承燕-panpan-马鑫mark-进行问题处理9点20点左右回复到公司查看问题#1"
+   ]
+  },
+  "dense": {
+   "latency_ms": 6.5,
+   "top1_sim": 0.8273,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0
+  },
+  "bm25": {
+   "latency_ms": 20.6,
+   "top1_score": 60.684,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0
+  },
+  "ablation": {
+   "0.60": {
+    "n_out": 8,
+    "hit5": 1,
+    "ev_cov_ctx": 1.0
+   }
+  }
+ },
+ {
+  "id": "C03",
+  "cat": "fact_lookup",
+  "diff": "easy",
+  "query": "以图搜图功能消耗 token 过多这个问题是怎么被发现和处理的？",
+  "gold": [
+   "e7a2d62440c9765caf6b050fcf393058::1a6ae031674229de::/H1/时间线#1"
+  ],
+  "n_gold": 1,
+  "hybrid": {
+   "n_out": 5,
+   "latency_ms": 258.5,
+   "top1_sim": 0.6124,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "recall": {
+    "1": 1.0,
+    "3": 1.0,
+    "5": 1.0,
+    "8": 1.0,
+    "10": 1.0
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0,
+   "ev_cov_ctx": 1.0,
+   "pollution": 0.2,
+   "dup": 0.0,
+   "top_files": [
+    "2024年08月26日，以图搜图识别图片特征.md",
+    "2024年08月26日，以图搜图识别图片特征.md",
+    "ECC学习解读第一篇.md",
+    "2024年08月26日，以图搜图识别图片特征.md",
+    "2024年08月26日，以图搜图识别图片特征.md"
+   ],
+   "top_block_ids": [
+    "e7a2d62440c9765caf6b050fcf393058::1a6ae031674229de::/H1/时间线#1",
+    "e7a2d62440c9765caf6b050fcf393058::1a6ae031674229de::/H1/如何避免#1",
+    "8bc23d014a6b6c724c59b9b71d905d83::670acb39cda26c3a::/H2/sequential-thinking#1",
+    "e7a2d62440c9765caf6b050fcf393058::1a6ae031674229de::/H1/解决过程#1",
+    "e7a2d62440c9765caf6b050fcf393058::1a6ae031674229de::/H1/发生原因#1"
+   ]
+  },
+  "dense": {
+   "latency_ms": 5.8,
+   "top1_sim": 0.6411,
+   "hit": {
+    "1": 0,
+    "3": 0,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 0.25,
+   "ndcg8": 0.431,
+   "ev_cov_raw": 1.0
+  },
+  "bm25": {
+   "latency_ms": 27.6,
+   "top1_score": 47.998,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0
+  },
+  "ablation": {
+   "0.60": {
+    "n_out": 5,
+    "hit5": 1,
+    "ev_cov_ctx": 1.0
+   }
+  }
+ },
+ {
+  "id": "C04",
+  "cat": "semantic",
+  "diff": "medium",
+  "query": "黑五期间用户侧的业务监控都覆盖了哪些模块？",
+  "gold": [
+   "6d87e36ea6fb762ce91968e730a82013::8bac8a611b5bea40::/H1/21-黑五/H3/监控更完善#1"
+  ],
+  "n_gold": 1,
+  "hybrid": {
+   "n_out": 7,
+   "latency_ms": 139.8,
+   "top1_sim": 0.738,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "recall": {
+    "1": 1.0,
+    "3": 1.0,
+    "5": 1.0,
+    "8": 1.0,
+    "10": 1.0
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0,
+   "ev_cov_ctx": 1.0,
+   "pollution": 0.286,
+   "dup": 0.0,
+   "top_files": [
+    "黑五分享.md",
+    "2024 年黑五复盘总结.md",
+    "黑五分享.md",
+    "2024 年黑五复盘总结.md",
+    "黑五分享.md",
+    "黑五分享.md",
+    "黑五分享.md"
+   ],
+   "top_block_ids": [
+    "6d87e36ea6fb762ce91968e730a82013::8bac8a611b5bea40::/H1/21-黑五/H3/监控更完善#1",
+    "f482d81a15a359ea83ddbd3b027068d7::b72eba8d3764a50a::/H1/做得好的部分/H2/黑五值班期间每日巡检#1",
+    "6d87e36ea6fb762ce91968e730a82013::8bac8a611b5bea40::/H1/21-黑五/H3/前期的准备#1",
+    "f482d81a15a359ea83ddbd3b027068d7::b72eba8d3764a50a::/H1/有待改进的部分/H2/错误日志数量未监控第三方监控不足#1",
+    "6d87e36ea6fb762ce91968e730a82013::8bac8a611b5bea40::/H1/21-黑五/H2/经验总结#1",
+    "6d87e36ea6fb762ce91968e730a82013::8bac8a611b5bea40::/H1/21-黑五/H2/数据统计#1",
+    "6d87e36ea6fb762ce91968e730a82013::8bac8a611b5bea40::/H1/21-黑五/H2/不足之处第一次#1"
+   ]
+  },
+  "dense": {
+   "latency_ms": 8.7,
+   "top1_sim": 0.738,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0
+  },
+  "bm25": {
+   "latency_ms": 27.5,
+   "top1_score": 28.853,
+   "hit": {
+    "1": 0,
+    "3": 0,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 0.25,
+   "ndcg8": 0.431,
+   "ev_cov_raw": 1.0
+  },
+  "ablation": {
+   "0.60": {
+    "n_out": 7,
+    "hit5": 1,
+    "ev_cov_ctx": 1.0
+   }
+  }
+ },
+ {
+  "id": "C05",
+  "cat": "numeric",
+  "diff": "easy",
+  "query": "第一次黑五两封营销邮件的转化率和带来的 GMV 分别是多少？",
+  "gold": [
+   "6d87e36ea6fb762ce91968e730a82013::8bac8a611b5bea40::/H1/21-黑五/H2/不足之处第一次#1"
+  ],
+  "n_gold": 1,
+  "hybrid": {
+   "n_out": 7,
+   "latency_ms": 117.4,
+   "top1_sim": 0.7468,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "recall": {
+    "1": 1.0,
+    "3": 1.0,
+    "5": 1.0,
+    "8": 1.0,
+    "10": 1.0
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0,
+   "ev_cov_ctx": 1.0,
+   "pollution": 0.143,
+   "dup": 0.0,
+   "top_files": [
+    "黑五分享.md",
+    "2024 年黑五复盘总结.md",
+    "黑五分享.md",
+    "黑五分享.md",
+    "黑五分享.md",
+    "黑五分享.md",
+    "黑五分享.md"
+   ],
+   "top_block_ids": [
+    "6d87e36ea6fb762ce91968e730a82013::8bac8a611b5bea40::/H1/21-黑五/H2/不足之处第一次#1",
+    "f482d81a15a359ea83ddbd3b027068d7::b72eba8d3764a50a::/H1/黑五成绩#2",
+    "6d87e36ea6fb762ce91968e730a82013::8bac8a611b5bea40::/H1/21-黑五/H2/不足之处第一次#2",
+    "6d87e36ea6fb762ce91968e730a82013::8bac8a611b5bea40::/H1/21-黑五/H2/经验总结#1",
+    "6d87e36ea6fb762ce91968e730a82013::8bac8a611b5bea40::/H1/21-黑五/H3/监控更完善#1",
+    "6d87e36ea6fb762ce91968e730a82013::8bac8a611b5bea40::/H1/21-黑五/H3/前期的准备#1",
+    "6d87e36ea6fb762ce91968e730a82013::8bac8a611b5bea40::/H1/21-黑五/H2/数据统计#1"
+   ]
+  },
+  "dense": {
+   "latency_ms": 7.0,
+   "top1_sim": 0.7468,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0
+  },
+  "bm25": {
+   "latency_ms": 40.3,
+   "top1_score": 79.008,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0
+  },
+  "ablation": {
+   "0.60": {
+    "n_out": 7,
+    "hit5": 1,
+    "ev_cov_ctx": 1.0
+   }
+  }
+ },
+ {
+  "id": "C06",
+  "cat": "identifier",
+  "diff": "easy",
+  "query": "为什么 CI 自动生成接口文档时禁止用 Map 或 JSONObject 作为接口返回值？",
+  "gold": [
+   "c8a0c6720c62f8b642f8d897ddaa0c31::e7827ba2b64c2929::/H2/规范注释使用/H3/禁止接口定义#1"
+  ],
+  "n_gold": 1,
+  "hybrid": {
+   "n_out": 7,
+   "latency_ms": 110.7,
+   "top1_sim": 0.8283,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "recall": {
+    "1": 1.0,
+    "3": 1.0,
+    "5": 1.0,
+    "8": 1.0,
+    "10": 1.0
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0,
+   "ev_cov_ctx": 1.0,
+   "pollution": 0.143,
+   "dup": 0.0,
+   "top_files": [
+    "CI_自动生成接口文档.md",
+    "CI_自动生成接口文档.md",
+    "基础服务_QA.md",
+    "CI_自动生成接口文档.md",
+    "CI_自动生成接口文档.md",
+    "CI_自动生成接口文档.md",
+    "CI_自动生成接口文档.md"
+   ],
+   "top_block_ids": [
+    "c8a0c6720c62f8b642f8d897ddaa0c31::e7827ba2b64c2929::/H2/规范注释使用/H3/禁止接口定义#1",
+    "c8a0c6720c62f8b642f8d897ddaa0c31::e7827ba2b64c2929::/H2/接口文档自动生成#1",
+    "a684d5beb9aa5e96d2369f0851e6135b::3130185326719578::/H1/api#1",
+    "c8a0c6720c62f8b642f8d897ddaa0c31::e7827ba2b64c2929::/H2/规范注释使用/H3/vo注释规范#1",
+    "c8a0c6720c62f8b642f8d897ddaa0c31::e7827ba2b64c2929::/H2/规范注释使用/H3/接口注释规范#1",
+    "c8a0c6720c62f8b642f8d897ddaa0c31::e7827ba2b64c2929::/H2/规范注释使用/H3/controller注释使用#1",
+    "c8a0c6720c62f8b642f8d897ddaa0c31::e7827ba2b64c2929::/H2/规范注释使用/H3/接口路径定义#1"
+   ]
+  },
+  "dense": {
+   "latency_ms": 6.1,
+   "top1_sim": 0.8283,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0
+  },
+  "bm25": {
+   "latency_ms": 21.6,
+   "top1_score": 87.665,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0
+  },
+  "ablation": {
+   "0.60": {
+    "n_out": 7,
+    "hit5": 1,
+    "ev_cov_ctx": 1.0
+   }
+  }
+ },
+ {
+  "id": "C07",
+  "cat": "identifier",
+  "diff": "easy",
+  "query": "接入 yapidoc-maven-plugin 时 yapiUrl 要配置成什么地址？",
+  "gold": [
+   "c8a0c6720c62f8b642f8d897ddaa0c31::e7827ba2b64c2929::/H2/接入指南/H3/引入maven插件/H5/统一依赖管理引用#1"
+  ],
+  "n_gold": 1,
+  "hybrid": {
+   "n_out": 5,
+   "latency_ms": 71.6,
+   "top1_sim": 0.6766,
+   "hit": {
+    "1": 0,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "recall": {
+    "1": 0.0,
+    "3": 1.0,
+    "5": 1.0,
+    "8": 1.0,
+    "10": 1.0
+   },
+   "rr": 0.5,
+   "ndcg8": 0.631,
+   "ev_cov_raw": 1.0,
+   "ev_cov_ctx": 1.0,
+   "pollution": 0.2,
+   "dup": 0.0,
+   "top_files": [
+    "CI_自动生成接口文档.md",
+    "CI_自动生成接口文档.md",
+    "CI_自动生成接口文档.md",
+    "CI_自动生成接口文档.md",
+    "基础服务_QA.md"
+   ],
+   "top_block_ids": [
+    "c8a0c6720c62f8b642f8d897ddaa0c31::e7827ba2b64c2929::/H2/接入指南/H3/引入maven插件/H5/单独依赖引入#1",
+    "c8a0c6720c62f8b642f8d897ddaa0c31::e7827ba2b64c2929::/H2/接入指南/H3/引入maven插件/H5/统一依赖管理引用#1",
+    "c8a0c6720c62f8b642f8d897ddaa0c31::e7827ba2b64c2929::/H2/接入指南/H3/引入maven插件/H4/常见问题#1",
+    "c8a0c6720c62f8b642f8d897ddaa0c31::e7827ba2b64c2929::/H2/接入指南/H3/设置上传token#1",
+    "a684d5beb9aa5e96d2369f0851e6135b::3130185326719578::/H1/api#1"
+   ]
+  },
+  "dense": {
+   "latency_ms": 4.8,
+   "top1_sim": 0.6766,
+   "hit": {
+    "1": 0,
+    "3": 0,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 0.2,
+   "ndcg8": 0.387,
+   "ev_cov_raw": 1.0
+  },
+  "bm25": {
+   "latency_ms": 14.1,
+   "top1_score": 26.234,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0
+  },
+  "ablation": {
+   "0.60": {
+    "n_out": 5,
+    "hit5": 1,
+    "ev_cov_ctx": 1.0
+   }
+  }
+ },
+ {
+  "id": "C08",
+  "cat": "identifier",
+  "diff": "easy",
+  "query": "RocketMQ 批量消费消息时，一次最多消费多少条是怎么设置的？",
+  "gold": [
+   "353c969756790aacffc20a7ec9a97867::748cb03bf92827bc::/H2/2024-33周/H3/rocketmq如何实现批量消费消息#1"
+  ],
+  "n_gold": 1,
+  "hybrid": {
+   "n_out": 8,
+   "latency_ms": 129.6,
+   "top1_sim": 0.5067,
+   "hit": {
+    "1": 0,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "recall": {
+    "1": 0.0,
+    "3": 1.0,
+    "5": 1.0,
+    "8": 1.0,
+    "10": 1.0
+   },
+   "rr": 0.5,
+   "ndcg8": 0.631,
+   "ev_cov_raw": 1.0,
+   "ev_cov_ctx": 1.0,
+   "pollution": 0.875,
+   "dup": 0.0,
+   "top_files": [
+    "八股文随笔.md",
+    "基础服务功能QA.md",
+    "春招 OKR.md",
+    "基础服务_QA.md",
+    "基础服务_QA.md",
+    "八股文随笔.md",
+    "阿里云 RocketMQ 迁移自建的 MQ.md",
+    "线上死循环导致MQ消息堆积问题排查.md"
+   ],
+   "top_block_ids": [
+    "3c925e381f2111d49dc81931af2de4bf::137681415b5587ce::/H1/消息队列#1",
+    "353c969756790aacffc20a7ec9a97867::748cb03bf92827bc::/H2/2024-33周/H3/rocketmq如何实现批量消费消息#1",
+    "284ed678f50fd8d46bfbe652a7775cdd::e7169942cd692dcd::#1",
+    "a684d5beb9aa5e96d2369f0851e6135b::3130185326719578::/H1/rocketmq-qa/H2/常见问题/H4/重复消费#1",
+    "a684d5beb9aa5e96d2369f0851e6135b::3130185326719578::/H1/rocketmq-qa/H2/java-sdk接入/H3/shopcider-rocketmq-all/H4/最原生的使用方式#2",
+    "3c925e381f2111d49dc81931af2de4bf::137681415b5587ce::/H1/消息队列/H2/rocketmq#1",
+    "5a921f07708234e6c4091f4461e04085::976d5c3ab56d36be::/H2/切割方案#1",
+    "0508977df28caec1c938d29ab9b525a7::d2ac6148f0445bb0::#4"
+   ]
+  },
+  "dense": {
+   "latency_ms": 4.5,
+   "top1_sim": 0.7359,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0
+  },
+  "bm25": {
+   "latency_ms": 19.1,
+   "top1_score": 44.424,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0
+  },
+  "ablation": {
+   "0.60": {
+    "n_out": 8,
+    "hit5": 1,
+    "ev_cov_ctx": 1.0
+   }
+  }
+ },
+ {
+  "id": "C09",
+  "cat": "numeric",
+  "diff": "medium",
+  "query": "TikTokShop 商详自动填充功能上线后，累计给运营省了多少时间？",
+  "gold": [
+   "bb3c1a554c2a863b9ac164a79fdc39d1::664d5cc595d72ea6::/H1/散修宗四大门派/H2/东岳泰山-改换门庭-tiktokshop#3"
+  ],
+  "n_gold": 1,
+  "hybrid": {
+   "n_out": 8,
+   "latency_ms": 88.1,
+   "top1_sim": 0.6059,
+   "hit": {
+    "1": 0,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "recall": {
+    "1": 0.0,
+    "3": 1.0,
+    "5": 1.0,
+    "8": 1.0,
+    "10": 1.0
+   },
+   "rr": 0.5,
+   "ndcg8": 0.631,
+   "ev_cov_raw": 1.0,
+   "ev_cov_ctx": 1.0,
+   "pollution": 0.0,
+   "dup": 0.0,
+   "top_files": [
+    "多渠道修仙传.md",
+    "多渠道修仙传.md",
+    "多渠道修仙传.md",
+    "多渠道修仙传.md",
+    "多渠道修仙传.md",
+    "多渠道修仙传.md",
+    "多渠道修仙传.md",
+    "多渠道修仙传.md"
+   ],
+   "top_block_ids": [
+    "bb3c1a554c2a863b9ac164a79fdc39d1::664d5cc595d72ea6::/H1/散修宗四大门派/H2/东岳泰山-改换门庭-tiktokshop#13",
+    "bb3c1a554c2a863b9ac164a79fdc39d1::664d5cc595d72ea6::/H1/散修宗四大门派/H2/东岳泰山-改换门庭-tiktokshop#3",
+    "bb3c1a554c2a863b9ac164a79fdc39d1::664d5cc595d72ea6::/H1/散修宗四大门派/H2/东岳泰山-改换门庭-tiktokshop#14",
+    "bb3c1a554c2a863b9ac164a79fdc39d1::664d5cc595d72ea6::/H1/散修宗四大门派/H2/东岳泰山-改换门庭-tiktokshop#11",
+    "bb3c1a554c2a863b9ac164a79fdc39d1::664d5cc595d72ea6::/H1/散修宗四大门派/H2/东岳泰山-改换门庭-tiktokshop#8",
+    "bb3c1a554c2a863b9ac164a79fdc39d1::664d5cc595d72ea6::/H1/散修宗四大门派/H2/东岳泰山-改换门庭-tiktokshop#15",
+    "bb3c1a554c2a863b9ac164a79fdc39d1::664d5cc595d72ea6::/H1/散修宗四大门派/H2/东岳泰山-改换门庭-tiktokshop#5",
+    "bb3c1a554c2a863b9ac164a79fdc39d1::664d5cc595d72ea6::/H1/散修宗四大门派/H2/东岳泰山-改换门庭-tiktokshop#12"
+   ]
+  },
+  "dense": {
+   "latency_ms": 7.0,
+   "top1_sim": 0.6059,
+   "hit": {
+    "1": 0,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 0.5,
+   "ndcg8": 0.631,
+   "ev_cov_raw": 1.0
+  },
+  "bm25": {
+   "latency_ms": 23.1,
+   "top1_score": 45.479,
+   "hit": {
+    "1": 0,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 0.5,
+   "ndcg8": 0.631,
+   "ev_cov_raw": 1.0
+  },
+  "ablation": {
+   "0.60": {
+    "n_out": 8,
+    "hit5": 1,
+    "ev_cov_ctx": 1.0
+   }
+  }
+ },
+ {
+  "id": "C10",
+  "cat": "fact_lookup",
+  "diff": "medium",
+  "query": "对接 Amazon 时为什么最后改用 CSV 传品而不用 API？",
+  "gold": [
+   "bb3c1a554c2a863b9ac164a79fdc39d1::664d5cc595d72ea6::/H1/散修宗四大门派/H2/北岳恒山-持续迭代-amazon#1"
+  ],
+  "n_gold": 1,
+  "hybrid": {
+   "n_out": 8,
+   "latency_ms": 91.2,
+   "top1_sim": 0.7296,
+   "hit": {
+    "1": 0,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "recall": {
+    "1": 0.0,
+    "3": 1.0,
+    "5": 1.0,
+    "8": 1.0,
+    "10": 1.0
+   },
+   "rr": 0.3333,
+   "ndcg8": 0.5,
+   "ev_cov_raw": 1.0,
+   "ev_cov_ctx": 1.0,
+   "pollution": 0.0,
+   "dup": 0.0,
+   "top_files": [
+    "多渠道修仙传.md",
+    "多渠道修仙传.md",
+    "多渠道修仙传.md",
+    "多渠道修仙传.md",
+    "多渠道修仙传.md",
+    "多渠道修仙传.md",
+    "多渠道修仙传.md",
+    "多渠道修仙传.md"
+   ],
+   "top_block_ids": [
+    "bb3c1a554c2a863b9ac164a79fdc39d1::664d5cc595d72ea6::/H1/散修宗四大门派/H2/北岳恒山-持续迭代-amazon#5",
+    "bb3c1a554c2a863b9ac164a79fdc39d1::664d5cc595d72ea6::/H1/散修宗四大门派/H2/北岳恒山-持续迭代-amazon#2",
+    "bb3c1a554c2a863b9ac164a79fdc39d1::664d5cc595d72ea6::/H1/散修宗四大门派/H2/北岳恒山-持续迭代-amazon#1",
+    "bb3c1a554c2a863b9ac164a79fdc39d1::664d5cc595d72ea6::/H1/散修宗四大门派/H2/东岳泰山-改换门庭-tiktokshop#3",
+    "bb3c1a554c2a863b9ac164a79fdc39d1::664d5cc595d72ea6::/H1/散修宗四大门派/H2/北岳恒山-持续迭代-amazon#3",
+    "bb3c1a554c2a863b9ac164a79fdc39d1::664d5cc595d72ea6::/H1/散修宗四大门派/H2/北岳恒山-持续迭代-amazon#8",
+    "bb3c1a554c2a863b9ac164a79fdc39d1::664d5cc595d72ea6::/H1/散修宗四大门派/H2/北岳恒山-持续迭代-amazon#7",
+    "bb3c1a554c2a863b9ac164a79fdc39d1::664d5cc595d72ea6::/H1/散修宗四大门派/H2/北岳恒山-持续迭代-amazon#9"
+   ]
+  },
+  "dense": {
+   "latency_ms": 8.2,
+   "top1_sim": 0.7296,
+   "hit": {
+    "1": 0,
+    "3": 0,
+    "5": 0,
+    "8": 0,
+    "10": 0
+   },
+   "rr": 0.0833,
+   "ndcg8": 0.0,
+   "ev_cov_raw": 1.0
+  },
+  "bm25": {
+   "latency_ms": 17.4,
+   "top1_score": 29.536,
+   "hit": {
+    "1": 0,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 0.5,
+   "ndcg8": 0.631,
+   "ev_cov_raw": 1.0
+  },
+  "ablation": {
+   "0.60": {
+    "n_out": 8,
+    "hit5": 1,
+    "ev_cov_ctx": 1.0
+   }
+  }
+ },
+ {
+  "id": "C11",
+  "cat": "identifier",
+  "diff": "easy",
+  "query": "chatbot 用户提问分析里，msg_analysis 类型返回的 json 包含哪些字段？",
+  "gold": [
+   "08cd9ae55a446a4b78a88b8a34cd04a1::7c24315fa04bccc4::/H1/消息交互/H2/用户提问分析更新#1"
+  ],
+  "n_gold": 1,
+  "hybrid": {
+   "n_out": 8,
+   "latency_ms": 117.9,
+   "top1_sim": 0.8137,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "recall": {
+    "1": 1.0,
+    "3": 1.0,
+    "5": 1.0,
+    "8": 1.0,
+    "10": 1.0
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0,
+   "ev_cov_ctx": 1.0,
+   "pollution": 0.625,
+   "dup": 0.0,
+   "top_files": [
+    "chatbot落地需求第二期.md",
+    "黑五压测白皮书.md",
+    "实时在线Debug问题定位与解决实战分享.md",
+    "chatbot数据统计.md",
+    "chatbot落地需求第二期.md",
+    "livechat接入chatbot.md",
+    "CI_自动生成接口文档.md",
+    "chatbot落地需求第二期.md"
+   ],
+   "top_block_ids": [
+    "08cd9ae55a446a4b78a88b8a34cd04a1::7c24315fa04bccc4::/H1/消息交互/H2/用户提问分析更新#1",
+    "a37b2e1ffc969fd0287a44b63bb10a90::83f84041a3f10bad::/H2/进入pts/H3/调整jmx脚本#3",
+    "7c98a587bca2a421e6df87464cad741c::972886d0ad40529a::/H1/遇到的问题#2",
+    "917ffbb9f3a04e9bb33911593ec93124::0519c8e6cb4fd5bd::/H1/chatbot每日数据统计需求/H2/数据指标#1",
+    "08cd9ae55a446a4b78a88b8a34cd04a1::7c24315fa04bccc4::/H1/消息交互/H2/emit-message#1",
+    "aeff60ac569e76f03308f4d513958ca4::3dc51f3cd1639aae::/H1/转出准确性张旸-yory#1",
+    "c8a0c6720c62f8b642f8d897ddaa0c31::e7827ba2b64c2929::/H2/规范注释使用/H3/禁止接口定义#1",
+    "08cd9ae55a446a4b78a88b8a34cd04a1::7c24315fa04bccc4::/H1/消息交互/H2/判断消息是否有推送过#1"
+   ]
+  },
+  "dense": {
+   "latency_ms": 6.9,
+   "top1_sim": 0.8137,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0
+  },
+  "bm25": {
+   "latency_ms": 21.8,
+   "top1_score": 66.859,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0
+  },
+  "ablation": {
+   "0.60": {
+    "n_out": 8,
+    "hit5": 1,
+    "ev_cov_ctx": 1.0
+   }
+  }
+ },
+ {
+  "id": "C12",
+  "cat": "fact_lookup",
+  "diff": "easy",
+  "query": "客服助手项目的前端仓库地址和开发分支名是什么？",
+  "gold": [
+   "08cd9ae55a446a4b78a88b8a34cd04a1::7c24315fa04bccc4::/H1/背景/H2/代码分支#1"
+  ],
+  "n_gold": 1,
+  "hybrid": {
+   "n_out": 5,
+   "latency_ms": 125.4,
+   "top1_sim": 0.7328,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "recall": {
+    "1": 1.0,
+    "3": 1.0,
+    "5": 1.0,
+    "8": 1.0,
+    "10": 1.0
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0,
+   "ev_cov_ctx": 1.0,
+   "pollution": 0.0,
+   "dup": 0.0,
+   "top_files": [
+    "chatbot落地需求第二期.md",
+    "chatbot落地需求第二期.md",
+    "chatbot落地需求第二期.md",
+    "chatbot落地需求第二期.md",
+    "chatbot落地需求第二期.md"
+   ],
+   "top_block_ids": [
+    "08cd9ae55a446a4b78a88b8a34cd04a1::7c24315fa04bccc4::/H1/背景/H2/代码分支#1",
+    "08cd9ae55a446a4b78a88b8a34cd04a1::7c24315fa04bccc4::/H1/背景/H2/代码分支#4",
+    "08cd9ae55a446a4b78a88b8a34cd04a1::7c24315fa04bccc4::/H1/背景/H3/功能说明#1",
+    "08cd9ae55a446a4b78a88b8a34cd04a1::7c24315fa04bccc4::/H1/背景/H2/代码分支#2",
+    "08cd9ae55a446a4b78a88b8a34cd04a1::7c24315fa04bccc4::/H1/背景/H2/代码分支#3"
+   ]
+  },
+  "dense": {
+   "latency_ms": 9.8,
+   "top1_sim": 0.7328,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0
+  },
+  "bm25": {
+   "latency_ms": 33.5,
+   "top1_score": 44.323,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0
+  },
+  "ablation": {
+   "0.60": {
+    "n_out": 5,
+    "hit5": 1,
+    "ev_cov_ctx": 1.0
+   }
+  }
+ },
+ {
+  "id": "C13",
+  "cat": "fact_lookup",
+  "diff": "medium",
+  "query": "obsidian-article skill 的验收标准里，成稿归档到哪个目录？",
+  "gold": [
+   "57324e4268498ae2721192a757432ef9::5e8f90c11de47ee7::/H1/设计文档obsidian-article-skill本地文章模式/H2/8-验收标准#1"
+  ],
+  "n_gold": 1,
+  "hybrid": {
+   "n_out": 8,
+   "latency_ms": 85.3,
+   "top1_sim": 0.7449,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "recall": {
+    "1": 1.0,
+    "3": 1.0,
+    "5": 1.0,
+    "8": 1.0,
+    "10": 1.0
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0,
+   "ev_cov_ctx": 1.0,
+   "pollution": 0.0,
+   "dup": 0.0,
+   "top_files": [
+    "2026-08-09-obsidian-article-design.md",
+    "2026-08-09-obsidian-article-design.md",
+    "2026-08-09-obsidian-article-design.md",
+    "2026-08-09-obsidian-article-design.md",
+    "2026-08-09-obsidian-article-design.md",
+    "2026-08-09-obsidian-article-design.md",
+    "2026-08-09-obsidian-article-design.md",
+    "2026-08-09-obsidian-article-design.md"
+   ],
+   "top_block_ids": [
+    "57324e4268498ae2721192a757432ef9::5e8f90c11de47ee7::/H1/设计文档obsidian-article-skill本地文章模式/H2/8-验收标准#1",
+    "57324e4268498ae2721192a757432ef9::5e8f90c11de47ee7::/H1/设计文档obsidian-article-skill本地文章模式/H2/3-技术形态skill不是独立脚本/H3/31-规范符合性开源前提#1",
+    "57324e4268498ae2721192a757432ef9::5e8f90c11de47ee7::/H1/设计文档obsidian-article-skill本地文章模式/H2/1-目标与背景#1",
+    "57324e4268498ae2721192a757432ef9::5e8f90c11de47ee7::/H1/设计文档obsidian-article-skill本地文章模式/H2/4-目录结构#2",
+    "57324e4268498ae2721192a757432ef9::5e8f90c11de47ee7::/H1/设计文档obsidian-article-skill本地文章模式/H2/6-各-references-文件内容要点/H3/64-archive-rulesmd归档#1",
+    "57324e4268498ae2721192a757432ef9::5e8f90c11de47ee7::/H1/设计文档obsidian-article-skill本地文章模式/H2/2-已确认的需求/H3/21-路径设计开源友好#1",
+    "57324e4268498ae2721192a757432ef9::5e8f90c11de47ee7::/H1/设计文档obsidian-article-skill本地文章模式/H2/2-已确认的需求/H3/21-路径设计开源友好#2",
+    "57324e4268498ae2721192a757432ef9::5e8f90c11de47ee7::/H1/设计文档obsidian-article-skill本地文章模式/H2/5-核心工作流6-步#1"
+   ]
+  },
+  "dense": {
+   "latency_ms": 4.4,
+   "top1_sim": 0.7449,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0
+  },
+  "bm25": {
+   "latency_ms": 12.7,
+   "top1_score": 62.628,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0
+  },
+  "ablation": {
+   "0.60": {
+    "n_out": 8,
+    "hit5": 1,
+    "ev_cov_ctx": 1.0
+   }
+  }
+ },
+ {
+  "id": "C14",
+  "cat": "semantic",
+  "diff": "medium",
+  "query": "obsidian-article skill 里哪些路径可以由用户配置、哪些是固定写死的？",
+  "gold": [
+   "57324e4268498ae2721192a757432ef9::5e8f90c11de47ee7::/H1/设计文档obsidian-article-skill本地文章模式/H2/2-已确认的需求/H3/21-路径设计开源友好#1"
+  ],
+  "n_gold": 1,
+  "hybrid": {
+   "n_out": 8,
+   "latency_ms": 133.9,
+   "top1_sim": 0.8336,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "recall": {
+    "1": 1.0,
+    "3": 1.0,
+    "5": 1.0,
+    "8": 1.0,
+    "10": 1.0
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0,
+   "ev_cov_ctx": 1.0,
+   "pollution": 0.0,
+   "dup": 0.0,
+   "top_files": [
+    "2026-08-09-obsidian-article-design.md",
+    "2026-08-09-obsidian-article-design.md",
+    "2026-08-09-obsidian-article-design.md",
+    "2026-08-09-obsidian-article-design.md",
+    "2026-08-09-obsidian-article-design.md",
+    "2026-08-09-obsidian-article-design.md",
+    "2026-08-09-obsidian-article-design.md",
+    "2026-08-09-obsidian-article-design.md"
+   ],
+   "top_block_ids": [
+    "57324e4268498ae2721192a757432ef9::5e8f90c11de47ee7::/H1/设计文档obsidian-article-skill本地文章模式/H2/2-已确认的需求/H3/21-路径设计开源友好#1",
+    "57324e4268498ae2721192a757432ef9::5e8f90c11de47ee7::/H1/设计文档obsidian-article-skill本地文章模式/H2/8-验收标准#1",
+    "57324e4268498ae2721192a757432ef9::5e8f90c11de47ee7::/H1/设计文档obsidian-article-skill本地文章模式/H2/2-已确认的需求#1",
+    "57324e4268498ae2721192a757432ef9::5e8f90c11de47ee7::/H1/设计文档obsidian-article-skill本地文章模式/H2/2-已确认的需求/H3/21-路径设计开源友好#2",
+    "57324e4268498ae2721192a757432ef9::5e8f90c11de47ee7::/H1/设计文档obsidian-article-skill本地文章模式/H2/4-目录结构#1",
+    "57324e4268498ae2721192a757432ef9::5e8f90c11de47ee7::/H1/设计文档obsidian-article-skill本地文章模式/H2/3-技术形态skill不是独立脚本/H3/31-规范符合性开源前提#1",
+    "57324e4268498ae2721192a757432ef9::5e8f90c11de47ee7::/H1/设计文档obsidian-article-skill本地文章模式/H2/6-各-references-文件内容要点/H3/64-archive-rulesmd归档#1",
+    "57324e4268498ae2721192a757432ef9::5e8f90c11de47ee7::/H1/设计文档obsidian-article-skill本地文章模式/H2/4-目录结构#2"
+   ]
+  },
+  "dense": {
+   "latency_ms": 4.3,
+   "top1_sim": 0.8336,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0
+  },
+  "bm25": {
+   "latency_ms": 21.8,
+   "top1_score": 41.485,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0
+  },
+  "ablation": {
+   "0.60": {
+    "n_out": 8,
+    "hit5": 1,
+    "ev_cov_ctx": 1.0
+   }
+  }
+ },
+ {
+  "id": "C15",
+  "cat": "numeric",
+  "diff": "easy",
+  "query": "Agent-Sentinel 的根因定位准确率是多少？为什么能做到这么高？",
+  "gold": [
+   "d004f57f11bf50299ab4aed7cc40d61b::9177802a4f97438f::/H2/准确率与可观测性#1"
+  ],
+  "n_gold": 1,
+  "hybrid": {
+   "n_out": 8,
+   "latency_ms": 98.3,
+   "top1_sim": 0.7487,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "recall": {
+    "1": 1.0,
+    "3": 1.0,
+    "5": 1.0,
+    "8": 1.0,
+    "10": 1.0
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0,
+   "ev_cov_ctx": 1.0,
+   "pollution": 0.0,
+   "dup": 0.0,
+   "top_files": [
+    "一个比较有潜力的 Agent 项目—— Agent-Sentiel.md",
+    "一个比较有潜力的 Agent 项目—— Agent-Sentiel.md",
+    "一个比较有潜力的 Agent 项目—— Agent-Sentiel.md",
+    "一个比较有潜力的 Agent 项目—— Agent-Sentiel.md",
+    "一个比较有潜力的 Agent 项目—— Agent-Sentiel.md",
+    "一个比较有潜力的 Agent 项目—— Agent-Sentiel.md",
+    "一个比较有潜力的 Agent 项目—— Agent-Sentiel.md",
+    "一个比较有潜力的 Agent 项目—— Agent-Sentiel.md"
+   ],
+   "top_block_ids": [
+    "d004f57f11bf50299ab4aed7cc40d61b::9177802a4f97438f::/H2/准确率与可观测性#1",
+    "d004f57f11bf50299ab4aed7cc40d61b::9177802a4f97438f::/H2/这件事的未来价值#1",
+    "d004f57f11bf50299ab4aed7cc40d61b::9177802a4f97438f::/H2/关键架构设计为什么选-langgraph#2",
+    "d004f57f11bf50299ab4aed7cc40d61b::9177802a4f97438f::/H2/关键架构设计为什么选-langgraph#1",
+    "d004f57f11bf50299ab4aed7cc40d61b::9177802a4f97438f::#1",
+    "d004f57f11bf50299ab4aed7cc40d61b::9177802a4f97438f::/H2/我们的解法agent-sentinel#1",
+    "d004f57f11bf50299ab4aed7cc40d61b::9177802a4f97438f::/H2/部署与开源#2",
+    "d004f57f11bf50299ab4aed7cc40d61b::9177802a4f97438f::/H2/痛点的本质多平台-多渠道-高频切换#1"
+   ]
+  },
+  "dense": {
+   "latency_ms": 8.5,
+   "top1_sim": 0.7487,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0
+  },
+  "bm25": {
+   "latency_ms": 24.7,
+   "top1_score": 45.586,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0
+  },
+  "ablation": {
+   "0.60": {
+    "n_out": 8,
+    "hit5": 1,
+    "ev_cov_ctx": 1.0
+   }
+  }
+ },
+ {
+  "id": "C16",
+  "cat": "fact_lookup",
+  "diff": "easy",
+  "query": "Agent-Sentinel 未来计划接入哪些办公软件和云厂商？",
+  "gold": [
+   "d004f57f11bf50299ab4aed7cc40d61b::9177802a4f97438f::/H2/这件事的未来价值#1"
+  ],
+  "n_gold": 1,
+  "hybrid": {
+   "n_out": 3,
+   "latency_ms": 72.9,
+   "top1_sim": 0.6681,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "recall": {
+    "1": 1.0,
+    "3": 1.0,
+    "5": 1.0,
+    "8": 1.0,
+    "10": 1.0
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0,
+   "ev_cov_ctx": 1.0,
+   "pollution": 0.0,
+   "dup": 0.0,
+   "top_files": [
+    "一个比较有潜力的 Agent 项目—— Agent-Sentiel.md",
+    "一个比较有潜力的 Agent 项目—— Agent-Sentiel.md",
+    "一个比较有潜力的 Agent 项目—— Agent-Sentiel.md"
+   ],
+   "top_block_ids": [
+    "d004f57f11bf50299ab4aed7cc40d61b::9177802a4f97438f::/H2/这件事的未来价值#1",
+    "d004f57f11bf50299ab4aed7cc40d61b::9177802a4f97438f::/H2/我们的解法agent-sentinel#1",
+    "d004f57f11bf50299ab4aed7cc40d61b::9177802a4f97438f::/H2/部署与开源#2"
+   ]
+  },
+  "dense": {
+   "latency_ms": 5.2,
+   "top1_sim": 0.6681,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0
+  },
+  "bm25": {
+   "latency_ms": 15.6,
+   "top1_score": 43.929,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0
+  },
+  "ablation": {
+   "0.60": {
+    "n_out": 3,
+    "hit5": 1,
+    "ev_cov_ctx": 1.0
+   }
+  }
+ },
+ {
+  "id": "C17",
+  "cat": "semantic",
+  "diff": "medium",
+  "query": "芒格说如果在赌桌上你不知道谁是傻瓜，这句话是什么意思？",
+  "gold": [
+   "27c15fbd6ec5e44c802e6968985c7db1::2ae8a62ab1c7899f::/H1/芒格的投资评估过程#1"
+  ],
+  "n_gold": 1,
+  "hybrid": {
+   "n_out": 5,
+   "latency_ms": 103.8,
+   "top1_sim": 0.5426,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "recall": {
+    "1": 1.0,
+    "3": 1.0,
+    "5": 1.0,
+    "8": 1.0,
+    "10": 1.0
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0,
+   "ev_cov_ctx": 1.0,
+   "pollution": 0.8,
+   "dup": 0.0,
+   "top_files": [
+    "《穷查理宝典》.md",
+    "chat - 2026-05-26.md",
+    "chat - 2026-05-26.md",
+    "chat - 2026-05-26.md",
+    "chat - 2026-05-26.md"
+   ],
+   "top_block_ids": [
+    "27c15fbd6ec5e44c802e6968985c7db1::2ae8a62ab1c7899f::/H1/芒格的投资评估过程#1",
+    "cb12ace214d7beb64b2e4f7fa168aee3::cc022ccfaa85cc45::/H1/不把事管好就要被事管深入解释/H2/assistant-1#3",
+    "cb12ace214d7beb64b2e4f7fa168aee3::cc022ccfaa85cc45::/H1/不把事管好就要被事管深入解释/H2/深层含义/H3/2-与上下文的关联#1",
+    "cb12ace214d7beb64b2e4f7fa168aee3::cc022ccfaa85cc45::/H1/深入理解铁锤人思维模型/H2/一个深刻的反直觉推论#1",
+    "cb12ace214d7beb64b2e4f7fa168aee3::cc022ccfaa85cc45::/H1/深入理解铁锤人思维模型/H2/结合本文其他段落的呼应#1"
+   ]
+  },
+  "dense": {
+   "latency_ms": 4.1,
+   "top1_sim": 0.5426,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0
+  },
+  "bm25": {
+   "latency_ms": 25.3,
+   "top1_score": 76.061,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0
+  },
+  "ablation": {
+   "0.60": {
+    "n_out": 5,
+    "hit5": 1,
+    "ev_cov_ctx": 1.0
+   }
+  }
+ },
+ {
+  "id": "C18",
+  "cat": "semantic",
+  "diff": "medium",
+  "query": "手里拿着铁锤的人看来世界就像一颗钉子，这句话在讲什么思维误区？",
+  "gold": [
+   "27c15fbd6ec5e44c802e6968985c7db1::2ae8a62ab1c7899f::/H1/芒格的生活学习和决策方法#1"
+  ],
+  "n_gold": 1,
+  "hybrid": {
+   "n_out": 8,
+   "latency_ms": 91.7,
+   "top1_sim": 0.3939,
+   "hit": {
+    "1": 0,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "recall": {
+    "1": 0.0,
+    "3": 1.0,
+    "5": 1.0,
+    "8": 1.0,
+    "10": 1.0
+   },
+   "rr": 0.5,
+   "ndcg8": 0.631,
+   "ev_cov_raw": 1.0,
+   "ev_cov_ctx": 1.0,
+   "pollution": 0.875,
+   "dup": 0.0,
+   "top_files": [
+    "chat - 2026-05-26.md",
+    "《穷查理宝典》.md",
+    "chat - 2026-05-26.md",
+    "chat - 2026-05-26.md",
+    "chat - 2026-05-26.md",
+    "chat - 2026-05-26.md",
+    "chat - 2026-05-26.md",
+    "chat - 2026-05-26.md"
+   ],
+   "top_block_ids": [
+    "cb12ace214d7beb64b2e4f7fa168aee3::cc022ccfaa85cc45::/H1/不把事管好就要被事管深入解释/H2/user-1#2",
+    "27c15fbd6ec5e44c802e6968985c7db1::2ae8a62ab1c7899f::/H1/芒格的生活学习和决策方法#1",
+    "cb12ace214d7beb64b2e4f7fa168aee3::cc022ccfaa85cc45::/H1/深入理解铁锤人思维模型/H2/原文核心论点拆解#2",
+    "cb12ace214d7beb64b2e4f7fa168aee3::cc022ccfaa85cc45::/H1/深入理解铁锤人思维模型/H2/为什么铁锤是致命的/H3/1-认知扭曲的本质#1",
+    "cb12ace214d7beb64b2e4f7fa168aee3::cc022ccfaa85cc45::/H1/深入理解铁锤人思维模型#1",
+    "cb12ace214d7beb64b2e4f7fa168aee3::cc022ccfaa85cc45::/H1/深入理解铁锤人思维模型/H2/为什么铁锤是致命的/H3/1-认知扭曲的本质#2",
+    "cb12ace214d7beb64b2e4f7fa168aee3::cc022ccfaa85cc45::/H1/深入理解铁锤人思维模型/H2/为什么铁锤是致命的/H3/2-为什么大多数人都是铁锤人#1",
+    "cb12ace214d7beb64b2e4f7fa168aee3::cc022ccfaa85cc45::/H1/深入理解铁锤人思维模型/H2/为什么铁锤是致命的/H3/1-认知扭曲的本质#3"
+   ]
+  },
+  "dense": {
+   "latency_ms": 4.6,
+   "top1_sim": 0.7693,
+   "hit": {
+    "1": 0,
+    "3": 0,
+    "5": 0,
+    "8": 0,
+    "10": 0
+   },
+   "rr": 0.0,
+   "ndcg8": 0.0,
+   "ev_cov_raw": 0.5
+  },
+  "bm25": {
+   "latency_ms": 27.0,
+   "top1_score": 124.577,
+   "hit": {
+    "1": 0,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 0.3333,
+   "ndcg8": 0.5,
+   "ev_cov_raw": 1.0
+  },
+  "ablation": {
+   "0.60": {
+    "n_out": 8,
+    "hit5": 1,
+    "ev_cov_ctx": 1.0
+   }
+  }
+ },
+ {
+  "id": "C19",
+  "cat": "identifier",
+  "diff": "easy",
+  "query": "广告策略引擎误操作事故中，bi_warehouse_dw_us_w2p_product_app_hourly 这张表出了什么问题？",
+  "gold": [
+   "fd8d17fa65c9c9ffb421f370525dd462::a434cd007cfa8685::/H1/1时间线/H3/12#1"
+  ],
+  "n_gold": 1,
+  "hybrid": {
+   "n_out": 6,
+   "latency_ms": 119.3,
+   "top1_sim": 0.7518,
+   "hit": {
+    "1": 0,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "recall": {
+    "1": 0.0,
+    "3": 1.0,
+    "5": 1.0,
+    "8": 1.0,
+    "10": 1.0
+   },
+   "rr": 0.5,
+   "ndcg8": 0.631,
+   "ev_cov_raw": 1.0,
+   "ev_cov_ctx": 1.0,
+   "pollution": 0.0,
+   "dup": 0.0,
+   "top_files": [
+    "2024年07月13日，广告策略引擎误操作.md",
+    "2024年07月13日，广告策略引擎误操作.md",
+    "2024年07月13日，广告策略引擎误操作.md",
+    "2024年07月13日，广告策略引擎误操作.md",
+    "2024年07月13日，广告策略引擎误操作.md",
+    "2024年07月13日，广告策略引擎误操作.md"
+   ],
+   "top_block_ids": [
+    "fd8d17fa65c9c9ffb421f370525dd462::a434cd007cfa8685::/H1/3发生原因/H3/32#1",
+    "fd8d17fa65c9c9ffb421f370525dd462::a434cd007cfa8685::/H1/1时间线/H3/12#1",
+    "fd8d17fa65c9c9ffb421f370525dd462::a434cd007cfa8685::/H1/2事故影响/H3/22#1",
+    "fd8d17fa65c9c9ffb421f370525dd462::a434cd007cfa8685::/H1/2事故影响/H3/21#1",
+    "fd8d17fa65c9c9ffb421f370525dd462::a434cd007cfa8685::/H1/3发生原因/H3/31#1",
+    "fd8d17fa65c9c9ffb421f370525dd462::a434cd007cfa8685::/H1/4解决过程#1"
+   ]
+  },
+  "dense": {
+   "latency_ms": 6.1,
+   "top1_sim": 0.7518,
+   "hit": {
+    "1": 0,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 0.3333,
+   "ndcg8": 0.5,
+   "ev_cov_raw": 1.0
+  },
+  "bm25": {
+   "latency_ms": 25.7,
+   "top1_score": 75.154,
+   "hit": {
+    "1": 0,
+    "3": 0,
+    "5": 0,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 0.1667,
+   "ndcg8": 0.356,
+   "ev_cov_raw": 1.0
+  },
+  "ablation": {
+   "0.60": {
+    "n_out": 6,
+    "hit5": 1,
+    "ev_cov_ctx": 1.0
+   }
+  }
+ },
+ {
+  "id": "C20",
+  "cat": "fact_lookup",
+  "diff": "easy",
+  "query": "广告策略引擎事故复盘后，apollo 配置发布流程加了什么约束？",
+  "gold": [
+   "fd8d17fa65c9c9ffb421f370525dd462::a434cd007cfa8685::/H1/5如何避免#1"
+  ],
+  "n_gold": 1,
+  "hybrid": {
+   "n_out": 5,
+   "latency_ms": 81.1,
+   "top1_sim": 0.6476,
+   "hit": {
+    "1": 0,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "recall": {
+    "1": 0.0,
+    "3": 1.0,
+    "5": 1.0,
+    "8": 1.0,
+    "10": 1.0
+   },
+   "rr": 0.3333,
+   "ndcg8": 0.5,
+   "ev_cov_raw": 1.0,
+   "ev_cov_ctx": 1.0,
+   "pollution": 0.0,
+   "dup": 0.0,
+   "top_files": [
+    "2024年07月13日，广告策略引擎误操作.md",
+    "2024年07月13日，广告策略引擎误操作.md",
+    "2024年07月13日，广告策略引擎误操作.md",
+    "2024年07月13日，广告策略引擎误操作.md",
+    "2024年07月13日，广告策略引擎误操作.md"
+   ],
+   "top_block_ids": [
+    "fd8d17fa65c9c9ffb421f370525dd462::a434cd007cfa8685::/H1/3发生原因/H3/31#1",
+    "fd8d17fa65c9c9ffb421f370525dd462::a434cd007cfa8685::/H1/1时间线/H3/11#1",
+    "fd8d17fa65c9c9ffb421f370525dd462::a434cd007cfa8685::/H1/5如何避免#1",
+    "fd8d17fa65c9c9ffb421f370525dd462::a434cd007cfa8685::/H1/2事故影响/H3/22#1",
+    "fd8d17fa65c9c9ffb421f370525dd462::a434cd007cfa8685::/H1/2事故影响/H3/21#1"
+   ]
+  },
+  "dense": {
+   "latency_ms": 6.0,
+   "top1_sim": 0.6476,
+   "hit": {
+    "1": 0,
+    "3": 0,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 0.2,
+   "ndcg8": 0.387,
+   "ev_cov_raw": 1.0
+  },
+  "bm25": {
+   "latency_ms": 23.8,
+   "top1_score": 52.655,
+   "hit": {
+    "1": 0,
+    "3": 0,
+    "5": 0,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 0.1667,
+   "ndcg8": 0.356,
+   "ev_cov_raw": 1.0
+  },
+  "ablation": {
+   "0.60": {
+    "n_out": 5,
+    "hit5": 1,
+    "ev_cov_ctx": 1.0
+   }
+  }
+ },
+ {
+  "id": "C21",
+  "cat": "definition",
+  "diff": "medium",
+  "query": "一般性转移支付和专项转移支付的区别是什么？",
+  "gold": [
+   "cb6cf583005b5aa2ccdf5109fc5f64cd::bdfa089576ebfce0::/H1/财税和政府行为/H2/纵向不平衡与横向不平衡#1"
+  ],
+  "n_gold": 1,
+  "hybrid": {
+   "n_out": 1,
+   "latency_ms": 145.8,
+   "top1_sim": 0.5529,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "recall": {
+    "1": 1.0,
+    "3": 1.0,
+    "5": 1.0,
+    "8": 1.0,
+    "10": 1.0
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0,
+   "ev_cov_ctx": 1.0,
+   "pollution": 0.0,
+   "dup": 0.0,
+   "top_files": [
+    "《置身事内：中国政府与经济发展》.md"
+   ],
+   "top_block_ids": [
+    "cb6cf583005b5aa2ccdf5109fc5f64cd::bdfa089576ebfce0::/H1/财税和政府行为/H2/纵向不平衡与横向不平衡#1"
+   ]
+  },
+  "dense": {
+   "latency_ms": 6.1,
+   "top1_sim": 0.5529,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0
+  },
+  "bm25": {
+   "latency_ms": 16.7,
+   "top1_score": 66.317,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0
+  },
+  "ablation": {
+   "0.60": {
+    "n_out": 1,
+    "hit5": 1,
+    "ev_cov_ctx": 1.0
+   }
+  }
+ },
+ {
+  "id": "C22",
+  "cat": "semantic",
+  "diff": "medium",
+  "query": "1994 年分税制改革的背景是什么，文章说的鞭打快牛核心矛盾指什么？",
+  "gold": [
+   "cb6cf583005b5aa2ccdf5109fc5f64cd::bdfa089576ebfce0::/H1/财税和政府行为/H3/分税制改革#1"
+  ],
+  "n_gold": 1,
+  "hybrid": {
+   "n_out": 3,
+   "latency_ms": 94.6,
+   "top1_sim": 0.7377,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "recall": {
+    "1": 1.0,
+    "3": 1.0,
+    "5": 1.0,
+    "8": 1.0,
+    "10": 1.0
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0,
+   "ev_cov_ctx": 1.0,
+   "pollution": 0.0,
+   "dup": 0.0,
+   "top_files": [
+    "《置身事内：中国政府与经济发展》.md",
+    "《置身事内：中国政府与经济发展》.md",
+    "《置身事内：中国政府与经济发展》.md"
+   ],
+   "top_block_ids": [
+    "cb6cf583005b5aa2ccdf5109fc5f64cd::bdfa089576ebfce0::/H1/财税和政府行为/H3/分税制改革#1",
+    "cb6cf583005b5aa2ccdf5109fc5f64cd::bdfa089576ebfce0::/H1/财税和政府行为/H2/纵向不平衡与横向不平衡#1",
+    "cb6cf583005b5aa2ccdf5109fc5f64cd::bdfa089576ebfce0::/H1/财税和政府行为/H3/土地财政#1"
+   ]
+  },
+  "dense": {
+   "latency_ms": 4.2,
+   "top1_sim": 0.7377,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0
+  },
+  "bm25": {
+   "latency_ms": 22.5,
+   "top1_score": 75.605,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0
+  },
+  "ablation": {
+   "0.60": {
+    "n_out": 3,
+    "hit5": 1,
+    "ev_cov_ctx": 1.0
+   }
+  }
+ },
+ {
+  "id": "C23",
+  "cat": "semantic",
+  "diff": "hard",
+  "query": "弗洛伊德理论中，压抑、未被压抑和升华这三种情况分别导向什么心理结果？",
+  "gold": [
+   "736cecae4e6cac5b8d379481b16c1a34::1fc54b21bdc30199::/H2/assistant-1#1-s0"
+  ],
+  "n_gold": 1,
+  "hybrid": {
+   "n_out": 8,
+   "latency_ms": 81.9,
+   "top1_sim": 0.6247,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "recall": {
+    "1": 1.0,
+    "3": 1.0,
+    "5": 1.0,
+    "8": 1.0,
+    "10": 1.0
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0,
+   "ev_cov_ctx": 1.0,
+   "pollution": 0.125,
+   "dup": 0.0,
+   "top_files": [
+    "弗洛伊德论的性变态的形成机制.md",
+    "弗洛伊德论的性变态的形成机制.md",
+    "《弗洛伊德与精神分析》.md",
+    "弗洛伊德论的性变态的形成机制.md",
+    "弗洛伊德论的性变态的形成机制.md",
+    "弗洛伊德论的性变态的形成机制.md",
+    "弗洛伊德论的性变态的形成机制.md",
+    "弗洛伊德论的性变态的形成机制.md"
+   ],
+   "top_block_ids": [
+    "736cecae4e6cac5b8d379481b16c1a34::1fc54b21bdc30199::/H2/assistant-1#1-s0",
+    "736cecae4e6cac5b8d379481b16c1a34::1fc54b21bdc30199::/H2/书中逻辑/H3/2-三种命运的对比#2",
+    "62d67b82e8bf12c8e960e2962959db19::d4ae5f1e907582d4::/H1/从创伤到幻想#1",
+    "736cecae4e6cac5b8d379481b16c1a34::1fc54b21bdc30199::/H2/assistant-1#1-s2",
+    "736cecae4e6cac5b8d379481b16c1a34::1fc54b21bdc30199::/H2/user#2",
+    "736cecae4e6cac5b8d379481b16c1a34::1fc54b21bdc30199::/H2/assistant#1",
+    "736cecae4e6cac5b8d379481b16c1a34::1fc54b21bdc30199::/H2/assistant#3",
+    "736cecae4e6cac5b8d379481b16c1a34::1fc54b21bdc30199::/H2/assistant-1#1-s1"
+   ]
+  },
+  "dense": {
+   "latency_ms": 3.5,
+   "top1_sim": 0.6247,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0
+  },
+  "bm25": {
+   "latency_ms": 27.4,
+   "top1_score": 99.326,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0
+  },
+  "ablation": {
+   "0.60": {
+    "n_out": 8,
+    "hit5": 1,
+    "ev_cov_ctx": 1.0
+   }
+  }
+ },
+ {
+  "id": "C24",
+  "cat": "definition",
+  "diff": "medium",
+  "query": "弗洛伊德说的夸大（exaggeration）在性心理发展里具体指什么？",
+  "gold": [
+   "736cecae4e6cac5b8d379481b16c1a34::1fc54b21bdc30199::/H2/书中逻辑/H3/3-夸大到底是什么意思#1"
+  ],
+  "n_gold": 1,
+  "hybrid": {
+   "n_out": 8,
+   "latency_ms": 94.9,
+   "top1_sim": 0.7593,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "recall": {
+    "1": 1.0,
+    "3": 1.0,
+    "5": 1.0,
+    "8": 1.0,
+    "10": 1.0
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0,
+   "ev_cov_ctx": 1.0,
+   "pollution": 0.0,
+   "dup": 0.0,
+   "top_files": [
+    "弗洛伊德论的性变态的形成机制.md",
+    "弗洛伊德论的性变态的形成机制.md",
+    "弗洛伊德论的性变态的形成机制.md",
+    "弗洛伊德论的性变态的形成机制.md",
+    "弗洛伊德论的性变态的形成机制.md",
+    "弗洛伊德论的性变态的形成机制.md",
+    "弗洛伊德论的性变态的形成机制.md",
+    "弗洛伊德论的性变态的形成机制.md"
+   ],
+   "top_block_ids": [
+    "736cecae4e6cac5b8d379481b16c1a34::1fc54b21bdc30199::/H2/书中逻辑/H3/3-夸大到底是什么意思#1",
+    "736cecae4e6cac5b8d379481b16c1a34::1fc54b21bdc30199::/H2/assistant-1#1-s0",
+    "736cecae4e6cac5b8d379481b16c1a34::1fc54b21bdc30199::/H2/核心回答#1",
+    "736cecae4e6cac5b8d379481b16c1a34::1fc54b21bdc30199::/H2/assistant-1#1-s2",
+    "736cecae4e6cac5b8d379481b16c1a34::1fc54b21bdc30199::/H2/延伸思考/H3/一个容易被误解的地方#1",
+    "736cecae4e6cac5b8d379481b16c1a34::1fc54b21bdc30199::/H2/现实映射/H3/临床之外的社会学隐喻#1",
+    "736cecae4e6cac5b8d379481b16c1a34::1fc54b21bdc30199::/H2/assistant#1",
+    "736cecae4e6cac5b8d379481b16c1a34::1fc54b21bdc30199::/H2/值得继续思考的问题#1"
+   ]
+  },
+  "dense": {
+   "latency_ms": 7.0,
+   "top1_sim": 0.7593,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0
+  },
+  "bm25": {
+   "latency_ms": 17.3,
+   "top1_score": 61.209,
+   "hit": {
+    "1": 0,
+    "3": 0,
+    "5": 0,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 0.1429,
+   "ndcg8": 0.333,
+   "ev_cov_raw": 1.0
+  },
+  "ablation": {
+   "0.60": {
+    "n_out": 8,
+    "hit5": 1,
+    "ev_cov_ctx": 1.0
+   }
+  }
+ },
+ {
+  "id": "C25",
+  "cat": "definition",
+  "diff": "medium",
+  "query": "城投公司是什么，地方政府为什么要靠它来借钱？",
+  "gold": [
+   "ac28ad7a30266b221b8b55f4a6683df9::7730471c2f42b874::/H1/政府的账本一场借明天的钱的接力赛/H2/第三节-城投加杠杆债务的放大器#1"
+  ],
+  "n_gold": 1,
+  "hybrid": {
+   "n_out": 6,
+   "latency_ms": 102.0,
+   "top1_sim": 0.7682,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "recall": {
+    "1": 1.0,
+    "3": 1.0,
+    "5": 1.0,
+    "8": 1.0,
+    "10": 1.0
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0,
+   "ev_cov_ctx": 1.0,
+   "pollution": 0.0,
+   "dup": 0.0,
+   "top_files": [
+    "2026-08-09-政府的账本：一场借明天的钱的接力赛.md",
+    "2026-08-09-政府的账本：一场借明天的钱的接力赛.md",
+    "2026-08-09-政府的账本：一场借明天的钱的接力赛.md",
+    "2026-08-09-政府的账本：一场借明天的钱的接力赛.md",
+    "2026-08-09-政府的账本：一场借明天的钱的接力赛.md",
+    "2026-08-09-政府的账本：一场借明天的钱的接力赛.md"
+   ],
+   "top_block_ids": [
+    "ac28ad7a30266b221b8b55f4a6683df9::7730471c2f42b874::/H1/政府的账本一场借明天的钱的接力赛/H2/第三节-城投加杠杆债务的放大器#1",
+    "ac28ad7a30266b221b8b55f4a6683df9::7730471c2f42b874::/H1/政府的账本一场借明天的钱的接力赛/H2/第一节-钱被谁拿走了1994-分税制#1",
+    "ac28ad7a30266b221b8b55f4a6683df9::7730471c2f42b874::/H1/政府的账本一场借明天的钱的接力赛/H2/第二节-卖地还账土地财政诞生#1-s1",
+    "ac28ad7a30266b221b8b55f4a6683df9::7730471c2f42b874::/H1/政府的账本一场借明天的钱的接力赛/H2/第二节-卖地还账土地财政诞生#1-s0",
+    "ac28ad7a30266b221b8b55f4a6683df9::7730471c2f42b874::/H1/政府的账本一场借明天的钱的接力赛/H2/第四节-谁来还任期与代际的错位#1",
+    "ac28ad7a30266b221b8b55f4a6683df9::7730471c2f42b874::/H1/政府的账本一场借明天的钱的接力赛/H2/结尾-借来的时间总要还#1"
+   ]
+  },
+  "dense": {
+   "latency_ms": 4.8,
+   "top1_sim": 0.7682,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0
+  },
+  "bm25": {
+   "latency_ms": 20.1,
+   "top1_score": 62.146,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0
+  },
+  "ablation": {
+   "0.60": {
+    "n_out": 6,
+    "hit5": 1,
+    "ev_cov_ctx": 1.0
+   }
+  }
+ },
+ {
+  "id": "C26",
+  "cat": "semantic",
+  "diff": "medium",
+  "query": "土地财政是怎么形成的，地方政府为什么没有动力压低地价？",
+  "gold": [
+   "ac28ad7a30266b221b8b55f4a6683df9::7730471c2f42b874::/H1/政府的账本一场借明天的钱的接力赛/H2/第二节-卖地还账土地财政诞生#1-s1"
+  ],
+  "n_gold": 1,
+  "hybrid": {
+   "n_out": 8,
+   "latency_ms": 138.7,
+   "top1_sim": 0.6781,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "recall": {
+    "1": 1.0,
+    "3": 1.0,
+    "5": 1.0,
+    "8": 1.0,
+    "10": 1.0
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0,
+   "ev_cov_ctx": 1.0,
+   "pollution": 0.625,
+   "dup": 0.0,
+   "top_files": [
+    "2026-08-09-政府的账本：一场借明天的钱的接力赛.md",
+    "《置身事内：中国政府与经济发展》.md",
+    "2026-08-09-政府的账本：一场借明天的钱的接力赛.md",
+    "2026-08-09-政府的账本：一场借明天的钱的接力赛.md",
+    "论中国房价的前世今生.md",
+    "《置身事内：中国政府与经济发展》.md",
+    "论中国房价的前世今生.md",
+    "《置身事内：中国政府与经济发展》.md"
+   ],
+   "top_block_ids": [
+    "ac28ad7a30266b221b8b55f4a6683df9::7730471c2f42b874::/H1/政府的账本一场借明天的钱的接力赛/H2/第二节-卖地还账土地财政诞生#1-s1",
+    "cb6cf583005b5aa2ccdf5109fc5f64cd::bdfa089576ebfce0::/H1/财税和政府行为/H3/土地财政#1",
+    "ac28ad7a30266b221b8b55f4a6683df9::7730471c2f42b874::/H1/政府的账本一场借明天的钱的接力赛/H2/第一节-钱被谁拿走了1994-分税制#1",
+    "ac28ad7a30266b221b8b55f4a6683df9::7730471c2f42b874::/H1/政府的账本一场借明天的钱的接力赛/H2/第二节-卖地还账土地财政诞生#1-s0",
+    "2b813fba9b2e2cfaf263a56670d94a5c::fe27977b5612e346::/H1/一切都来自-30-年前政策#1-s0",
+    "cb6cf583005b5aa2ccdf5109fc5f64cd::bdfa089576ebfce0::/H1/财税和政府行为/H3/土地财政/H4/税收地租与地方政府竞争#1",
+    "2b813fba9b2e2cfaf263a56670d94a5c::fe27977b5612e346::/H1/一切都来自-30-年前政策#1-s1",
+    "cb6cf583005b5aa2ccdf5109fc5f64cd::bdfa089576ebfce0::/H1/财税和政府行为/H2/纵向不平衡与横向不平衡#1"
+   ]
+  },
+  "dense": {
+   "latency_ms": 5.3,
+   "top1_sim": 0.7001,
+   "hit": {
+    "1": 0,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 0.5,
+   "ndcg8": 0.631,
+   "ev_cov_raw": 1.0
+  },
+  "bm25": {
+   "latency_ms": 23.9,
+   "top1_score": 76.461,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0
+  },
+  "ablation": {
+   "0.60": {
+    "n_out": 8,
+    "hit5": 1,
+    "ev_cov_ctx": 1.0
+   }
+  }
+ },
+ {
+  "id": "C27",
+  "cat": "numeric",
+  "diff": "easy",
+  "query": "首单加深项目里 1.7 亿行的订单表造成了什么问题，优化后接口耗时降到多少？",
+  "gold": [
+   "47632fb6b5da4d7c621c101e6fca9f79::ee3b56ff156691fe::/H1/01-star-完整版c端商详页视角/H2/三30-秒精简版被打断时用#1"
+  ],
+  "n_gold": 1,
+  "hybrid": {
+   "n_out": 8,
+   "latency_ms": 129.0,
+   "top1_sim": 0.7149,
+   "hit": {
+    "1": 0,
+    "3": 0,
+    "5": 0,
+    "8": 0,
+    "10": 0
+   },
+   "recall": {
+    "1": 0.0,
+    "3": 0.0,
+    "5": 0.0,
+    "8": 0.0,
+    "10": 0.0
+   },
+   "rr": 0.0,
+   "ndcg8": 0.0,
+   "ev_cov_raw": 1.0,
+   "ev_cov_ctx": 1.0,
+   "pollution": 1.0,
+   "dup": 0.0,
+   "top_files": [
+    "首发加深功能优化复盘.md",
+    "首发加深功能优化复盘.md",
+    "首发加深功能优化复盘.md",
+    "首发加深功能优化复盘.md",
+    "首发加深功能优化复盘.md",
+    "首发加深功能优化复盘.md",
+    "首发加深功能优化复盘.md",
+    "首发加深功能优化复盘.md"
+   ],
+   "top_block_ids": [
+    "583e276cb4151475023d2c41e3d4ad26::3081c5334ed0e9d5::/H1/一次接口耗时从-30s-到秒开的优化复盘-我做对了什么又踩了什么坑-1/H2/把-30-秒变成能用-1#1",
+    "583e276cb4151475023d2c41e3d4ad26::3081c5334ed0e9d5::/H1/一次接口耗时从-30s-到秒开的优化复盘-我做对了什么又踩了什么坑-1/H2/四轮排查层层剥洋葱-1/H3/第一轮连蒙带猜的盲人摸象-1#1",
+    "583e276cb4151475023d2c41e3d4ad26::3081c5334ed0e9d5::/H1/一次接口耗时从-30s-到秒开的优化复盘-我做对了什么又踩了什么坑-1/H2/一个看起来还行的需求-1#1",
+    "583e276cb4151475023d2c41e3d4ad26::3081c5334ed0e9d5::/H1/一次接口耗时从-30s-到秒开的优化复盘-我做对了什么又踩了什么坑-1/H2/四轮排查层层剥洋葱-1/H3/第二轮物化视图-从-30-秒到秒开的质变-1#1",
+    "583e276cb4151475023d2c41e3d4ad26::3081c5334ed0e9d5::/H1/一次接口耗时从-30s-到秒开的优化复盘-我做对了什么又踩了什么坑-1/H2/不只是性能数字-1/H3/量化成果-1#1",
+    "583e276cb4151475023d2c41e3d4ad26::3081c5334ed0e9d5::/H1/一次接口耗时从-30s-到秒开的优化复盘-我做对了什么又踩了什么坑#1",
+    "583e276cb4151475023d2c41e3d4ad26::3081c5334ed0e9d5::/H1/一次接口耗时从-30s-到秒开的优化复盘-我做对了什么又踩了什么坑-1/H2/写在前面-1#1",
+    "583e276cb4151475023d2c41e3d4ad26::3081c5334ed0e9d5::/H1/一次接口耗时从-30s-到秒开的优化复盘-我做对了什么又踩了什么坑-1/H2/四轮排查层层剥洋葱-1/H3/第三轮数据对不上-灵异事件的真相-1#1"
+   ]
+  },
+  "dense": {
+   "latency_ms": 6.6,
+   "top1_sim": 0.7331,
+   "hit": {
+    "1": 0,
+    "3": 0,
+    "5": 0,
+    "8": 0,
+    "10": 0
+   },
+   "rr": 0.0,
+   "ndcg8": 0.0,
+   "ev_cov_raw": 1.0
+  },
+  "bm25": {
+   "latency_ms": 52.7,
+   "top1_score": 61.458,
+   "hit": {
+    "1": 0,
+    "3": 0,
+    "5": 0,
+    "8": 0,
+    "10": 0
+   },
+   "rr": 0.0769,
+   "ndcg8": 0.0,
+   "ev_cov_raw": 1.0
+  },
+  "ablation": {
+   "0.60": {
+    "n_out": 8,
+    "hit5": 0,
+    "ev_cov_ctx": 1.0
+   }
+  }
+ },
+ {
+  "id": "C28",
+  "cat": "semantic",
+  "diff": "hard",
+  "query": "作者说先立口径基线再谈优化，这句话是什么意思？",
+  "gold": [
+   "47632fb6b5da4d7c621c101e6fca9f79::ee3b56ff156691fe::/H1/01-star-完整版c端商详页视角/H2/二完整-star-口述版面试直接讲/H3/升华数据湖亮点收尾#1"
+  ],
+  "n_gold": 1,
+  "hybrid": {
+   "n_out": 2,
+   "latency_ms": 83.8,
+   "top1_sim": 0.4788,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "recall": {
+    "1": 1.0,
+    "3": 1.0,
+    "5": 1.0,
+    "8": 1.0,
+    "10": 1.0
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0,
+   "ev_cov_ctx": 1.0,
+   "pollution": 0.5,
+   "dup": 0.0,
+   "top_files": [
+    "01-STAR-C端完整版.md",
+    "02-华为技术官追问预案.md"
+   ],
+   "top_block_ids": [
+    "47632fb6b5da4d7c621c101e6fca9f79::ee3b56ff156691fe::/H1/01-star-完整版c端商详页视角/H2/二完整-star-口述版面试直接讲/H3/升华数据湖亮点收尾#1",
+    "c03ac7b1c2111c3112f31fbb3a63b38a::8cc239f72c4790c6::/H1/02-华为技术官追问预案/H2/一硬核必背q1q8/H3/q8必考如果再给你一次你怎么一开始就避免这些坑#1"
+   ]
+  },
+  "dense": {
+   "latency_ms": 6.2,
+   "top1_sim": 0.5585,
+   "hit": {
+    "1": 0,
+    "3": 0,
+    "5": 0,
+    "8": 0,
+    "10": 0
+   },
+   "rr": 0.0769,
+   "ndcg8": 0.0,
+   "ev_cov_raw": 0.0
+  },
+  "bm25": {
+   "latency_ms": 18.1,
+   "top1_score": 50.438,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0
+  },
+  "ablation": {
+   "0.60": {
+    "n_out": 2,
+    "hit5": 1,
+    "ev_cov_ctx": 1.0
+   }
+  }
+ },
+ {
+  "id": "C29",
+  "cat": "fact_lookup",
+  "diff": "medium",
+  "query": "OMS 切面偶发失效的问题，当时的临时解决办法是什么？",
+  "gold": [
+   "06fcc07cd6b265c98de3bd8224ca45f4::e69da36130707e9b::/H1/再次排查-5月2627日/H2/第二层缓存代码#1"
+  ],
+  "n_gold": 1,
+  "hybrid": {
+   "n_out": 8,
+   "latency_ms": 120.2,
+   "top1_sim": 0.594,
+   "hit": {
+    "1": 0,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "recall": {
+    "1": 0.0,
+    "3": 1.0,
+    "5": 1.0,
+    "8": 1.0,
+    "10": 1.0
+   },
+   "rr": 0.3333,
+   "ndcg8": 0.5,
+   "ev_cov_raw": 1.0,
+   "ev_cov_ctx": 1.0,
+   "pollution": 0.125,
+   "dup": 0.0,
+   "top_files": [
+    "OMS切面偶发问题排查.md",
+    "OMS切面偶发问题排查.md",
+    "OMS切面偶发问题排查.md",
+    "排查bug的真实案例.md",
+    "OMS切面偶发问题排查.md",
+    "OMS切面偶发问题排查.md",
+    "OMS切面偶发问题排查.md",
+    "OMS切面偶发问题排查.md"
+   ],
+   "top_block_ids": [
+    "06fcc07cd6b265c98de3bd8224ca45f4::e69da36130707e9b::/H1/首次排查-1月2324日#1",
+    "06fcc07cd6b265c98de3bd8224ca45f4::e69da36130707e9b::/H1/再次排查-5月2627日#1",
+    "06fcc07cd6b265c98de3bd8224ca45f4::e69da36130707e9b::/H1/再次排查-5月2627日/H2/第二层缓存代码#1",
+    "557c166acb72c17af049566751ac81d9::6e9346fee84827a9::/H1/oms-偶发的对象不存在-25124-林冠鹏-guanpeng-李泽彬-zebin-张子宽#1",
+    "06fcc07cd6b265c98de3bd8224ca45f4::e69da36130707e9b::/H1/起因#1",
+    "06fcc07cd6b265c98de3bd8224ca45f4::e69da36130707e9b::/H1/最后一战/H2/为啥旧版本没问题呢#1",
+    "06fcc07cd6b265c98de3bd8224ca45f4::e69da36130707e9b::/H1/再次排查-5月2627日/H2/第一层缓存代码#1",
+    "06fcc07cd6b265c98de3bd8224ca45f4::e69da36130707e9b::/H1/最后#1"
+   ]
+  },
+  "dense": {
+   "latency_ms": 6.1,
+   "top1_sim": 0.6227,
+   "hit": {
+    "1": 0,
+    "3": 0,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 0.2,
+   "ndcg8": 0.387,
+   "ev_cov_raw": 1.0
+  },
+  "bm25": {
+   "latency_ms": 21.9,
+   "top1_score": 44.826,
+   "hit": {
+    "1": 0,
+    "3": 0,
+    "5": 0,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 0.1429,
+   "ndcg8": 0.333,
+   "ev_cov_raw": 1.0
+  },
+  "ablation": {
+   "0.60": {
+    "n_out": 8,
+    "hit5": 1,
+    "ev_cov_ctx": 1.0
+   }
+  }
+ },
+ {
+  "id": "C30",
+  "cat": "identifier",
+  "diff": "easy",
+  "query": "OMS 切面问题最终拿到堆栈后，报的是什么异常，涉及哪两个方法？",
+  "gold": [
+   "06fcc07cd6b265c98de3bd8224ca45f4::e69da36130707e9b::/H1/拿到堆栈-5月29日#1"
+  ],
+  "n_gold": 1,
+  "hybrid": {
+   "n_out": 8,
+   "latency_ms": 105.1,
+   "top1_sim": 0.5916,
+   "hit": {
+    "1": 0,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "recall": {
+    "1": 0.0,
+    "3": 1.0,
+    "5": 1.0,
+    "8": 1.0,
+    "10": 1.0
+   },
+   "rr": 0.5,
+   "ndcg8": 0.631,
+   "ev_cov_raw": 1.0,
+   "ev_cov_ctx": 1.0,
+   "pollution": 0.125,
+   "dup": 0.0,
+   "top_files": [
+    "OMS切面偶发问题排查.md",
+    "OMS切面偶发问题排查.md",
+    "OMS切面偶发问题排查.md",
+    "OMS切面偶发问题排查.md",
+    "排查bug的真实案例.md",
+    "OMS切面偶发问题排查.md",
+    "OMS切面偶发问题排查.md",
+    "OMS切面偶发问题排查.md"
+   ],
+   "top_block_ids": [
+    "06fcc07cd6b265c98de3bd8224ca45f4::e69da36130707e9b::/H1/再次排查-5月2627日/H2/第二层缓存代码#1",
+    "06fcc07cd6b265c98de3bd8224ca45f4::e69da36130707e9b::/H1/拿到堆栈-5月29日#1",
+    "06fcc07cd6b265c98de3bd8224ca45f4::e69da36130707e9b::/H1/首次排查-1月2324日#1",
+    "06fcc07cd6b265c98de3bd8224ca45f4::e69da36130707e9b::/H1/起因#1",
+    "557c166acb72c17af049566751ac81d9::6e9346fee84827a9::/H1/oms-偶发的对象不存在-25124-林冠鹏-guanpeng-李泽彬-zebin-张子宽#1",
+    "06fcc07cd6b265c98de3bd8224ca45f4::e69da36130707e9b::/H1/再次排查-5月2627日/H2/第一层缓存代码#1",
+    "06fcc07cd6b265c98de3bd8224ca45f4::e69da36130707e9b::/H1/再次排查-5月2627日#1",
+    "06fcc07cd6b265c98de3bd8224ca45f4::e69da36130707e9b::/H1/最后#1"
+   ]
+  },
+  "dense": {
+   "latency_ms": 5.5,
+   "top1_sim": 0.6855,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0
+  },
+  "bm25": {
+   "latency_ms": 27.9,
+   "top1_score": 40.668,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0
+  },
+  "ablation": {
+   "0.60": {
+    "n_out": 8,
+    "hit5": 1,
+    "ev_cov_ctx": 1.0
+   }
+  }
+ },
+ {
+  "id": "C31",
+  "cat": "numeric",
+  "diff": "easy",
+  "query": "使用 R8 混淆后 APK 体积从多少降到多少，有什么副作用？",
+  "gold": [
+   "b440a0554aa58f3eae0d94dcae0c5c6d::3aa5f4dad11915ee::/H1/优化三步曲/H2/怎么优化资源懒加载混淆采用特殊的发布格式/H3/针对其他资源优化#1"
+  ],
+  "n_gold": 1,
+  "hybrid": {
+   "n_out": 8,
+   "latency_ms": 121.8,
+   "top1_sim": 0.6751,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "recall": {
+    "1": 1.0,
+    "3": 1.0,
+    "5": 1.0,
+    "8": 1.0,
+    "10": 1.0
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0,
+   "ev_cov_ctx": 1.0,
+   "pollution": 0.0,
+   "dup": 0.0,
+   "top_files": [
+    "Cider Android包（APK）体积优化.md",
+    "Cider Android包（APK）体积优化.md",
+    "Cider Android包（APK）体积优化.md",
+    "Cider Android包（APK）体积优化.md",
+    "Cider Android包（APK）体积优化.md",
+    "Cider Android包（APK）体积优化.md",
+    "Cider Android包（APK）体积优化.md",
+    "Cider Android包（APK）体积优化.md"
+   ],
+   "top_block_ids": [
+    "b440a0554aa58f3eae0d94dcae0c5c6d::3aa5f4dad11915ee::/H1/优化三步曲/H2/怎么优化资源懒加载混淆采用特殊的发布格式/H3/针对其他资源优化#1",
+    "b440a0554aa58f3eae0d94dcae0c5c6d::3aa5f4dad11915ee::/H1/问题#1",
+    "b440a0554aa58f3eae0d94dcae0c5c6d::3aa5f4dad11915ee::/H1/优化三步曲/H2/优化什么apk体积#1",
+    "b440a0554aa58f3eae0d94dcae0c5c6d::3aa5f4dad11915ee::/H1/apk体积对下载转化率的影响#1",
+    "b440a0554aa58f3eae0d94dcae0c5c6d::3aa5f4dad11915ee::/H1/最后#1",
+    "b440a0554aa58f3eae0d94dcae0c5c6d::3aa5f4dad11915ee::/H1/优化三步曲/H2/怎么优化资源懒加载混淆采用特殊的发布格式/H3/针对处理器架构/H4/下面一张动图带大家直观的看apk与aab的安装区别#1",
+    "b440a0554aa58f3eae0d94dcae0c5c6d::3aa5f4dad11915ee::/H1/优化三步曲/H2/怎么优化资源懒加载混淆采用特殊的发布格式/H3/针对处理器架构#1",
+    "b440a0554aa58f3eae0d94dcae0c5c6d::3aa5f4dad11915ee::/H1/优化三步曲/H2/怎么优化资源懒加载混淆采用特殊的发布格式/H3/针对预置基准包#1"
+   ]
+  },
+  "dense": {
+   "latency_ms": 7.3,
+   "top1_sim": 0.6751,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0
+  },
+  "bm25": {
+   "latency_ms": 20.5,
+   "top1_score": 43.709,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0
+  },
+  "ablation": {
+   "0.60": {
+    "n_out": 8,
+    "hit5": 1,
+    "ev_cov_ctx": 1.0
+   }
+  }
+ },
+ {
+  "id": "C32",
+  "cat": "definition",
+  "diff": "easy",
+  "query": "AAB（Android App Bundle）是什么，它怎么解决不同 ab 架构的包体积问题？",
+  "gold": [
+   "b440a0554aa58f3eae0d94dcae0c5c6d::3aa5f4dad11915ee::/H1/优化三步曲/H2/怎么优化资源懒加载混淆采用特殊的发布格式/H3/针对处理器架构#1"
+  ],
+  "n_gold": 1,
+  "hybrid": {
+   "n_out": 8,
+   "latency_ms": 211.1,
+   "top1_sim": 0.7573,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "recall": {
+    "1": 1.0,
+    "3": 1.0,
+    "5": 1.0,
+    "8": 1.0,
+    "10": 1.0
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0,
+   "ev_cov_ctx": 1.0,
+   "pollution": 0.0,
+   "dup": 0.0,
+   "top_files": [
+    "Cider Android包（APK）体积优化.md",
+    "Cider Android包（APK）体积优化.md",
+    "Cider Android包（APK）体积优化.md",
+    "Cider Android包（APK）体积优化.md",
+    "Cider Android包（APK）体积优化.md",
+    "Cider Android包（APK）体积优化.md",
+    "Cider Android包（APK）体积优化.md",
+    "Cider Android包（APK）体积优化.md"
+   ],
+   "top_block_ids": [
+    "b440a0554aa58f3eae0d94dcae0c5c6d::3aa5f4dad11915ee::/H1/优化三步曲/H2/怎么优化资源懒加载混淆采用特殊的发布格式/H3/针对处理器架构#1",
+    "b440a0554aa58f3eae0d94dcae0c5c6d::3aa5f4dad11915ee::/H1/优化三步曲/H2/怎么优化资源懒加载混淆采用特殊的发布格式/H3/针对处理器架构/H4/下面一张动图带大家直观的看apk与aab的安装区别#1",
+    "b440a0554aa58f3eae0d94dcae0c5c6d::3aa5f4dad11915ee::/H1/优化三步曲/H2/优化哪里针对可优化资源/H3/ab架构资源包#1",
+    "b440a0554aa58f3eae0d94dcae0c5c6d::3aa5f4dad11915ee::/H1/优化三步曲/H2/优化什么apk体积#1",
+    "b440a0554aa58f3eae0d94dcae0c5c6d::3aa5f4dad11915ee::/H1/apk体积对下载转化率的影响#1",
+    "b440a0554aa58f3eae0d94dcae0c5c6d::3aa5f4dad11915ee::/H1/问题#1",
+    "b440a0554aa58f3eae0d94dcae0c5c6d::3aa5f4dad11915ee::/H1/最后的最后#1",
+    "b440a0554aa58f3eae0d94dcae0c5c6d::3aa5f4dad11915ee::/H1/优化三步曲/H2/怎么优化资源懒加载混淆采用特殊的发布格式/H3/针对其他资源优化#1"
+   ]
+  },
+  "dense": {
+   "latency_ms": 7.8,
+   "top1_sim": 0.7573,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0
+  },
+  "bm25": {
+   "latency_ms": 31.9,
+   "top1_score": 57.745,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0
+  },
+  "ablation": {
+   "0.60": {
+    "n_out": 8,
+    "hit5": 1,
+    "ev_cov_ctx": 1.0
+   }
+  }
+ },
+ {
+  "id": "C33",
+  "cat": "fact_lookup",
+  "diff": "medium",
+  "query": "星链系统是给哪个客户做的供应链项目，MPS 模块投入了多少人力？",
+  "gold": [
+   "7efbaaadf0b0e87d9e1b35065443ff61::4b7281599526b9d7::/H1/自我介绍/H2/section#1"
+  ],
+  "n_gold": 1,
+  "hybrid": {
+   "n_out": 8,
+   "latency_ms": 117.4,
+   "top1_sim": 0.496,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "recall": {
+    "1": 1.0,
+    "3": 1.0,
+    "5": 1.0,
+    "8": 1.0,
+    "10": 1.0
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0,
+   "ev_cov_ctx": 1.0,
+   "pollution": 0.875,
+   "dup": 0.0,
+   "top_files": [
+    "面试背诵环节.md",
+    "非功能产出.md",
+    "供应链名词.md",
+    "BTN.md",
+    "BTN.md",
+    "BTN.md",
+    "BTN.md",
+    "供应链名词.md"
+   ],
+   "top_block_ids": [
+    "7efbaaadf0b0e87d9e1b35065443ff61::4b7281599526b9d7::/H1/自我介绍/H2/section#1",
+    "f0f50f0882d6676187f1a8083038d128::900ac37a108d1cd5::/H2/团队的业务#1",
+    "27fd98efabb1f2354c8ffc67350d3ec0::fec64c6eeda369cd::/H2/mps#1",
+    "1d926c8792617125890359aab1a5bb70::72600fa369a94512::/H1/模块二-工厂日明细计划-以青浦工厂为例/H2/星链-mps侧功能/H3/叫料计划的生成逻辑星链已有功能的阐述#1",
+    "1d926c8792617125890359aab1a5bb70::72600fa369a94512::/H1/模块一星链补充和优化/H2/业务模块的整理和权限区分#2",
+    "1d926c8792617125890359aab1a5bb70::72600fa369a94512::/H1/模块二-工厂日明细计划-以青浦工厂为例/H2/功能点规划#1",
+    "1d926c8792617125890359aab1a5bb70::72600fa369a94512::/H1/模块三供应链资源规划/H2/原料备货跟踪/H3/功能设计/H4/年度mps表514艺文新增#1",
+    "27fd98efabb1f2354c8ffc67350d3ec0::fec64c6eeda369cd::/H2/mrp#1"
+   ]
+  },
+  "dense": {
+   "latency_ms": 5.2,
+   "top1_sim": 0.5799,
+   "hit": {
+    "1": 0,
+    "3": 0,
+    "5": 0,
+    "8": 0,
+    "10": 0
+   },
+   "rr": 0.0,
+   "ndcg8": 0.0,
+   "ev_cov_raw": 0.333
+  },
+  "bm25": {
+   "latency_ms": 24.8,
+   "top1_score": 65.907,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0
+  },
+  "ablation": {
+   "0.60": {
+    "n_out": 8,
+    "hit5": 1,
+    "ev_cov_ctx": 1.0
+   }
+  }
+ },
+ {
+  "id": "C34",
+  "cat": "semantic",
+  "diff": "medium",
+  "query": "面试结尾反问环节，文档建议向面试官提哪些问题？",
+  "gold": [
+   "7efbaaadf0b0e87d9e1b35065443ff61::4b7281599526b9d7::/H1/你有什么问题想问我的#1"
+  ],
+  "n_gold": 1,
+  "hybrid": {
+   "n_out": 1,
+   "latency_ms": 102.7,
+   "top1_sim": 0.6187,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "recall": {
+    "1": 1.0,
+    "3": 1.0,
+    "5": 1.0,
+    "8": 1.0,
+    "10": 1.0
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0,
+   "ev_cov_ctx": 1.0,
+   "pollution": 0.0,
+   "dup": 0.0,
+   "top_files": [
+    "面试背诵环节.md"
+   ],
+   "top_block_ids": [
+    "7efbaaadf0b0e87d9e1b35065443ff61::4b7281599526b9d7::/H1/你有什么问题想问我的#1"
+   ]
+  },
+  "dense": {
+   "latency_ms": 7.8,
+   "top1_sim": 0.6187,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0
+  },
+  "bm25": {
+   "latency_ms": 26.1,
+   "top1_score": 22.735,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0
+  },
+  "ablation": {
+   "0.60": {
+    "n_out": 1,
+    "hit5": 1,
+    "ev_cov_ctx": 1.0
+   }
+  }
+ },
+ {
+  "id": "C35",
+  "cat": "semantic",
+  "diff": "hard",
+  "query": "文档里说的遗留代码重构中的鸡生蛋蛋生鸡问题指的是什么？",
+  "gold": [
+   "fe688f235c1472769f09ef85848b7065::ab244e6b83776f3e::/H1/困境#1"
+  ],
+  "n_gold": 1,
+  "hybrid": {
+   "n_out": 1,
+   "latency_ms": 97.9,
+   "top1_sim": 0.4627,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "recall": {
+    "1": 1.0,
+    "3": 1.0,
+    "5": 1.0,
+    "8": 1.0,
+    "10": 1.0
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0,
+   "ev_cov_ctx": 1.0,
+   "pollution": 0.0,
+   "dup": 0.0,
+   "top_files": [
+    "如何测试你的代码.md"
+   ],
+   "top_block_ids": [
+    "fe688f235c1472769f09ef85848b7065::ab244e6b83776f3e::/H1/困境#1"
+   ]
+  },
+  "dense": {
+   "latency_ms": 7.2,
+   "top1_sim": 0.5028,
+   "hit": {
+    "1": 0,
+    "3": 0,
+    "5": 0,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 0.1667,
+   "ndcg8": 0.356,
+   "ev_cov_raw": 1.0
+  },
+  "bm25": {
+   "latency_ms": 29.4,
+   "top1_score": 54.181,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0
+  },
+  "ablation": {
+   "0.60": {
+    "n_out": 1,
+    "hit5": 1,
+    "ev_cov_ctx": 1.0
+   }
+  }
+ },
+ {
+  "id": "C36",
+  "cat": "identifier",
+  "diff": "easy",
+  "query": "SPM 的拼接规则是什么，举例说明 8.1005482.10003.2 各段代表什么？",
+  "gold": [
+   "c2195431f17c4748937bf6b39b3b1eee::62f4a3c531b094a8::/H2/4spm-scm#1"
+  ],
+  "n_gold": 1,
+  "hybrid": {
+   "n_out": 8,
+   "latency_ms": 109.4,
+   "top1_sim": 0.583,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "recall": {
+    "1": 1.0,
+    "3": 1.0,
+    "5": 1.0,
+    "8": 1.0,
+    "10": 1.0
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0,
+   "ev_cov_ctx": 1.0,
+   "pollution": 0.875,
+   "dup": 0.0,
+   "top_files": [
+    "埋点后台一期2.0.md",
+    "C端埋点的春天--SPM新埋点初探.md",
+    "埋点2.0设计文档V2.0.2.md",
+    "C端埋点的春天--SPM新埋点初探.md",
+    "埋点2.0设计文档V2.0.1.md",
+    "C端埋点的春天--SPM新埋点初探.md",
+    "C端埋点的春天--SPM新埋点初探.md",
+    "C端埋点的春天--SPM新埋点初探.md"
+   ],
+   "top_block_ids": [
+    "c2195431f17c4748937bf6b39b3b1eee::62f4a3c531b094a8::/H2/4spm-scm#1",
+    "6037f907e1182658e5aa2c98c0c82902::a23cc3f774bb0528::/H1/spm和scm拼接规则#6",
+    "ce8433c281aca8684d894f59481077b0::55b79382077cb1ac::/H1/五商品瀑布流及多tab商品瀑布流spm补充定义#1",
+    "6037f907e1182658e5aa2c98c0c82902::a23cc3f774bb0528::/H1/spm和scm拼接规则#1",
+    "d28c239ce4581b19179a72e178560d21::4a169fb60bde281f::/H1/二spm及scm设计/H2/1spm/H3/11-规则#1",
+    "6037f907e1182658e5aa2c98c0c82902::a23cc3f774bb0528::/H1/spmrefer-和-scmrefer的由来/H2/拼接规则#1",
+    "6037f907e1182658e5aa2c98c0c82902::a23cc3f774bb0528::/H1/spmrefer-和-scmrefer的由来/H2/拼接准则#1",
+    "6037f907e1182658e5aa2c98c0c82902::a23cc3f774bb0528::/H1/spmrefer-和-scmrefer的由来/H2/拼接准则#5"
+   ]
+  },
+  "dense": {
+   "latency_ms": 6.2,
+   "top1_sim": 0.6518,
+   "hit": {
+    "1": 0,
+    "3": 0,
+    "5": 0,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 0.1667,
+   "ndcg8": 0.356,
+   "ev_cov_raw": 1.0
+  },
+  "bm25": {
+   "latency_ms": 21.2,
+   "top1_score": 38.56,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0
+  },
+  "ablation": {
+   "0.60": {
+    "n_out": 8,
+    "hit5": 1,
+    "ev_cov_ctx": 1.0
+   }
+  }
+ },
+ {
+  "id": "C37",
+  "cat": "identifier",
+  "diff": "easy",
+  "query": "埋点后台创建事件时，事件需要定义哪些字段？",
+  "gold": [
+   "c2195431f17c4748937bf6b39b3b1eee::62f4a3c531b094a8::/H2/2事件管理/H3/21-创建事件#1"
+  ],
+  "n_gold": 1,
+  "hybrid": {
+   "n_out": 8,
+   "latency_ms": 97.1,
+   "top1_sim": 0.7359,
+   "hit": {
+    "1": 0,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "recall": {
+    "1": 0.0,
+    "3": 1.0,
+    "5": 1.0,
+    "8": 1.0,
+    "10": 1.0
+   },
+   "rr": 0.5,
+   "ndcg8": 0.631,
+   "ev_cov_raw": 1.0,
+   "ev_cov_ctx": 1.0,
+   "pollution": 0.25,
+   "dup": 0.0,
+   "top_files": [
+    "埋点后台一期2.0.md",
+    "埋点后台一期2.0.md",
+    "埋点后台一期2.0.md",
+    "埋点后台一期2.0.md",
+    "埋点基础.md",
+    "埋点2.0设计文档V2.0.1.md",
+    "埋点后台一期2.0.md",
+    "埋点后台一期2.0.md"
+   ],
+   "top_block_ids": [
+    "c2195431f17c4748937bf6b39b3b1eee::62f4a3c531b094a8::/H2/2事件管理#1",
+    "c2195431f17c4748937bf6b39b3b1eee::62f4a3c531b094a8::/H2/2事件管理/H3/21-创建事件#1",
+    "c2195431f17c4748937bf6b39b3b1eee::62f4a3c531b094a8::/H2/3页面管理#1",
+    "c2195431f17c4748937bf6b39b3b1eee::62f4a3c531b094a8::/H2/数据表#1",
+    "106d3b7dd763b73b3c36b44ad1ad5c5d::93edddeb57a673e8::/H2/一些基本的埋点常识/H3/3-事件数据event-data#1",
+    "d28c239ce4581b19179a72e178560d21::4a169fb60bde281f::/H1/四补充约定/H2/2埋点管理后台#1",
+    "c2195431f17c4748937bf6b39b3b1eee::62f4a3c531b094a8::/H2/2事件管理/H3/22-属性管理#1",
+    "c2195431f17c4748937bf6b39b3b1eee::62f4a3c531b094a8::#1"
+   ]
+  },
+  "dense": {
+   "latency_ms": 6.5,
+   "top1_sim": 0.7975,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0
+  },
+  "bm25": {
+   "latency_ms": 23.2,
+   "top1_score": 41.487,
+   "hit": {
+    "1": 0,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 0.5,
+   "ndcg8": 0.631,
+   "ev_cov_raw": 1.0
+  },
+  "ablation": {
+   "0.60": {
+    "n_out": 8,
+    "hit5": 1,
+    "ev_cov_ctx": 1.0
+   }
+  }
+ },
+ {
+  "id": "C38",
+  "cat": "identifier",
+  "diff": "easy",
+  "query": "PC 搜索异常事故中，key_word_type 参数上报存在什么问题？",
+  "gold": [
+   "db3667bc0c85cc473c3b511c3b945693::81cbb6a511532727::/H1/时间线#1"
+  ],
+  "n_gold": 1,
+  "hybrid": {
+   "n_out": 7,
+   "latency_ms": 130.4,
+   "top1_sim": 0.6337,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "recall": {
+    "1": 1.0,
+    "3": 1.0,
+    "5": 1.0,
+    "8": 1.0,
+    "10": 1.0
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0,
+   "ev_cov_ctx": 1.0,
+   "pollution": 0.0,
+   "dup": 0.0,
+   "top_files": [
+    "2023年02月17日，PC_搜索异常.md",
+    "2023年02月17日，PC_搜索异常.md",
+    "2023年02月17日，PC_搜索异常.md",
+    "2023年02月17日，PC_搜索异常.md",
+    "2023年02月17日，PC_搜索异常.md",
+    "2023年02月17日，PC_搜索异常.md",
+    "2023年02月17日，PC_搜索异常.md"
+   ],
+   "top_block_ids": [
+    "db3667bc0c85cc473c3b511c3b945693::81cbb6a511532727::/H1/时间线#1",
+    "db3667bc0c85cc473c3b511c3b945693::81cbb6a511532727::/H1/造成事故的原因#1",
+    "db3667bc0c85cc473c3b511c3b945693::81cbb6a511532727::/H1/事故复盘/H2/为什么会多了一个参数#1",
+    "db3667bc0c85cc473c3b511c3b945693::81cbb6a511532727::/H1/影响范围#1",
+    "db3667bc0c85cc473c3b511c3b945693::81cbb6a511532727::/H1/事故复盘/H2/为什么会出现这个问题#1",
+    "db3667bc0c85cc473c3b511c3b945693::81cbb6a511532727::/H1/事故复盘/H2/为什么报警没有发现问题刘江涛-苏永康yongkang#1",
+    "db3667bc0c85cc473c3b511c3b945693::81cbb6a511532727::/H1/事故复盘/H2/为什么线上回归没有发现问题#1"
+   ]
+  },
+  "dense": {
+   "latency_ms": 7.4,
+   "top1_sim": 0.6337,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0
+  },
+  "bm25": {
+   "latency_ms": 26.4,
+   "top1_score": 45.03,
+   "hit": {
+    "1": 0,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 0.5,
+   "ndcg8": 0.631,
+   "ev_cov_raw": 1.0
+  },
+  "ablation": {
+   "0.60": {
+    "n_out": 7,
+    "hit5": 1,
+    "ev_cov_ctx": 1.0
+   }
+  }
+ },
+ {
+  "id": "C39",
+  "cat": "semantic",
+  "diff": "medium",
+  "query": "置身事内这本书里，中央和地方各自掌握哪些权力和优势？",
+  "gold": [
+   "d95fd94cca262e49da244b7aacfb5689::2ced48435abd0a89::/H2/为什么作者把它放在第一章#1"
+  ],
+  "n_gold": 1,
+  "hybrid": {
+   "n_out": 3,
+   "latency_ms": 88.4,
+   "top1_sim": 0.6447,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "recall": {
+    "1": 1.0,
+    "3": 1.0,
+    "5": 1.0,
+    "8": 1.0,
+    "10": 1.0
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0,
+   "ev_cov_ctx": 1.0,
+   "pollution": 0.667,
+   "dup": 0.0,
+   "top_files": [
+    "官僚体系.md",
+    "《置身事内：中国政府与经济发展》.md",
+    "《置身事内：中国政府与经济发展》.md"
+   ],
+   "top_block_ids": [
+    "d95fd94cca262e49da244b7aacfb5689::2ced48435abd0a89::/H2/为什么作者把它放在第一章#1",
+    "cb6cf583005b5aa2ccdf5109fc5f64cd::bdfa089576ebfce0::/H1/微观机制/H2/地方政府的权力与事务/H3/地方管理#1",
+    "cb6cf583005b5aa2ccdf5109fc5f64cd::bdfa089576ebfce0::/H1/微观机制/H2/地方政府的权力与事务/H3/政府治理的特点#1"
+   ]
+  },
+  "dense": {
+   "latency_ms": 4.5,
+   "top1_sim": 0.6447,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0
+  },
+  "bm25": {
+   "latency_ms": 18.0,
+   "top1_score": 47.311,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0
+  },
+  "ablation": {
+   "0.60": {
+    "n_out": 3,
+    "hit5": 1,
+    "ev_cov_ctx": 1.0
+   }
+  }
+ },
+ {
+  "id": "C40",
+  "cat": "semantic",
+  "diff": "medium",
+  "query": "cider 仓库的 CLAUDE.md 里提到自研系统包含哪些？",
+  "gold": [
+   "46e600a81c96fdfe185251e126de3523::5ff9a5d4ead9dda7::/H1/claudemd/H2/working-with-this-repository/H3/specialized-knowledge-areas#1"
+  ],
+  "n_gold": 1,
+  "hybrid": {
+   "n_out": 4,
+   "latency_ms": 87.6,
+   "top1_sim": 0.4249,
+   "hit": {
+    "1": 0,
+    "3": 0,
+    "5": 0,
+    "8": 0,
+    "10": 0
+   },
+   "recall": {
+    "1": 0.0,
+    "3": 0.0,
+    "5": 0.0,
+    "8": 0.0,
+    "10": 0.0
+   },
+   "rr": 0.0,
+   "ndcg8": 0.0,
+   "ev_cov_raw": 0.0,
+   "ev_cov_ctx": 0.0,
+   "pollution": 0.75,
+   "dup": 0.0,
+   "top_files": [
+    "Data Warebase 在 Cider 中的应用.md",
+    "Data Warebase 在 Cider 中的应用.md",
+    "Cider Android包（APK）体积优化.md",
+    "CLAUDE.md"
+   ],
+   "top_block_ids": [
+    "d624573dd8ebaeb33b0011310d131c82::e70b19acd5735b17::/H2/三protonbase-在该跨境电商多条业务线的应用#1",
+    "d624573dd8ebaeb33b0011310d131c82::e70b19acd5735b17::/H2/三protonbase-在该跨境电商多条业务线的应用/H3/c-端数仓场景-5-天降低至-10-分钟数据分析流程提速显著#3",
+    "b440a0554aa58f3eae0d94dcae0c5c6d::3aa5f4dad11915ee::/H1/问题#1",
+    "46e600a81c96fdfe185251e126de3523::5ff9a5d4ead9dda7::/H1/claudemd/H2/repository-overview#1"
+   ]
+  },
+  "dense": {
+   "latency_ms": 6.6,
+   "top1_sim": 0.6673,
+   "hit": {
+    "1": 0,
+    "3": 0,
+    "5": 0,
+    "8": 0,
+    "10": 0
+   },
+   "rr": 0.0909,
+   "ndcg8": 0.0,
+   "ev_cov_raw": 0.0
+  },
+  "bm25": {
+   "latency_ms": 20.9,
+   "top1_score": 17.817,
+   "hit": {
+    "1": 0,
+    "3": 0,
+    "5": 0,
+    "8": 0,
+    "10": 0
+   },
+   "rr": 0.0,
+   "ndcg8": 0.0,
+   "ev_cov_raw": 0.0
+  },
+  "ablation": {
+   "0.60": {
+    "n_out": 4,
+    "hit5": 0,
+    "ev_cov_ctx": 0.0
+   }
+  }
+ },
+ {
+  "id": "C41",
+  "cat": "numeric",
+  "diff": "medium",
+  "query": "购物车分表分了多少张表，用的是什么哈希算法？",
+  "gold": [
+   "46e600a81c96fdfe185251e126de3523::5ff9a5d4ead9dda7::/H1/claudemd/H2/working-with-this-repository/H3/key-documentation-areas#1"
+  ],
+  "n_gold": 1,
+  "hybrid": {
+   "n_out": 8,
+   "latency_ms": 119.4,
+   "top1_sim": 0.7126,
+   "hit": {
+    "1": 0,
+    "3": 0,
+    "5": 0,
+    "8": 0,
+    "10": 0
+   },
+   "recall": {
+    "1": 0.0,
+    "3": 0.0,
+    "5": 0.0,
+    "8": 0.0,
+    "10": 0.0
+   },
+   "rr": 0.0,
+   "ndcg8": 0.0,
+   "ev_cov_raw": 0.5,
+   "ev_cov_ctx": 0.5,
+   "pollution": 1.0,
+   "dup": 0.0,
+   "top_files": [
+    "购物车分表.md",
+    "购物车分表分享V2.md",
+    "购物车分表方案落地.md",
+    "购物车分表分享V2.md",
+    "购物车分表.md",
+    "购物车分表分享V2.md",
+    "购物车分表.md",
+    "购物车分表分享V2.md"
+   ],
+   "top_block_ids": [
+    "79223e28f76d7db96d225f434db5c7ea::c511fdebd8bc705b::/H2/方案对比#1",
+    "9aac6c65c0803e36702b8df7faad4020::415a638579316634::/H3/技术选型#1",
+    "ab637aea831a5dea8b530f6fb810a6f9::935f5978d055cef6::/H2/三方案-细节/H3/31-方案#1",
+    "9aac6c65c0803e36702b8df7faad4020::415a638579316634::/H3/背景介绍#1",
+    "79223e28f76d7db96d225f434db5c7ea::c511fdebd8bc705b::/H2/开发设计/H3/section#1",
+    "9aac6c65c0803e36702b8df7faad4020::415a638579316634::/H3/参考资料#1",
+    "79223e28f76d7db96d225f434db5c7ea::c511fdebd8bc705b::/H2/购物车数据统计#5",
+    "9aac6c65c0803e36702b8df7faad4020::415a638579316634::/H3/方案#1"
+   ]
+  },
+  "dense": {
+   "latency_ms": 6.2,
+   "top1_sim": 0.7744,
+   "hit": {
+    "1": 0,
+    "3": 0,
+    "5": 0,
+    "8": 0,
+    "10": 0
+   },
+   "rr": 0.0,
+   "ndcg8": 0.0,
+   "ev_cov_raw": 0.5
+  },
+  "bm25": {
+   "latency_ms": 20.8,
+   "top1_score": 44.738,
+   "hit": {
+    "1": 0,
+    "3": 0,
+    "5": 0,
+    "8": 0,
+    "10": 0
+   },
+   "rr": 0.0,
+   "ndcg8": 0.0,
+   "ev_cov_raw": 0.5
+  },
+  "ablation": {
+   "0.60": {
+    "n_out": 8,
+    "hit5": 0,
+    "ev_cov_ctx": 0.5
+   }
+  }
+ },
+ {
+  "id": "C42",
+  "cat": "semantic",
+  "diff": "medium",
+  "query": "WMS 后段入库拆分二期独立部署上线时，是怎么控制上线风险的？",
+  "gold": [
+   "a280078131a55bc79236cbc89de542d5::ee72485a6e857ffa::/H1/二期开发独立部署/H2/怎么保证上线没问题有问题要如何处理#1"
+  ],
+  "n_gold": 1,
+  "hybrid": {
+   "n_out": 8,
+   "latency_ms": 179.5,
+   "top1_sim": 0.7766,
+   "hit": {
+    "1": 0,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "recall": {
+    "1": 0.0,
+    "3": 1.0,
+    "5": 1.0,
+    "8": 1.0,
+    "10": 1.0
+   },
+   "rr": 0.3333,
+   "ndcg8": 0.5,
+   "ev_cov_raw": 1.0,
+   "ev_cov_ctx": 1.0,
+   "pollution": 0.0,
+   "dup": 0.0,
+   "top_files": [
+    "WMS_后段入库拆分复盘.md",
+    "WMS_后段入库拆分复盘.md",
+    "WMS_后段入库拆分复盘.md",
+    "WMS_后段入库拆分复盘.md",
+    "WMS_后段入库拆分复盘.md",
+    "WMS_后段入库拆分复盘.md",
+    "WMS_后段入库拆分复盘.md",
+    "WMS_后段入库拆分复盘.md"
+   ],
+   "top_block_ids": [
+    "a280078131a55bc79236cbc89de542d5::ee72485a6e857ffa::/H1/二期规划独立部署/H2/最终落地#1",
+    "a280078131a55bc79236cbc89de542d5::ee72485a6e857ffa::/H1/二期开发独立部署/H2/怎么做呢-1#1",
+    "a280078131a55bc79236cbc89de542d5::ee72485a6e857ffa::/H1/二期开发独立部署/H2/怎么保证上线没问题有问题要如何处理#1",
+    "a280078131a55bc79236cbc89de542d5::ee72485a6e857ffa::/H1/二期规划独立部署/H2/初步尝试#1",
+    "a280078131a55bc79236cbc89de542d5::ee72485a6e857ffa::/H1/二期规划独立部署/H2/二次讨论#1",
+    "a280078131a55bc79236cbc89de542d5::ee72485a6e857ffa::/H1/涉及文档#1",
+    "a280078131a55bc79236cbc89de542d5::ee72485a6e857ffa::/H1/二期开发独立部署/H2/数量有多少-1#1",
+    "a280078131a55bc79236cbc89de542d5::ee72485a6e857ffa::/H1/总体规划/H2/初步目标wms多仓部署#1"
+   ]
+  },
+  "dense": {
+   "latency_ms": 7.3,
+   "top1_sim": 0.8222,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0
+  },
+  "bm25": {
+   "latency_ms": 24.1,
+   "top1_score": 71.073,
+   "hit": {
+    "1": 0,
+    "3": 0,
+    "5": 0,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 0.1667,
+   "ndcg8": 0.356,
+   "ev_cov_raw": 1.0
+  },
+  "ablation": {
+   "0.60": {
+    "n_out": 8,
+    "hit5": 1,
+    "ev_cov_ctx": 1.0
+   }
+  }
+ },
+ {
+  "id": "C43",
+  "cat": "definition",
+  "diff": "medium",
+  "query": "影响力这本书里讲的拒绝后撤策略是什么？",
+  "gold": [
+   "adef6b49d78ac49f3c9c1837d8f8cac4::8bd825c28239d9ca::/H1/互惠#1-s1"
+  ],
+  "n_gold": 1,
+  "hybrid": {
+   "n_out": 1,
+   "latency_ms": 92.5,
+   "top1_sim": 0.6552,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "recall": {
+    "1": 1.0,
+    "3": 1.0,
+    "5": 1.0,
+    "8": 1.0,
+    "10": 1.0
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0,
+   "ev_cov_ctx": 1.0,
+   "pollution": 0.0,
+   "dup": 0.0,
+   "top_files": [
+    "《影响力》.md"
+   ],
+   "top_block_ids": [
+    "adef6b49d78ac49f3c9c1837d8f8cac4::8bd825c28239d9ca::/H1/互惠#1-s1"
+   ]
+  },
+  "dense": {
+   "latency_ms": 7.4,
+   "top1_sim": 0.6552,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0
+  },
+  "bm25": {
+   "latency_ms": 21.6,
+   "top1_score": 41.971,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0
+  },
+  "ablation": {
+   "0.60": {
+    "n_out": 1,
+    "hit5": 1,
+    "ev_cov_ctx": 1.0
+   }
+  }
+ },
+ {
+  "id": "C44",
+  "cat": "semantic",
+  "diff": "hard",
+  "query": "影响力里提到的认知吝啬、锚定效应，还列举了哪些思维惯式？",
+  "gold": [
+   "adef6b49d78ac49f3c9c1837d8f8cac4::8bd825c28239d9ca::/H1/影响力的武器#1"
+  ],
+  "n_gold": 1,
+  "hybrid": {
+   "n_out": 1,
+   "latency_ms": 80.1,
+   "top1_sim": 0.6496,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "recall": {
+    "1": 1.0,
+    "3": 1.0,
+    "5": 1.0,
+    "8": 1.0,
+    "10": 1.0
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0,
+   "ev_cov_ctx": 1.0,
+   "pollution": 0.0,
+   "dup": 0.0,
+   "top_files": [
+    "《影响力》.md"
+   ],
+   "top_block_ids": [
+    "adef6b49d78ac49f3c9c1837d8f8cac4::8bd825c28239d9ca::/H1/影响力的武器#1"
+   ]
+  },
+  "dense": {
+   "latency_ms": 5.4,
+   "top1_sim": 0.6496,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0
+  },
+  "bm25": {
+   "latency_ms": 22.0,
+   "top1_score": 61.566,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0
+  },
+  "ablation": {
+   "0.60": {
+    "n_out": 1,
+    "hit5": 1,
+    "ev_cov_ctx": 1.0
+   }
+  }
+ },
+ {
+  "id": "C45",
+  "cat": "numeric",
+  "diff": "easy",
+  "query": "针对新加坡爬虫调小接口阈值后，ctr 和 session 分别降到多少？",
+  "gold": [
+   "8b71e4317a56e751892b589fa20abf27::bcb684859d86baff::/H2/2024-04-18/H3/新加坡爬虫#1"
+  ],
+  "n_gold": 1,
+  "hybrid": {
+   "n_out": 8,
+   "latency_ms": 120.9,
+   "top1_sim": 0.7411,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "recall": {
+    "1": 1.0,
+    "3": 1.0,
+    "5": 1.0,
+    "8": 1.0,
+    "10": 1.0
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0,
+   "ev_cov_ctx": 1.0,
+   "pollution": 0.0,
+   "dup": 0.0,
+   "top_files": [
+    "行为风控数据分析.md",
+    "行为风控数据分析.md",
+    "行为风控数据分析.md",
+    "行为风控数据分析.md",
+    "行为风控数据分析.md",
+    "行为风控数据分析.md",
+    "行为风控数据分析.md",
+    "行为风控数据分析.md"
+   ],
+   "top_block_ids": [
+    "8b71e4317a56e751892b589fa20abf27::bcb684859d86baff::/H2/2024-04-18/H3/新加坡爬虫#1",
+    "8b71e4317a56e751892b589fa20abf27::bcb684859d86baff::/H2/2024-04-11#1",
+    "8b71e4317a56e751892b589fa20abf27::bcb684859d86baff::/H2/2024-04-18/H3/新加坡爬虫#3",
+    "8b71e4317a56e751892b589fa20abf27::bcb684859d86baff::/H2/2024-04-11#12",
+    "8b71e4317a56e751892b589fa20abf27::bcb684859d86baff::/H2/m站接入人机识别v2相关数据#2",
+    "8b71e4317a56e751892b589fa20abf27::bcb684859d86baff::/H2/m站接入人机识别v2相关数据#3",
+    "8b71e4317a56e751892b589fa20abf27::bcb684859d86baff::/H2/2024-03-11#1",
+    "8b71e4317a56e751892b589fa20abf27::bcb684859d86baff::/H2/2024-04-18/H3/误封率#1"
+   ]
+  },
+  "dense": {
+   "latency_ms": 8.2,
+   "top1_sim": 0.8047,
+   "hit": {
+    "1": 0,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 0.5,
+   "ndcg8": 0.631,
+   "ev_cov_raw": 1.0
+  },
+  "bm25": {
+   "latency_ms": 26.7,
+   "top1_score": 80.886,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0
+  },
+  "ablation": {
+   "0.60": {
+    "n_out": 8,
+    "hit5": 1,
+    "ev_cov_ctx": 1.0
+   }
+  }
+ },
+ {
+  "id": "C46",
+  "cat": "identifier",
+  "diff": "easy",
+  "query": "人机识别 v3 给出风险分 0.7 但没有被拉黑的用户，用的是什么机型？",
+  "gold": [
+   "8b71e4317a56e751892b589fa20abf27::bcb684859d86baff::/H2/2024-02-06-分析的app接入v3后的数据/H5/没拉黑的v3给出的风险分高于05的#1"
+  ],
+  "n_gold": 1,
+  "hybrid": {
+   "n_out": 8,
+   "latency_ms": 98.9,
+   "top1_sim": 0.7662,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "recall": {
+    "1": 1.0,
+    "3": 1.0,
+    "5": 1.0,
+    "8": 1.0,
+    "10": 1.0
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0,
+   "ev_cov_ctx": 1.0,
+   "pollution": 0.0,
+   "dup": 0.0,
+   "top_files": [
+    "行为风控数据分析.md",
+    "行为风控数据分析.md",
+    "行为风控数据分析.md",
+    "行为风控数据分析.md",
+    "行为风控数据分析.md",
+    "行为风控数据分析.md",
+    "行为风控数据分析.md",
+    "行为风控数据分析.md"
+   ],
+   "top_block_ids": [
+    "8b71e4317a56e751892b589fa20abf27::bcb684859d86baff::/H2/2024-02-06-分析的app接入v3后的数据/H5/没拉黑的v3给出的风险分高于05的#1",
+    "8b71e4317a56e751892b589fa20abf27::bcb684859d86baff::/H2/2024-02-06-分析的app接入v3后的数据/H5/被拉黑的v3给出的为高风险的总共是下面这两个#1",
+    "8b71e4317a56e751892b589fa20abf27::bcb684859d86baff::/H2/2024-02-04分析2月03日拦截30多万次请求的情况#3",
+    "8b71e4317a56e751892b589fa20abf27::bcb684859d86baff::/H2/2024-02-06-分析的app接入v3后的数据/H5/没拉黑的v3给出的风险分高于05的#3",
+    "8b71e4317a56e751892b589fa20abf27::bcb684859d86baff::/H2/2024-03-11#3",
+    "8b71e4317a56e751892b589fa20abf27::bcb684859d86baff::/H2/2024-03-18/H3/v3#4",
+    "8b71e4317a56e751892b589fa20abf27::bcb684859d86baff::/H2/2024-03-07/H4/对人机识别v2期间-频繁弹出v2复选框-的用户进行永久拉黑#1",
+    "8b71e4317a56e751892b589fa20abf27::bcb684859d86baff::/H2/2024-03-30#1"
+   ]
+  },
+  "dense": {
+   "latency_ms": 6.4,
+   "top1_sim": 0.7662,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0
+  },
+  "bm25": {
+   "latency_ms": 26.7,
+   "top1_score": 87.555,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0
+  },
+  "ablation": {
+   "0.60": {
+    "n_out": 8,
+    "hit5": 1,
+    "ev_cov_ctx": 1.0
+   }
+  }
+ },
+ {
+  "id": "C47",
+  "cat": "semantic",
+  "diff": "medium",
+  "query": "客服 Agent 的会话工作空间隔离是怎么实现的？",
+  "gold": [
+   "e7f69069f2088d55e9743578188128dd::a9666910dc6b1ac5::/H3/2-安全性工具安全性数据安全性数据隔离/H4/数据隔离#1"
+  ],
+  "n_gold": 1,
+  "hybrid": {
+   "n_out": 8,
+   "latency_ms": 148.7,
+   "top1_sim": 0.7851,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "recall": {
+    "1": 1.0,
+    "3": 1.0,
+    "5": 1.0,
+    "8": 1.0,
+    "10": 1.0
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0,
+   "ev_cov_ctx": 1.0,
+   "pollution": 0.125,
+   "dup": 0.0,
+   "top_files": [
+    "客服 Agent 构建.md",
+    "LiveChat架构及介绍.md",
+    "客服 Agent 构建.md",
+    "客服 Agent 构建.md",
+    "客服 Agent 构建.md",
+    "客服 Agent 构建.md",
+    "客服 Agent 构建.md",
+    "客服 Agent 构建.md"
+   ],
+   "top_block_ids": [
+    "e7f69069f2088d55e9743578188128dd::a9666910dc6b1ac5::/H3/2-安全性工具安全性数据安全性数据隔离/H4/数据隔离#1",
+    "74abaa50b9bf2f36ecf08053d33d966b::b0aed2b49c64e226::/H2/客服服务-客服坐席平台自研mvp-livechat/H3/twilio-的主要功能#4",
+    "e7f69069f2088d55e9743578188128dd::a9666910dc6b1ac5::/H3/2-安全性工具安全性数据安全性数据隔离/H4/数据安全性#1",
+    "e7f69069f2088d55e9743578188128dd::a9666910dc6b1ac5::/H3/2-安全性工具安全性数据安全性数据隔离/H4/数据隔离#3",
+    "e7f69069f2088d55e9743578188128dd::a9666910dc6b1ac5::/H3/2-安全性工具安全性数据安全性数据隔离#1",
+    "e7f69069f2088d55e9743578188128dd::a9666910dc6b1ac5::#1",
+    "e7f69069f2088d55e9743578188128dd::a9666910dc6b1ac5::/H3/2-安全性工具安全性数据安全性数据隔离/H4/工具安全性#1",
+    "e7f69069f2088d55e9743578188128dd::a9666910dc6b1ac5::/H3/2-安全性工具安全性数据安全性数据隔离/H4/数据隔离#2"
+   ]
+  },
+  "dense": {
+   "latency_ms": 7.5,
+   "top1_sim": 0.7851,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0
+  },
+  "bm25": {
+   "latency_ms": 19.9,
+   "top1_score": 63.541,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0
+  },
+  "ablation": {
+   "0.60": {
+    "n_out": 8,
+    "hit5": 1,
+    "ev_cov_ctx": 1.0
+   }
+  }
+ },
+ {
+  "id": "C48",
+  "cat": "semantic",
+  "diff": "medium",
+  "query": "客服 Agent 怎么防止用户查到别人的订单信息？",
+  "gold": [
+   "e7f69069f2088d55e9743578188128dd::a9666910dc6b1ac5::/H3/2-安全性工具安全性数据安全性数据隔离/H4/数据安全性#1"
+  ],
+  "n_gold": 1,
+  "hybrid": {
+   "n_out": 4,
+   "latency_ms": 183.0,
+   "top1_sim": 0.6789,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "recall": {
+    "1": 1.0,
+    "3": 1.0,
+    "5": 1.0,
+    "8": 1.0,
+    "10": 1.0
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0,
+   "ev_cov_ctx": 1.0,
+   "pollution": 0.5,
+   "dup": 0.0,
+   "top_files": [
+    "客服 Agent 构建.md",
+    "LiveChat架构及介绍.md",
+    "客服 Agent 构建.md",
+    "推荐服务重启问题排查.md"
+   ],
+   "top_block_ids": [
+    "e7f69069f2088d55e9743578188128dd::a9666910dc6b1ac5::/H3/2-安全性工具安全性数据安全性数据隔离/H4/数据安全性#1",
+    "74abaa50b9bf2f36ecf08053d33d966b::b0aed2b49c64e226::/H2/客服服务-客服坐席平台自研mvp-livechat/H3/twilio-的主要功能#4",
+    "e7f69069f2088d55e9743578188128dd::a9666910dc6b1ac5::/H3/2-安全性工具安全性数据安全性数据隔离/H4/工具安全性#1",
+    "0cbbb9b0ac26cc6dc2e012f20ac799fb::64ec94f04535cb1b::/H2/jvm-crash#1"
+   ]
+  },
+  "dense": {
+   "latency_ms": 7.3,
+   "top1_sim": 0.6789,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0
+  },
+  "bm25": {
+   "latency_ms": 23.4,
+   "top1_score": 60.82,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0
+  },
+  "ablation": {
+   "0.60": {
+    "n_out": 4,
+    "hit5": 1,
+    "ev_cov_ctx": 1.0
+   }
+  }
+ },
+ {
+  "id": "C49",
+  "cat": "semantic",
+  "diff": "hard",
+  "query": "SKU 上架时间在五年前甚至十年前，首 30 天总销量统计不到该怎么处理？",
+  "gold": [
+   "27bf569ad11edfb9d6aa766c45cf4822::40a63640fbce7e84::/H2/q-我里面有个需求求近七天的平均销量和该-sku-上架-30-天内的总销量-如果这个-sku-上架时间在-5-年前甚至-10-年前是不是统计不到你觉得要怎么处理才好#2-s0"
+  ],
+  "n_gold": 1,
+  "hybrid": {
+   "n_out": 8,
+   "latency_ms": 188.1,
+   "top1_sim": 0.7555,
+   "hit": {
+    "1": 0,
+    "3": 0,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "recall": {
+    "1": 0.0,
+    "3": 0.0,
+    "5": 1.0,
+    "8": 1.0,
+    "10": 1.0
+   },
+   "rr": 0.25,
+   "ndcg8": 0.431,
+   "ev_cov_raw": 1.0,
+   "ev_cov_ctx": 1.0,
+   "pollution": 0.5,
+   "dup": 0.0,
+   "top_files": [
+    "首单加深销量优化——物化视图，和 AI 对线.md",
+    "01-STAR-C端完整版.md",
+    "首单加深销量优化——物化视图，和 AI 对线.md",
+    "首单加深销量优化——物化视图，和 AI 对线.md",
+    "04-面试速记卡.md",
+    "首发加深功能优化复盘.md",
+    "BW-外仓转运.md",
+    "首单加深销量优化——物化视图，和 AI 对线.md"
+   ],
+   "top_block_ids": [
+    "27bf569ad11edfb9d6aa766c45cf4822::40a63640fbce7e84::/H2/q-我里面有个需求求近七天的平均销量和该-sku-上架-30-天内的总销量-如果这个-sku-上架时间在-5-年前甚至-10-年前是不是统计不到你觉得要怎么处理才好#2-s1",
+    "47632fb6b5da4d7c621c101e6fca9f79::ee3b56ff156691fe::/H1/01-star-完整版c端商详页视角/H2/二完整-star-口述版面试直接讲/H3/a-action约25分钟得分区四层#1",
+    "27bf569ad11edfb9d6aa766c45cf4822::40a63640fbce7e84::/H2/q为什么会导致丢单呢为什么写-left-join-就可以呢#1",
+    "27bf569ad11edfb9d6aa766c45cf4822::40a63640fbce7e84::/H2/q-我里面有个需求求近七天的平均销量和该-sku-上架-30-天内的总销量-如果这个-sku-上架时间在-5-年前甚至-10-年前是不是统计不到你觉得要怎么处理才好#2-s0",
+    "eac831f6413e6c06a730cd67278275ee::4e53c8e45c88fe67::/H1/04-面试速记卡考前-10-分钟看/H2/star-骨架#1",
+    "583e276cb4151475023d2c41e3d4ad26::3081c5334ed0e9d5::/H1/一次接口耗时从-30s-到秒开的优化复盘-我做对了什么又踩了什么坑-1/H2/四轮排查层层剥洋葱-1/H3/第四轮和同事的深入讨论-1#1",
+    "ec955957d18ab0f5d6db26f04e22c314::5b5f60009c634b6b::/H1/计划表/H3/转运主计划#6",
+    "27bf569ad11edfb9d6aa766c45cf4822::40a63640fbce7e84::/H2/q-我里面有个需求求近七天的平均销量和该-sku-上架-30-天内的总销量-如果这个-sku-上架时间在-5-年前甚至-10-年前是不是统计不到你觉得要怎么处理才好#1"
+   ]
+  },
+  "dense": {
+   "latency_ms": 6.5,
+   "top1_sim": 0.7555,
+   "hit": {
+    "1": 0,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 0.5,
+   "ndcg8": 0.631,
+   "ev_cov_raw": 1.0
+  },
+  "bm25": {
+   "latency_ms": 28.2,
+   "top1_score": 108.106,
+   "hit": {
+    "1": 0,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 0.5,
+   "ndcg8": 0.631,
+   "ev_cov_raw": 1.0
+  },
+  "ablation": {
+   "0.60": {
+    "n_out": 8,
+    "hit5": 1,
+    "ev_cov_ctx": 1.0
+   }
+  }
+ },
+ {
+  "id": "C50",
+  "cat": "semantic",
+  "diff": "hard",
+  "query": "物化视图跑出来的结果和原 SQL 有细微数据差异，可能是什么原因？",
+  "gold": [
+   "27bf569ad11edfb9d6aa766c45cf4822::40a63640fbce7e84::/H2/q-为什么使用物化视图和我之前的-sql-跑出来的-sql-有一点点不一样呢细微的数据误差按理来说我每天更新一次而得出来的数据是天纬度的应该和原来的数据保持一致吧为什么会造成这种现象呢#2"
+  ],
+  "n_gold": 1,
+  "hybrid": {
+   "n_out": 8,
+   "latency_ms": 136.5,
+   "top1_sim": 0.7954,
+   "hit": {
+    "1": 0,
+    "3": 0,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "recall": {
+    "1": 0.0,
+    "3": 0.0,
+    "5": 1.0,
+    "8": 1.0,
+    "10": 1.0
+   },
+   "rr": 0.25,
+   "ndcg8": 0.431,
+   "ev_cov_raw": 1.0,
+   "ev_cov_ctx": 1.0,
+   "pollution": 0.5,
+   "dup": 0.0,
+   "top_files": [
+    "首单加深销量优化——物化视图，和 AI 对线.md",
+    "01-STAR-C端完整版.md",
+    "首单加深销量优化——物化视图，和 AI 对线.md",
+    "首单加深销量优化——物化视图，和 AI 对线.md",
+    "首发加深功能优化复盘.md",
+    "首单加深物化视图优化.md",
+    "首发加深功能优化复盘.md",
+    "首单加深销量优化——物化视图，和 AI 对线.md"
+   ],
+   "top_block_ids": [
+    "27bf569ad11edfb9d6aa766c45cf4822::40a63640fbce7e84::/H2/q-为什么使用物化视图和我之前的-sql-跑出来的-sql-有一点点不一样呢细微的数据误差按理来说我每天更新一次而得出来的数据是天纬度的应该和原来的数据保持一致吧为什么会造成这种现象呢#1",
+    "47632fb6b5da4d7c621c101e6fca9f79::ee3b56ff156691fe::/H1/01-star-完整版c端商详页视角/H2/二完整-star-口述版面试直接讲/H3/a-action约25分钟得分区四层#1",
+    "27bf569ad11edfb9d6aa766c45cf4822::40a63640fbce7e84::/H2/q为什么会导致丢单呢为什么写-left-join-就可以呢#1",
+    "27bf569ad11edfb9d6aa766c45cf4822::40a63640fbce7e84::/H2/q-为什么使用物化视图和我之前的-sql-跑出来的-sql-有一点点不一样呢细微的数据误差按理来说我每天更新一次而得出来的数据是天纬度的应该和原来的数据保持一致吧为什么会造成这种现象呢#2",
+    "583e276cb4151475023d2c41e3d4ad26::3081c5334ed0e9d5::/H1/一次接口耗时从-30s-到秒开的优化复盘-我做对了什么又踩了什么坑-1/H2/四轮排查层层剥洋葱-1/H3/第三轮数据对不上-灵异事件的真相-1#1",
+    "4352c3223932eb16e583d6b3312da025::ed80bab6aff4d35e::/H2/心酸的过程#1",
+    "583e276cb4151475023d2c41e3d4ad26::3081c5334ed0e9d5::/H1/一次接口耗时从-30s-到秒开的优化复盘-我做对了什么又踩了什么坑-1/H2/四轮排查层层剥洋葱-1/H3/第四轮和同事的深入讨论-1#1",
+    "27bf569ad11edfb9d6aa766c45cf4822::40a63640fbce7e84::/H2/q有些数据差别特别大差-7-天或者-30-天物化视图的数据某些大了也有一下小了这是为什么#2"
+   ]
+  },
+  "dense": {
+   "latency_ms": 8.2,
+   "top1_sim": 0.7954,
+   "hit": {
+    "1": 0,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 0.5,
+   "ndcg8": 0.631,
+   "ev_cov_raw": 1.0
+  },
+  "bm25": {
+   "latency_ms": 35.2,
+   "top1_score": 58.095,
+   "hit": {
+    "1": 0,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 0.5,
+   "ndcg8": 0.631,
+   "ev_cov_raw": 1.0
+  },
+  "ablation": {
+   "0.60": {
+    "n_out": 8,
+    "hit5": 1,
+    "ev_cov_ctx": 1.0
+   }
+  }
+ },
+ {
+  "id": "C51",
+  "cat": "identifier",
+  "diff": "easy",
+  "query": "Windows 上配置 claude 使用国产大模型，请求地址和主模型要填什么？",
+  "gold": [
+   "6bbea58decb1c3f7136adddc08c26cf6::4ed53149adfa2d6b::/H1/4-skill-加载使用案例-2#1"
+  ],
+  "n_gold": 1,
+  "hybrid": {
+   "n_out": 8,
+   "latency_ms": 112.1,
+   "top1_sim": 0.5599,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "recall": {
+    "1": 1.0,
+    "3": 1.0,
+    "5": 1.0,
+    "8": 1.0,
+    "10": 1.0
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0,
+   "ev_cov_ctx": 1.0,
+   "pollution": 0.0,
+   "dup": 0.0,
+   "top_files": [
+    "电脑端使用指南.md",
+    "电脑端使用指南.md",
+    "电脑端使用指南.md",
+    "电脑端使用指南.md",
+    "电脑端使用指南.md",
+    "电脑端使用指南.md",
+    "电脑端使用指南.md",
+    "电脑端使用指南.md"
+   ],
+   "top_block_ids": [
+    "6bbea58decb1c3f7136adddc08c26cf6::4ed53149adfa2d6b::/H1/4-skill-加载使用案例-2#1",
+    "6bbea58decb1c3f7136adddc08c26cf6::4ed53149adfa2d6b::/H1/4-skill-加载使用案例-2#6",
+    "6bbea58decb1c3f7136adddc08c26cf6::4ed53149adfa2d6b::/H1/4-skill-加载使用案例-2#13",
+    "6bbea58decb1c3f7136adddc08c26cf6::4ed53149adfa2d6b::/H1/1-前期准备工作#1",
+    "6bbea58decb1c3f7136adddc08c26cf6::4ed53149adfa2d6b::/H1/2-准备一个账号#1",
+    "6bbea58decb1c3f7136adddc08c26cf6::4ed53149adfa2d6b::/H1/3-语料包使用使用案例-1#1",
+    "6bbea58decb1c3f7136adddc08c26cf6::4ed53149adfa2d6b::/H1/5-其他工具配合使用可选#1",
+    "6bbea58decb1c3f7136adddc08c26cf6::4ed53149adfa2d6b::/H1/4-skill-加载使用案例-2#7"
+   ]
+  },
+  "dense": {
+   "latency_ms": 7.2,
+   "top1_sim": 0.7583,
+   "hit": {
+    "1": 0,
+    "3": 0,
+    "5": 0,
+    "8": 0,
+    "10": 0
+   },
+   "rr": 0.0667,
+   "ndcg8": 0.0,
+   "ev_cov_raw": 1.0
+  },
+  "bm25": {
+   "latency_ms": 32.0,
+   "top1_score": 47.323,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0
+  },
+  "ablation": {
+   "0.60": {
+    "n_out": 8,
+    "hit5": 1,
+    "ev_cov_ctx": 1.0
+   }
+  }
+ },
+ {
+  "id": "C52",
+  "cat": "semantic",
+  "diff": "medium",
+  "query": "电商为什么要用坑位归因，而不是靠单因素 AB 测试来评估改版效果？",
+  "gold": [
+   "dfd90a2ac83d75acc3a861fffd22bff4::f76143005814aa45::/H2/一电商归因目的#1"
+  ],
+  "n_gold": 1,
+  "hybrid": {
+   "n_out": 8,
+   "latency_ms": 133.4,
+   "top1_sim": 0.7472,
+   "hit": {
+    "1": 0,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "recall": {
+    "1": 0.0,
+    "3": 1.0,
+    "5": 1.0,
+    "8": 1.0,
+    "10": 1.0
+   },
+   "rr": 0.5,
+   "ndcg8": 0.631,
+   "ev_cov_raw": 1.0,
+   "ev_cov_ctx": 1.0,
+   "pollution": 0.75,
+   "dup": 0.0,
+   "top_files": [
+    "电商中的归因体系.md",
+    "电商归因模型技术方案.md",
+    "关于埋点自己的理解.md",
+    "电商中的归因体系.md",
+    "电商中的归因体系.md",
+    "电商归因模型技术方案.md",
+    "八股文错题.md",
+    "电商中的归因体系.md"
+   ],
+   "top_block_ids": [
+    "8f44053d3209213ecf3bd2d5f84e4bef::e8cebd26285f1879::/H1/一电商归因目的#1",
+    "dfd90a2ac83d75acc3a861fffd22bff4::f76143005814aa45::/H2/一电商归因目的#1",
+    "6587b16c4258bff5c7dcacaacd5361a5::fdf5bbd1df8091c1::#1",
+    "8f44053d3209213ecf3bd2d5f84e4bef::e8cebd26285f1879::/H1/四总结#1",
+    "8f44053d3209213ecf3bd2d5f84e4bef::e8cebd26285f1879::/H1/三电商归因实现方案#1",
+    "dfd90a2ac83d75acc3a861fffd22bff4::f76143005814aa45::/H2/三电商归因实现方案#1",
+    "ad395f85b10681ee8303fd5298d1b6cb::9d48f1122665a31a::/H1/面经/H2/有赞一面#1",
+    "8f44053d3209213ecf3bd2d5f84e4bef::e8cebd26285f1879::/H1/二归因类型简介#1"
+   ]
+  },
+  "dense": {
+   "latency_ms": 8.5,
+   "top1_sim": 0.7472,
+   "hit": {
+    "1": 0,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 0.5,
+   "ndcg8": 0.631,
+   "ev_cov_raw": 1.0
+  },
+  "bm25": {
+   "latency_ms": 31.0,
+   "top1_score": 70.902,
+   "hit": {
+    "1": 0,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 0.5,
+   "ndcg8": 0.631,
+   "ev_cov_raw": 1.0
+  },
+  "ablation": {
+   "0.60": {
+    "n_out": 8,
+    "hit5": 1,
+    "ev_cov_ctx": 1.0
+   }
+  }
+ },
+ {
+  "id": "C53",
+  "cat": "semantic",
+  "diff": "hard",
+  "query": "只根据坑位归因的转化价值来评判坑位会有什么问题？",
+  "gold": [
+   "8f44053d3209213ecf3bd2d5f84e4bef::e8cebd26285f1879::/H1/四总结#1"
+  ],
+  "n_gold": 1,
+  "hybrid": {
+   "n_out": 7,
+   "latency_ms": 125.3,
+   "top1_sim": 0.6075,
+   "hit": {
+    "1": 0,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "recall": {
+    "1": 0.0,
+    "3": 1.0,
+    "5": 1.0,
+    "8": 1.0,
+    "10": 1.0
+   },
+   "rr": 0.3333,
+   "ndcg8": 0.5,
+   "ev_cov_raw": 1.0,
+   "ev_cov_ctx": 1.0,
+   "pollution": 0.429,
+   "dup": 0.0,
+   "top_files": [
+    "电商中的归因体系.md",
+    "电商归因模型技术方案.md",
+    "电商中的归因体系.md",
+    "电商归因模型技术方案.md",
+    "电商中的归因体系.md",
+    "电商归因模型技术方案.md",
+    "电商中的归因体系.md"
+   ],
+   "top_block_ids": [
+    "8f44053d3209213ecf3bd2d5f84e4bef::e8cebd26285f1879::/H1/一电商归因目的#1",
+    "dfd90a2ac83d75acc3a861fffd22bff4::f76143005814aa45::/H2/一电商归因目的#1",
+    "8f44053d3209213ecf3bd2d5f84e4bef::e8cebd26285f1879::/H1/四总结#1",
+    "dfd90a2ac83d75acc3a861fffd22bff4::f76143005814aa45::/H2/二归因类型简介#1",
+    "8f44053d3209213ecf3bd2d5f84e4bef::e8cebd26285f1879::/H1/二归因类型简介#1",
+    "dfd90a2ac83d75acc3a861fffd22bff4::f76143005814aa45::/H2/三电商归因实现方案#1",
+    "8f44053d3209213ecf3bd2d5f84e4bef::e8cebd26285f1879::/H1/三电商归因实现方案#1"
+   ]
+  },
+  "dense": {
+   "latency_ms": 8.8,
+   "top1_sim": 0.635,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 1.0,
+   "ndcg8": 1.5,
+   "ev_cov_raw": 1.0
+  },
+  "bm25": {
+   "latency_ms": 27.3,
+   "top1_score": 75.356,
+   "hit": {
+    "1": 0,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 0.3333,
+   "ndcg8": 0.5,
+   "ev_cov_raw": 1.0
+  },
+  "ablation": {
+   "0.60": {
+    "n_out": 7,
+    "hit5": 1,
+    "ev_cov_ctx": 1.0
+   }
+  }
+ },
+ {
+  "id": "C54",
+  "cat": "identifier",
+  "diff": "easy",
+  "query": "PageHelper 为什么会带来数据安全问题，怎么避免？",
+  "gold": [
+   "218be1560b4a322b3a2f206761da0ba0::eb2c481d414608ab::/H2/分页#1"
+  ],
+  "n_gold": 1,
+  "hybrid": {
+   "n_out": 8,
+   "latency_ms": 181.1,
+   "top1_sim": 0.6817,
+   "hit": {
+    "1": 0,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "recall": {
+    "1": 0.0,
+    "3": 1.0,
+    "5": 1.0,
+    "8": 1.0,
+    "10": 1.0
+   },
+   "rr": 0.5,
+   "ndcg8": 0.631,
+   "ev_cov_raw": 1.0,
+   "ev_cov_ctx": 1.0,
+   "pollution": 0.875,
+   "dup": 0.0,
+   "top_files": [
+    "PageHelper与缓存ThreadLocal污染问题排查记录.md",
+    "RuoYi-Cloud.md",
+    "PageHelper与缓存ThreadLocal污染问题排查记录.md",
+    "PageHelper与缓存ThreadLocal污染问题排查记录.md",
+    "PageHelper与缓存ThreadLocal污染问题排查记录.md",
+    "PageHelper与缓存ThreadLocal污染问题排查记录.md",
+    "PageHelper与缓存ThreadLocal污染问题排查记录.md",
+    "PageHelper与缓存ThreadLocal污染问题排查记录.md"
+   ],
+   "top_block_ids": [
+    "e3082db2f787d2bcfc98f94321306100::45fd4578293c999d::/H2/4-解决方案/H3/42-为什么不手动清理pagehelper#3",
+    "218be1560b4a322b3a2f206761da0ba0::eb2c481d414608ab::/H2/分页#1",
+    "e3082db2f787d2bcfc98f94321306100::45fd4578293c999d::/H2/1-问题现象/H3/12-sql语句/H4/核心问题#3",
+    "e3082db2f787d2bcfc98f94321306100::45fd4578293c999d::/H2/4-解决方案/H3/42-为什么不手动清理pagehelper#1",
+    "e3082db2f787d2bcfc98f94321306100::45fd4578293c999d::/H2/1-问题现象/H3/12-sql语句#3",
+    "e3082db2f787d2bcfc98f94321306100::45fd4578293c999d::/H2/4-解决方案/H3/41-为什么不能简单删除-limit-200#1",
+    "e3082db2f787d2bcfc98f94321306100::45fd4578293c999d::/H2/1-问题现象/H3/12-sql语句/H4/核心问题#1",
+    "e3082db2f787d2bcfc98f94321306100::45fd4578293c999d::/H2/4-解决方案/H3/42-为什么不手动清理pagehelper#2"
+   ]
+  },
+  "dense": {
+   "latency_ms": 7.0,
+   "top1_sim": 0.7567,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0
+  },
+  "bm25": {
+   "latency_ms": 26.8,
+   "top1_score": 30.976,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0
+  },
+  "ablation": {
+   "0.60": {
+    "n_out": 8,
+    "hit5": 1,
+    "ev_cov_ctx": 1.0
+   }
+  }
+ },
+ {
+  "id": "C55",
+  "cat": "fact_lookup",
+  "diff": "easy",
+  "query": "K8S 路由异常导致商品服务 503 的最终根因是什么？",
+  "gold": [
+   "49a734a6697c4f1b60fe29787df9f210::d6871eba3f873bce::/H1/时间线#1"
+  ],
+  "n_gold": 1,
+  "hybrid": {
+   "n_out": 8,
+   "latency_ms": 106.0,
+   "top1_sim": 0.7819,
+   "hit": {
+    "1": 0,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "recall": {
+    "1": 0.0,
+    "3": 1.0,
+    "5": 1.0,
+    "8": 1.0,
+    "10": 1.0
+   },
+   "rr": 0.5,
+   "ndcg8": 0.631,
+   "ev_cov_raw": 1.0,
+   "ev_cov_ctx": 1.0,
+   "pollution": 0.0,
+   "dup": 0.0,
+   "top_files": [
+    "2025年05月29日，K8S路由异常导致商品服务无法访问.md",
+    "2025年05月29日，K8S路由异常导致商品服务无法访问.md",
+    "2025年05月29日，K8S路由异常导致商品服务无法访问.md",
+    "2025年05月29日，K8S路由异常导致商品服务无法访问.md",
+    "2025年05月29日，K8S路由异常导致商品服务无法访问.md",
+    "2025年05月29日，K8S路由异常导致商品服务无法访问.md",
+    "2025年05月29日，K8S路由异常导致商品服务无法访问.md",
+    "2025年05月29日，K8S路由异常导致商品服务无法访问.md"
+   ],
+   "top_block_ids": [
+    "49a734a6697c4f1b60fe29787df9f210::d6871eba3f873bce::/H1/事故影响#1",
+    "49a734a6697c4f1b60fe29787df9f210::d6871eba3f873bce::/H1/时间线#1",
+    "49a734a6697c4f1b60fe29787df9f210::d6871eba3f873bce::/H1/发生原因#1",
+    "49a734a6697c4f1b60fe29787df9f210::d6871eba3f873bce::/H1/事故复盘/H2/为什么product服务的标签会丢失#1",
+    "49a734a6697c4f1b60fe29787df9f210::d6871eba3f873bce::/H1/事故复盘/H2/未解之谜#1",
+    "49a734a6697c4f1b60fe29787df9f210::d6871eba3f873bce::/H1/事故复盘/H2/为什么灰度路由存在而灰度pod不存在#1",
+    "49a734a6697c4f1b60fe29787df9f210::d6871eba3f873bce::/H1/解决过程#1",
+    "49a734a6697c4f1b60fe29787df9f210::d6871eba3f873bce::/H1/事故复盘#1"
+   ]
+  },
+  "dense": {
+   "latency_ms": 8.3,
+   "top1_sim": 0.7975,
+   "hit": {
+    "1": 0,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 0.5,
+   "ndcg8": 0.631,
+   "ev_cov_raw": 1.0
+  },
+  "bm25": {
+   "latency_ms": 29.3,
+   "top1_score": 67.477,
+   "hit": {
+    "1": 0,
+    "3": 0,
+    "5": 0,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 0.125,
+   "ndcg8": 0.315,
+   "ev_cov_raw": 1.0
+  },
+  "ablation": {
+   "0.60": {
+    "n_out": 8,
+    "hit5": 1,
+    "ev_cov_ctx": 1.0
+   }
+  }
+ },
+ {
+  "id": "C56",
+  "cat": "fact_lookup",
+  "diff": "medium",
+  "query": "星链系统里手动完成节点任务时，后端需要更新哪些字段？",
+  "gold": [
+   "1d926c8792617125890359aab1a5bb70::72600fa369a94512::/H1/模块一星链补充和优化/H2/计划任务全链路监控与提醒/H3/节点任务的手工完成#1"
+  ],
+  "n_gold": 1,
+  "hybrid": {
+   "n_out": 8,
+   "latency_ms": 123.5,
+   "top1_sim": 0.7344,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "recall": {
+    "1": 1.0,
+    "3": 1.0,
+    "5": 1.0,
+    "8": 1.0,
+    "10": 1.0
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0,
+   "ev_cov_ctx": 1.0,
+   "pollution": 0.125,
+   "dup": 0.0,
+   "top_files": [
+    "BTN.md",
+    "BTN.md",
+    "面试背诵环节.md",
+    "BTN.md",
+    "BTN.md",
+    "BTN.md",
+    "BTN.md",
+    "BTN.md"
+   ],
+   "top_block_ids": [
+    "1d926c8792617125890359aab1a5bb70::72600fa369a94512::/H1/模块一星链补充和优化/H2/计划任务全链路监控与提醒/H3/节点任务的手工完成#1",
+    "1d926c8792617125890359aab1a5bb70::72600fa369a94512::/H1/模块一星链补充和优化/H2/计划任务全链路监控与提醒/H3/需求点#1",
+    "7efbaaadf0b0e87d9e1b35065443ff61::4b7281599526b9d7::/H1/自我介绍/H2/section#1",
+    "1d926c8792617125890359aab1a5bb70::72600fa369a94512::/H1/模块一星链补充和优化/H2/计划任务全链路监控与提醒/H3/节点的重置#1",
+    "1d926c8792617125890359aab1a5bb70::72600fa369a94512::/H1/模块四-新品项目管理/H2/需求说明-1#1",
+    "1d926c8792617125890359aab1a5bb70::72600fa369a94512::/H1/模块一星链补充和优化/H2/计划任务全链路监控与提醒/H3/工作流实体节点生成的逻辑#1",
+    "1d926c8792617125890359aab1a5bb70::72600fa369a94512::/H1/模块一星链补充和优化/H2/计划任务全链路监控与提醒/H3/工作流核心对象的设计#1",
+    "1d926c8792617125890359aab1a5bb70::72600fa369a94512::/H1/模块一星链补充和优化/H2/计划任务全链路监控与提醒/H3/任务提醒#1"
+   ]
+  },
+  "dense": {
+   "latency_ms": 8.8,
+   "top1_sim": 0.7344,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0
+  },
+  "bm25": {
+   "latency_ms": 30.1,
+   "top1_score": 53.814,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0
+  },
+  "ablation": {
+   "0.60": {
+    "n_out": 8,
+    "hit5": 1,
+    "ev_cov_ctx": 1.0
+   }
+  }
+ },
+ {
+  "id": "C57",
+  "cat": "semantic",
+  "diff": "medium",
+  "query": "青浦工厂原料排产时，原料和待包品混排的优先级是怎么定的？",
+  "gold": [
+   "1d926c8792617125890359aab1a5bb70::72600fa369a94512::/H1/模块二-工厂日明细计划-以青浦工厂为例/H2/原料排产#1"
+  ],
+  "n_gold": 1,
+  "hybrid": {
+   "n_out": 8,
+   "latency_ms": 174.6,
+   "top1_sim": 0.8076,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "recall": {
+    "1": 1.0,
+    "3": 1.0,
+    "5": 1.0,
+    "8": 1.0,
+    "10": 1.0
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0,
+   "ev_cov_ctx": 1.0,
+   "pollution": 0.0,
+   "dup": 0.0,
+   "top_files": [
+    "BTN.md",
+    "BTN.md",
+    "BTN.md",
+    "BTN.md",
+    "BTN.md",
+    "BTN.md",
+    "BTN.md",
+    "BTN.md"
+   ],
+   "top_block_ids": [
+    "1d926c8792617125890359aab1a5bb70::72600fa369a94512::/H1/模块二-工厂日明细计划-以青浦工厂为例/H2/原料排产#1",
+    "1d926c8792617125890359aab1a5bb70::72600fa369a94512::/H1/模块一星链补充和优化/H2/mrp功能补充叶丹/H3/青浦工厂所需原料的mrp需求计算方案高优先级#1",
+    "1d926c8792617125890359aab1a5bb70::72600fa369a94512::/H1/模块二-工厂日明细计划-以青浦工厂为例/H2/排程优化模块的关键点说明需求#1",
+    "1d926c8792617125890359aab1a5bb70::72600fa369a94512::/H1/模块二-工厂日明细计划-以青浦工厂为例/H2/待包品排产#1",
+    "1d926c8792617125890359aab1a5bb70::72600fa369a94512::/H1/模块二-工厂日明细计划-以青浦工厂为例/H2/调研0307/H3/多版本多阶段的排产整体流程#1",
+    "1d926c8792617125890359aab1a5bb70::72600fa369a94512::/H1/模块一星链补充和优化/H2/mrp功能补充叶丹/H3/青浦工厂所需原料的mrp需求计算方案高优先级#2",
+    "1d926c8792617125890359aab1a5bb70::72600fa369a94512::/H1/模块二-工厂日明细计划-以青浦工厂为例/H2/流程图/H3/为日排产做准备的星链侧的流程#1",
+    "1d926c8792617125890359aab1a5bb70::72600fa369a94512::/H1/模块二-工厂日明细计划-以青浦工厂为例/H2/功能点规划#1"
+   ]
+  },
+  "dense": {
+   "latency_ms": 4.8,
+   "top1_sim": 0.8076,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0
+  },
+  "bm25": {
+   "latency_ms": 21.3,
+   "top1_score": 96.687,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0
+  },
+  "ablation": {
+   "0.60": {
+    "n_out": 8,
+    "hit5": 1,
+    "ev_cov_ctx": 1.0
+   }
+  }
+ },
+ {
+  "id": "C58",
+  "cat": "fact_lookup",
+  "diff": "easy",
+  "query": "黑五期间 Redis reco 集群 0007 分片异常的原因是什么？",
+  "gold": [
+   "41c49b124a6c473497475b00f6f87c18::0267ecfa4c2375ec::/H2/黑五回顾/H3/遇到的问题及优化#1"
+  ],
+  "n_gold": 1,
+  "hybrid": {
+   "n_out": 8,
+   "latency_ms": 111.5,
+   "top1_sim": 0.83,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "recall": {
+    "1": 1.0,
+    "3": 1.0,
+    "5": 1.0,
+    "8": 1.0,
+    "10": 1.0
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0,
+   "ev_cov_ctx": 1.0,
+   "pollution": 0.625,
+   "dup": 0.0,
+   "top_files": [
+    "推荐系统架构 + 黑五.md",
+    "推荐系统架构 + 黑五.md",
+    "2024 年黑五复盘总结.md",
+    "黑五分享.md",
+    "黑五分享.md",
+    "2025黑五遇到的问题.md",
+    "cider-基建2023.md",
+    "推荐系统架构 + 黑五.md"
+   ],
+   "top_block_ids": [
+    "41c49b124a6c473497475b00f6f87c18::0267ecfa4c2375ec::/H2/黑五回顾/H3/遇到的问题及优化#1",
+    "41c49b124a6c473497475b00f6f87c18::0267ecfa4c2375ec::/H2/黑五回顾/H3/结果#1",
+    "f482d81a15a359ea83ddbd3b027068d7::b72eba8d3764a50a::/H1/黑五发版#2",
+    "6d87e36ea6fb762ce91968e730a82013::8bac8a611b5bea40::/H1/23-黑五/H2/web-端#1",
+    "6d87e36ea6fb762ce91968e730a82013::8bac8a611b5bea40::/H1/23-黑五/H2/商品促销缓存热-key-导致-redis-单分片-cpu-居高不下#1",
+    "efad0cd4cf2a799bcdbb688f4f64805b::7074597f4f800b76::/H2/黑五短信腾讯额度超标#1",
+    "6711733679281ee1f12251ae60a3dfb2::2df0e044046b33f0::/H1/2023-11-16/H2/运维建设-吕佳-haon-贾铮-5/H4/降本增效-3#1",
+    "41c49b124a6c473497475b00f6f87c18::0267ecfa4c2375ec::/H2/黑五回顾/H3/准备工作#1"
+   ]
+  },
+  "dense": {
+   "latency_ms": 7.1,
+   "top1_sim": 0.83,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0
+  },
+  "bm25": {
+   "latency_ms": 24.5,
+   "top1_score": 52.022,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0
+  },
+  "ablation": {
+   "0.60": {
+    "n_out": 8,
+    "hit5": 1,
+    "ev_cov_ctx": 1.0
+   }
+  }
+ },
+ {
+  "id": "C59",
+  "cat": "definition",
+  "diff": "medium",
+  "query": "弗洛伊德说的自恋式地选择对象是什么意思？",
+  "gold": [
+   "946ab9573e769cdf36d722ba2196fce8::99f225b4d719b007::/H1/二自恋式地选择对象是什么意思#1"
+  ],
+  "n_gold": 1,
+  "hybrid": {
+   "n_out": 8,
+   "latency_ms": 106.6,
+   "top1_sim": 0.7886,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "recall": {
+    "1": 1.0,
+    "3": 1.0,
+    "5": 1.0,
+    "8": 1.0,
+    "10": 1.0
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0,
+   "ev_cov_ctx": 1.0,
+   "pollution": 0.875,
+   "dup": 0.0,
+   "top_files": [
+    "哀悼.md",
+    "《弗洛伊德与精神分析》.md",
+    "自恋与依附型的爱.md",
+    "《弗洛伊德与精神分析》.md",
+    "《弗洛伊德与精神分析》.md",
+    "弗洛伊德论的性变态的形成机制.md",
+    "弗洛伊德论的性变态的形成机制.md",
+    "《弗洛伊德与精神分析》.md"
+   ],
+   "top_block_ids": [
+    "946ab9573e769cdf36d722ba2196fce8::99f225b4d719b007::/H1/二自恋式地选择对象是什么意思#1",
+    "62d67b82e8bf12c8e960e2962959db19::d4ae5f1e907582d4::/H1/攻击抑郁与妄想/H2/哀悼#1",
+    "3106a8f7e0884884db8a8dd4b81be816::f7315ffd12e2c418::/H1/自恋型对象选择#1",
+    "62d67b82e8bf12c8e960e2962959db19::d4ae5f1e907582d4::/H1/自我超我与本我/H2/自恋#1",
+    "62d67b82e8bf12c8e960e2962959db19::d4ae5f1e907582d4::/H1/自我超我与本我/H2/爱与恨#1",
+    "736cecae4e6cac5b8d379481b16c1a34::1fc54b21bdc30199::/H2/assistant-1#1-s0",
+    "736cecae4e6cac5b8d379481b16c1a34::1fc54b21bdc30199::/H2/书中逻辑/H3/3-夸大到底是什么意思#1",
+    "62d67b82e8bf12c8e960e2962959db19::d4ae5f1e907582d4::/H1/自我超我与本我/H2/攻击本能#1"
+   ]
+  },
+  "dense": {
+   "latency_ms": 6.8,
+   "top1_sim": 0.8029,
+   "hit": {
+    "1": 0,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 0.5,
+   "ndcg8": 0.631,
+   "ev_cov_raw": 1.0
+  },
+  "bm25": {
+   "latency_ms": 23.2,
+   "top1_score": 81.986,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0
+  },
+  "ablation": {
+   "0.60": {
+    "n_out": 8,
+    "hit5": 1,
+    "ev_cov_ctx": 1.0
+   }
+  }
+ },
+ {
+  "id": "C60",
+  "cat": "identifier",
+  "diff": "easy",
+  "query": "chatbot 接入 Livechat 需要调用哪些第三方接口？",
+  "gold": [
+   "aeff60ac569e76f03308f4d513958ca4::3dc51f3cd1639aae::/H1/第三方接口依赖#1"
+  ],
+  "n_gold": 1,
+  "hybrid": {
+   "n_out": 8,
+   "latency_ms": 110.0,
+   "top1_sim": 0.7559,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "recall": {
+    "1": 1.0,
+    "3": 1.0,
+    "5": 1.0,
+    "8": 1.0,
+    "10": 1.0
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0,
+   "ev_cov_ctx": 1.0,
+   "pollution": 0.0,
+   "dup": 0.0,
+   "top_files": [
+    "livechat接入chatbot.md",
+    "livechat接入chatbot.md",
+    "livechat接入chatbot.md",
+    "livechat接入chatbot.md",
+    "livechat接入chatbot.md",
+    "livechat接入chatbot.md",
+    "livechat接入chatbot.md",
+    "livechat接入chatbot.md"
+   ],
+   "top_block_ids": [
+    "aeff60ac569e76f03308f4d513958ca4::3dc51f3cd1639aae::/H1/第三方接口依赖#1",
+    "aeff60ac569e76f03308f4d513958ca4::3dc51f3cd1639aae::/H1/对话效果/H2/update-sizecolor#1",
+    "aeff60ac569e76f03308f4d513958ca4::3dc51f3cd1639aae::/H1/流程交互/H2/chatbot-转出/H3/异常转出#1",
+    "aeff60ac569e76f03308f4d513958ca4::3dc51f3cd1639aae::/H1/客服质检打分#1",
+    "aeff60ac569e76f03308f4d513958ca4::3dc51f3cd1639aae::/H1/流程交互/H2/chatbot-转出/H3/发送图片#1",
+    "aeff60ac569e76f03308f4d513958ca4::3dc51f3cd1639aae::/H1/测试完成结果#1",
+    "aeff60ac569e76f03308f4d513958ca4::3dc51f3cd1639aae::/H1/流程交互/H2/chatbot-正常结束#1",
+    "aeff60ac569e76f03308f4d513958ca4::3dc51f3cd1639aae::/H1/对话效果#1"
+   ]
+  },
+  "dense": {
+   "latency_ms": 5.7,
+   "top1_sim": 0.7559,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0
+  },
+  "bm25": {
+   "latency_ms": 19.7,
+   "top1_score": 41.784,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0
+  },
+  "ablation": {
+   "0.60": {
+    "n_out": 8,
+    "hit5": 1,
+    "ev_cov_ctx": 1.0
+   }
+  }
+ },
+ {
+  "id": "M01",
+  "cat": "multi_hop",
+  "diff": "hard",
+  "query": "OMS 切面偶发失效问题从 5 月 26 日排查到 5 月 29 日拿到堆栈，整个过程是怎样的？",
+  "gold": [
+   "06fcc07cd6b265c98de3bd8224ca45f4::e69da36130707e9b::/H1/再次排查-5月2627日/H2/第二层缓存代码#1",
+   "06fcc07cd6b265c98de3bd8224ca45f4::e69da36130707e9b::/H1/拿到堆栈-5月29日#1"
+  ],
+  "n_gold": 2,
+  "hybrid": {
+   "n_out": 8,
+   "latency_ms": 241.7,
+   "top1_sim": 0.6874,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "recall": {
+    "1": 0.5,
+    "3": 0.5,
+    "5": 1.0,
+    "8": 1.0,
+    "10": 1.0
+   },
+   "rr": 1.0,
+   "ndcg8": 0.85,
+   "ev_cov_raw": 1.0,
+   "ev_cov_ctx": 1.0,
+   "pollution": 0.125,
+   "dup": 0.0,
+   "top_files": [
+    "OMS切面偶发问题排查.md",
+    "OMS切面偶发问题排查.md",
+    "OMS切面偶发问题排查.md",
+    "排查bug的真实案例.md",
+    "OMS切面偶发问题排查.md",
+    "OMS切面偶发问题排查.md",
+    "OMS切面偶发问题排查.md",
+    "OMS切面偶发问题排查.md"
+   ],
+   "top_block_ids": [
+    "06fcc07cd6b265c98de3bd8224ca45f4::e69da36130707e9b::/H1/拿到堆栈-5月29日#1",
+    "06fcc07cd6b265c98de3bd8224ca45f4::e69da36130707e9b::/H1/再次排查-5月2627日#1",
+    "06fcc07cd6b265c98de3bd8224ca45f4::e69da36130707e9b::/H1/首次排查-1月2324日#1",
+    "557c166acb72c17af049566751ac81d9::6e9346fee84827a9::/H1/oms-偶发的对象不存在-25124-林冠鹏-guanpeng-李泽彬-zebin-张子宽#1",
+    "06fcc07cd6b265c98de3bd8224ca45f4::e69da36130707e9b::/H1/再次排查-5月2627日/H2/第二层缓存代码#1",
+    "06fcc07cd6b265c98de3bd8224ca45f4::e69da36130707e9b::/H1/再次排查-5月2627日/H2/第一层缓存代码#1",
+    "06fcc07cd6b265c98de3bd8224ca45f4::e69da36130707e9b::/H1/最后一战/H2/为啥旧版本没问题呢#1",
+    "06fcc07cd6b265c98de3bd8224ca45f4::e69da36130707e9b::/H1/起因#1"
+   ]
+  },
+  "dense": {
+   "latency_ms": 8.3,
+   "top1_sim": 0.6918,
+   "hit": {
+    "1": 0,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 0.5,
+   "ndcg8": 0.605,
+   "ev_cov_raw": 1.0
+  },
+  "bm25": {
+   "latency_ms": 34.5,
+   "top1_score": 61.063,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 1.0,
+   "ndcg8": 0.85,
+   "ev_cov_raw": 1.0
+  },
+  "ablation": {
+   "0.60": {
+    "n_out": 8,
+    "hit5": 1,
+    "ev_cov_ctx": 1.0
+   }
+  }
+ },
+ {
+  "id": "M02",
+  "cat": "multi_hop",
+  "diff": "hard",
+  "query": "电商坑位归因方案的目的是什么，它又有什么局限性？",
+  "gold": [
+   "dfd90a2ac83d75acc3a861fffd22bff4::f76143005814aa45::/H2/一电商归因目的#1",
+   "8f44053d3209213ecf3bd2d5f84e4bef::e8cebd26285f1879::/H1/四总结#1"
+  ],
+  "n_gold": 2,
+  "hybrid": {
+   "n_out": 8,
+   "latency_ms": 144.7,
+   "top1_sim": 0.7662,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "recall": {
+    "1": 0.5,
+    "3": 0.5,
+    "5": 1.0,
+    "8": 1.0,
+    "10": 1.0
+   },
+   "rr": 1.0,
+   "ndcg8": 0.877,
+   "ev_cov_raw": 1.0,
+   "ev_cov_ctx": 1.0,
+   "pollution": 0.25,
+   "dup": 0.0,
+   "top_files": [
+    "电商归因模型技术方案.md",
+    "Recent Conversations.md",
+    "电商中的归因体系.md",
+    "电商中的归因体系.md",
+    "电商中的归因体系.md",
+    "关于曙光埋点.md",
+    "电商归因模型技术方案.md",
+    "电商中的归因体系.md"
+   ],
+   "top_block_ids": [
+    "dfd90a2ac83d75acc3a861fffd22bff4::f76143005814aa45::/H2/一电商归因目的#1",
+    "eecf63ad965f66751ceedfff718d1ed8::27fd7d2e191c89d6::/H2/电商归因模型深度解析#1",
+    "8f44053d3209213ecf3bd2d5f84e4bef::e8cebd26285f1879::/H1/一电商归因目的#1",
+    "8f44053d3209213ecf3bd2d5f84e4bef::e8cebd26285f1879::/H1/四总结#1",
+    "8f44053d3209213ecf3bd2d5f84e4bef::e8cebd26285f1879::/H1/三电商归因实现方案#1",
+    "0a9dfdd03fe3f37de3c155dd5d3e9ae8::303be5675aec0d3a::/H2/上面方案的弊端/H3/坑位类的埋点方案#1",
+    "dfd90a2ac83d75acc3a861fffd22bff4::f76143005814aa45::/H2/二归因类型简介#1",
+    "8f44053d3209213ecf3bd2d5f84e4bef::e8cebd26285f1879::/H1/二归因类型简介#1"
+   ]
+  },
+  "dense": {
+   "latency_ms": 9.4,
+   "top1_sim": 0.7726,
+   "hit": {
+    "1": 0,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 0.5,
+   "ndcg8": 0.957,
+   "ev_cov_raw": 1.0
+  },
+  "bm25": {
+   "latency_ms": 32.9,
+   "top1_score": 40.35,
+   "hit": {
+    "1": 0,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 0.5,
+   "ndcg8": 0.651,
+   "ev_cov_raw": 1.0
+  },
+  "ablation": {
+   "0.60": {
+    "n_out": 8,
+    "hit5": 1,
+    "ev_cov_ctx": 1.0
+   }
+  }
+ },
+ {
+  "id": "M03",
+  "cat": "multi_hop",
+  "diff": "hard",
+  "query": "Cider Android 包体积优化针对资源和处理架构分别采取了什么手段？",
+  "gold": [
+   "b440a0554aa58f3eae0d94dcae0c5c6d::3aa5f4dad11915ee::/H1/优化三步曲/H2/怎么优化资源懒加载混淆采用特殊的发布格式/H3/针对其他资源优化#1",
+   "b440a0554aa58f3eae0d94dcae0c5c6d::3aa5f4dad11915ee::/H1/优化三步曲/H2/怎么优化资源懒加载混淆采用特殊的发布格式/H3/针对处理器架构#1"
+  ],
+  "n_gold": 2,
+  "hybrid": {
+   "n_out": 8,
+   "latency_ms": 158.0,
+   "top1_sim": 0.7752,
+   "hit": {
+    "1": 0,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "recall": {
+    "1": 0.0,
+    "3": 0.5,
+    "5": 0.5,
+    "8": 0.5,
+    "10": 0.5
+   },
+   "rr": 0.3333,
+   "ndcg8": 0.307,
+   "ev_cov_raw": 0.5,
+   "ev_cov_ctx": 0.5,
+   "pollution": 0.0,
+   "dup": 0.0,
+   "top_files": [
+    "Cider Android包（APK）体积优化.md",
+    "Cider Android包（APK）体积优化.md",
+    "Cider Android包（APK）体积优化.md",
+    "Cider Android包（APK）体积优化.md",
+    "Cider Android包（APK）体积优化.md",
+    "Cider Android包（APK）体积优化.md",
+    "Cider Android包（APK）体积优化.md",
+    "Cider Android包（APK）体积优化.md"
+   ],
+   "top_block_ids": [
+    "b440a0554aa58f3eae0d94dcae0c5c6d::3aa5f4dad11915ee::/H1/优化三步曲/H2/优化哪里针对可优化资源/H3/ab架构资源包#1",
+    "b440a0554aa58f3eae0d94dcae0c5c6d::3aa5f4dad11915ee::/H1/优化三步曲/H2/怎么优化资源懒加载混淆采用特殊的发布格式/H3/针对处理器架构/H4/下面一张动图带大家直观的看apk与aab的安装区别#1",
+    "b440a0554aa58f3eae0d94dcae0c5c6d::3aa5f4dad11915ee::/H1/优化三步曲/H2/怎么优化资源懒加载混淆采用特殊的发布格式/H3/针对处理器架构#1",
+    "b440a0554aa58f3eae0d94dcae0c5c6d::3aa5f4dad11915ee::/H1/优化三步曲/H2/优化什么apk体积#1",
+    "b440a0554aa58f3eae0d94dcae0c5c6d::3aa5f4dad11915ee::/H1/优化三步曲/H2/怎么优化资源懒加载混淆采用特殊的发布格式/H3/针对预置基准包#1",
+    "b440a0554aa58f3eae0d94dcae0c5c6d::3aa5f4dad11915ee::/H1/优化三步曲/H2/优化哪里针对可优化资源#1",
+    "b440a0554aa58f3eae0d94dcae0c5c6d::3aa5f4dad11915ee::/H1/优化三步曲/H2/优化哪里针对可优化资源/H3/其他资源优化#1",
+    "b440a0554aa58f3eae0d94dcae0c5c6d::3aa5f4dad11915ee::/H1/问题#1"
+   ]
+  },
+  "dense": {
+   "latency_ms": 7.7,
+   "top1_sim": 0.7895,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 1.0,
+   "ndcg8": 0.818,
+   "ev_cov_raw": 1.0
+  },
+  "bm25": {
+   "latency_ms": 34.4,
+   "top1_score": 44.752,
+   "hit": {
+    "1": 0,
+    "3": 0,
+    "5": 0,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 0.1429,
+   "ndcg8": 0.204,
+   "ev_cov_raw": 0.5
+  },
+  "ablation": {
+   "0.60": {
+    "n_out": 8,
+    "hit5": 1,
+    "ev_cov_ctx": 0.5
+   }
+  }
+ },
+ {
+  "id": "M04",
+  "cat": "multi_hop",
+  "diff": "hard",
+  "query": "土地财政和城投平台分别是怎样把地方政府债务滚起来的？",
+  "gold": [
+   "ac28ad7a30266b221b8b55f4a6683df9::7730471c2f42b874::/H1/政府的账本一场借明天的钱的接力赛/H2/第三节-城投加杠杆债务的放大器#1",
+   "ac28ad7a30266b221b8b55f4a6683df9::7730471c2f42b874::/H1/政府的账本一场借明天的钱的接力赛/H2/第二节-卖地还账土地财政诞生#1-s1"
+  ],
+  "n_gold": 2,
+  "hybrid": {
+   "n_out": 7,
+   "latency_ms": 191.5,
+   "top1_sim": 0.6652,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "recall": {
+    "1": 0.5,
+    "3": 1.0,
+    "5": 1.0,
+    "8": 1.0,
+    "10": 1.0
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0,
+   "ev_cov_ctx": 1.0,
+   "pollution": 0.429,
+   "dup": 0.0,
+   "top_files": [
+    "2026-08-09-政府的账本：一场借明天的钱的接力赛.md",
+    "2026-08-09-政府的账本：一场借明天的钱的接力赛.md",
+    "2026-08-09-政府的账本：一场借明天的钱的接力赛.md",
+    "《置身事内：中国政府与经济发展》.md",
+    "《置身事内：中国政府与经济发展》.md",
+    "论中国房价的前世今生.md",
+    "2026-08-09-政府的账本：一场借明天的钱的接力赛.md"
+   ],
+   "top_block_ids": [
+    "ac28ad7a30266b221b8b55f4a6683df9::7730471c2f42b874::/H1/政府的账本一场借明天的钱的接力赛/H2/第二节-卖地还账土地财政诞生#1-s1",
+    "ac28ad7a30266b221b8b55f4a6683df9::7730471c2f42b874::/H1/政府的账本一场借明天的钱的接力赛/H2/第三节-城投加杠杆债务的放大器#1",
+    "ac28ad7a30266b221b8b55f4a6683df9::7730471c2f42b874::/H1/政府的账本一场借明天的钱的接力赛/H2/结尾-借来的时间总要还#1",
+    "cb6cf583005b5aa2ccdf5109fc5f64cd::bdfa089576ebfce0::/H1/财税和政府行为/H3/土地财政/H4/税收地租与地方政府竞争#1",
+    "cb6cf583005b5aa2ccdf5109fc5f64cd::bdfa089576ebfce0::/H1/政府投融资与债务/H2/地方政府债务/H3/招商引资的地方官员#1",
+    "2b813fba9b2e2cfaf263a56670d94a5c::fe27977b5612e346::/H1/一切都来自-30-年前政策#1-s0",
+    "ac28ad7a30266b221b8b55f4a6683df9::7730471c2f42b874::/H1/政府的账本一场借明天的钱的接力赛/H2/第四节-谁来还任期与代际的错位#1"
+   ]
+  },
+  "dense": {
+   "latency_ms": 6.9,
+   "top1_sim": 0.6604,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0
+  },
+  "bm25": {
+   "latency_ms": 23.9,
+   "top1_score": 83.567,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 1.0,
+   "ndcg8": 0.877,
+   "ev_cov_raw": 1.0
+  },
+  "ablation": {
+   "0.60": {
+    "n_out": 7,
+    "hit5": 1,
+    "ev_cov_ctx": 1.0
+   }
+  }
+ },
+ {
+  "id": "M05",
+  "cat": "multi_hop",
+  "diff": "hard",
+  "query": "Agent-Sentinel 的准确率、可观测监控项以及未来演进方向分别是什么？",
+  "gold": [
+   "d004f57f11bf50299ab4aed7cc40d61b::9177802a4f97438f::/H2/准确率与可观测性#1",
+   "d004f57f11bf50299ab4aed7cc40d61b::9177802a4f97438f::/H2/这件事的未来价值#1"
+  ],
+  "n_gold": 2,
+  "hybrid": {
+   "n_out": 8,
+   "latency_ms": 122.3,
+   "top1_sim": 0.7554,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "recall": {
+    "1": 0.5,
+    "3": 1.0,
+    "5": 1.0,
+    "8": 1.0,
+    "10": 1.0
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0,
+   "ev_cov_ctx": 1.0,
+   "pollution": 0.0,
+   "dup": 0.0,
+   "top_files": [
+    "一个比较有潜力的 Agent 项目—— Agent-Sentiel.md",
+    "一个比较有潜力的 Agent 项目—— Agent-Sentiel.md",
+    "一个比较有潜力的 Agent 项目—— Agent-Sentiel.md",
+    "一个比较有潜力的 Agent 项目—— Agent-Sentiel.md",
+    "一个比较有潜力的 Agent 项目—— Agent-Sentiel.md",
+    "一个比较有潜力的 Agent 项目—— Agent-Sentiel.md",
+    "一个比较有潜力的 Agent 项目—— Agent-Sentiel.md",
+    "一个比较有潜力的 Agent 项目—— Agent-Sentiel.md"
+   ],
+   "top_block_ids": [
+    "d004f57f11bf50299ab4aed7cc40d61b::9177802a4f97438f::/H2/准确率与可观测性#1",
+    "d004f57f11bf50299ab4aed7cc40d61b::9177802a4f97438f::/H2/这件事的未来价值#1",
+    "d004f57f11bf50299ab4aed7cc40d61b::9177802a4f97438f::#1",
+    "d004f57f11bf50299ab4aed7cc40d61b::9177802a4f97438f::/H2/部署与开源#2",
+    "d004f57f11bf50299ab4aed7cc40d61b::9177802a4f97438f::/H2/我们的解法agent-sentinel#1",
+    "d004f57f11bf50299ab4aed7cc40d61b::9177802a4f97438f::/H2/关键架构设计为什么选-langgraph#2",
+    "d004f57f11bf50299ab4aed7cc40d61b::9177802a4f97438f::/H2/痛点的本质多平台-多渠道-高频切换#1",
+    "d004f57f11bf50299ab4aed7cc40d61b::9177802a4f97438f::/H2/部署与开源#1"
+   ]
+  },
+  "dense": {
+   "latency_ms": 7.8,
+   "top1_sim": 0.7554,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 1.0,
+   "ndcg8": 0.92,
+   "ev_cov_raw": 1.0
+  },
+  "bm25": {
+   "latency_ms": 27.5,
+   "top1_score": 38.172,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 1.0,
+   "ndcg8": 0.832,
+   "ev_cov_raw": 1.0
+  },
+  "ablation": {
+   "0.60": {
+    "n_out": 8,
+    "hit5": 1,
+    "ev_cov_ctx": 1.0
+   }
+  }
+ },
+ {
+  "id": "M06",
+  "cat": "multi_hop",
+  "diff": "hard",
+  "query": "黑五期间用户侧监控完善到了什么程度，第一次做黑五又暴露了哪些不足？",
+  "gold": [
+   "6d87e36ea6fb762ce91968e730a82013::8bac8a611b5bea40::/H1/21-黑五/H3/监控更完善#1",
+   "6d87e36ea6fb762ce91968e730a82013::8bac8a611b5bea40::/H1/21-黑五/H2/不足之处第一次#1"
+  ],
+  "n_gold": 2,
+  "hybrid": {
+   "n_out": 8,
+   "latency_ms": 126.8,
+   "top1_sim": 0.744,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "recall": {
+    "1": 0.5,
+    "3": 0.5,
+    "5": 0.5,
+    "8": 1.0,
+    "10": 1.0
+   },
+   "rr": 1.0,
+   "ndcg8": 0.807,
+   "ev_cov_raw": 1.0,
+   "ev_cov_ctx": 1.0,
+   "pollution": 0.75,
+   "dup": 0.0,
+   "top_files": [
+    "黑五分享.md",
+    "2024 年黑五复盘总结.md",
+    "2024 年黑五复盘总结.md",
+    "2024 年黑五复盘总结.md",
+    "推荐系统架构 + 黑五.md",
+    "2024 年黑五复盘总结.md",
+    "2025黑五遇到的问题.md",
+    "黑五分享.md"
+   ],
+   "top_block_ids": [
+    "6d87e36ea6fb762ce91968e730a82013::8bac8a611b5bea40::/H1/21-黑五/H3/监控更完善#1",
+    "f482d81a15a359ea83ddbd3b027068d7::b72eba8d3764a50a::/H1/有待改进的部分/H2/错误日志数量未监控第三方监控不足#1",
+    "f482d81a15a359ea83ddbd3b027068d7::b72eba8d3764a50a::/H1/做得好的部分/H2/黑五值班期间每日巡检#1",
+    "f482d81a15a359ea83ddbd3b027068d7::b72eba8d3764a50a::/H1/黑五总体可用性指标/H3/黑五期间事故报告#1",
+    "41c49b124a6c473497475b00f6f87c18::0267ecfa4c2375ec::/H2/黑五回顾/H3/准备工作#1",
+    "f482d81a15a359ea83ddbd3b027068d7::b72eba8d3764a50a::/H1/做得好的部分/H2/黑五之前压测#1",
+    "efad0cd4cf2a799bcdbb688f4f64805b::7074597f4f800b76::/H2/redis流量超出影响c端流量导致服务不可用#1",
+    "6d87e36ea6fb762ce91968e730a82013::8bac8a611b5bea40::/H1/21-黑五/H2/不足之处第一次#1"
+   ]
+  },
+  "dense": {
+   "latency_ms": 7.6,
+   "top1_sim": 0.744,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 1.0,
+   "ndcg8": 0.613,
+   "ev_cov_raw": 0.5
+  },
+  "bm25": {
+   "latency_ms": 33.4,
+   "top1_score": 36.026,
+   "hit": {
+    "1": 0,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 0.5,
+   "ndcg8": 0.387,
+   "ev_cov_raw": 0.5
+  },
+  "ablation": {
+   "0.60": {
+    "n_out": 8,
+    "hit5": 1,
+    "ev_cov_ctx": 1.0
+   }
+  }
+ },
+ {
+  "id": "M07",
+  "cat": "multi_hop",
+  "diff": "hard",
+  "query": "PG 数据库加字段导致锁表的排查过程中，隔离级别和表级锁分别查到了什么结论？",
+  "gold": [
+   "c98412cdca8386bc4174f56dd742e0ea::8a99b9e8d32f3c58::/H1/423日早上#1",
+   "c98412cdca8386bc4174f56dd742e0ea::8a99b9e8d32f3c58::/H1/排查过程/H2/是不是商品库的隔离级别设置的高#1"
+  ],
+  "n_gold": 2,
+  "hybrid": {
+   "n_out": 8,
+   "latency_ms": 142.6,
+   "top1_sim": 0.7376,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "recall": {
+    "1": 0.5,
+    "3": 1.0,
+    "5": 1.0,
+    "8": 1.0,
+    "10": 1.0
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0,
+   "ev_cov_ctx": 1.0,
+   "pollution": 0.25,
+   "dup": 0.0,
+   "top_files": [
+    "加字段？锁表？解密数据库不为人知的一面.md",
+    "加字段？锁表？解密数据库不为人知的一面.md",
+    "加字段？锁表？解密数据库不为人知的一面.md",
+    "Recent Conversations.md",
+    "Recent Conversations.md",
+    "加字段？锁表？解密数据库不为人知的一面.md",
+    "加字段？锁表？解密数据库不为人知的一面.md",
+    "加字段？锁表？解密数据库不为人知的一面.md"
+   ],
+   "top_block_ids": [
+    "c98412cdca8386bc4174f56dd742e0ea::8a99b9e8d32f3c58::/H1/排查过程/H2/是不是商品库的隔离级别设置的高#1",
+    "c98412cdca8386bc4174f56dd742e0ea::8a99b9e8d32f3c58::/H1/423日早上#1",
+    "c98412cdca8386bc4174f56dd742e0ea::8a99b9e8d32f3c58::/H1/结论#1",
+    "eecf63ad965f66751ceedfff718d1ed8::27fd7d2e191c89d6::/H2/postgresql锁表问题深度分析#1",
+    "eecf63ad965f66751ceedfff718d1ed8::27fd7d2e191c89d6::/H2/postgresql锁表事故排查总结#1",
+    "c98412cdca8386bc4174f56dd742e0ea::8a99b9e8d32f3c58::/H1/排查过程/H2/是不是商品库的隔离级别设置的高#4",
+    "c98412cdca8386bc4174f56dd742e0ea::8a99b9e8d32f3c58::/H1/排查过程/H2/怀疑是否是当前表数据量太大导致的#1",
+    "c98412cdca8386bc4174f56dd742e0ea::8a99b9e8d32f3c58::/H1/排查过程/H2/是不是商品库的隔离级别设置的高#3"
+   ]
+  },
+  "dense": {
+   "latency_ms": 7.5,
+   "top1_sim": 0.7535,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0
+  },
+  "bm25": {
+   "latency_ms": 45.3,
+   "top1_score": 58.115,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 1.0,
+   "ndcg8": 0.92,
+   "ev_cov_raw": 1.0
+  },
+  "ablation": {
+   "0.60": {
+    "n_out": 8,
+    "hit5": 1,
+    "ev_cov_ctx": 1.0
+   }
+  }
+ },
+ {
+  "id": "M08",
+  "cat": "multi_hop",
+  "diff": "hard",
+  "query": "弗洛伊德理论里，子本能被夸大但未被压抑，和自恋式地选择对象，分别解释了什么现象？",
+  "gold": [
+   "736cecae4e6cac5b8d379481b16c1a34::1fc54b21bdc30199::/H2/书中逻辑/H3/3-夸大到底是什么意思#1",
+   "946ab9573e769cdf36d722ba2196fce8::99f225b4d719b007::/H1/二自恋式地选择对象是什么意思#1"
+  ],
+  "n_gold": 2,
+  "hybrid": {
+   "n_out": 8,
+   "latency_ms": 245.8,
+   "top1_sim": 0.6698,
+   "hit": {
+    "1": 0,
+    "3": 0,
+    "5": 0,
+    "8": 1,
+    "10": 1
+   },
+   "recall": {
+    "1": 0.0,
+    "3": 0.0,
+    "5": 0.0,
+    "8": 1.0,
+    "10": 1.0
+   },
+   "rr": 0.1667,
+   "ndcg8": 0.423,
+   "ev_cov_raw": 1.0,
+   "ev_cov_ctx": 1.0,
+   "pollution": 0.125,
+   "dup": 0.0,
+   "top_files": [
+    "弗洛伊德论的性变态的形成机制.md",
+    "弗洛伊德论的性变态的形成机制.md",
+    "弗洛伊德论的性变态的形成机制.md",
+    "《弗洛伊德与精神分析》.md",
+    "弗洛伊德论的性变态的形成机制.md",
+    "弗洛伊德论的性变态的形成机制.md",
+    "哀悼.md",
+    "弗洛伊德论的性变态的形成机制.md"
+   ],
+   "top_block_ids": [
+    "736cecae4e6cac5b8d379481b16c1a34::1fc54b21bdc30199::/H2/assistant-1#1-s0",
+    "736cecae4e6cac5b8d379481b16c1a34::1fc54b21bdc30199::/H2/user#2",
+    "736cecae4e6cac5b8d379481b16c1a34::1fc54b21bdc30199::/H2/核心回答#1",
+    "62d67b82e8bf12c8e960e2962959db19::d4ae5f1e907582d4::/H1/自我超我与本我/H2/自恋#1",
+    "736cecae4e6cac5b8d379481b16c1a34::1fc54b21bdc30199::/H2/现实映射/H3/临床之外的社会学隐喻#1",
+    "736cecae4e6cac5b8d379481b16c1a34::1fc54b21bdc30199::/H2/书中逻辑/H3/3-夸大到底是什么意思#1",
+    "946ab9573e769cdf36d722ba2196fce8::99f225b4d719b007::/H1/二自恋式地选择对象是什么意思#1",
+    "736cecae4e6cac5b8d379481b16c1a34::1fc54b21bdc30199::/H2/assistant-1#1-s2"
+   ]
+  },
+  "dense": {
+   "latency_ms": 7.5,
+   "top1_sim": 0.6716,
+   "hit": {
+    "1": 0,
+    "3": 0,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 0.2,
+   "ndcg8": 0.456,
+   "ev_cov_raw": 1.0
+  },
+  "bm25": {
+   "latency_ms": 38.0,
+   "top1_score": 114.703,
+   "hit": {
+    "1": 0,
+    "3": 0,
+    "5": 0,
+    "8": 0,
+    "10": 0
+   },
+   "rr": 0.0833,
+   "ndcg8": 0.0,
+   "ev_cov_raw": 0.0
+  },
+  "ablation": {
+   "0.60": {
+    "n_out": 8,
+    "hit5": 0,
+    "ev_cov_ctx": 1.0
+   }
+  }
+ },
+ {
+  "id": "M09",
+  "cat": "multi_hop",
+  "diff": "hard",
+  "query": "影响力这本书里，互惠原则和影响力的武器分别列举了哪些说服心理机制？",
+  "gold": [
+   "adef6b49d78ac49f3c9c1837d8f8cac4::8bd825c28239d9ca::/H1/互惠#1-s1",
+   "adef6b49d78ac49f3c9c1837d8f8cac4::8bd825c28239d9ca::/H1/影响力的武器#1"
+  ],
+  "n_gold": 2,
+  "hybrid": {
+   "n_out": 8,
+   "latency_ms": 101.0,
+   "top1_sim": 0.6843,
+   "hit": {
+    "1": 0,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "recall": {
+    "1": 0.0,
+    "3": 1.0,
+    "5": 1.0,
+    "8": 1.0,
+    "10": 1.0
+   },
+   "rr": 0.5,
+   "ndcg8": 0.693,
+   "ev_cov_raw": 1.0,
+   "ev_cov_ctx": 1.0,
+   "pollution": 0.0,
+   "dup": 0.0,
+   "top_files": [
+    "《影响力》.md",
+    "《影响力》.md",
+    "《影响力》.md",
+    "《影响力》.md",
+    "《影响力》.md",
+    "《影响力》.md",
+    "《影响力》.md",
+    "《影响力》.md"
+   ],
+   "top_block_ids": [
+    "adef6b49d78ac49f3c9c1837d8f8cac4::8bd825c28239d9ca::/H1/互惠#1-s0",
+    "adef6b49d78ac49f3c9c1837d8f8cac4::8bd825c28239d9ca::/H1/互惠#1-s1",
+    "adef6b49d78ac49f3c9c1837d8f8cac4::8bd825c28239d9ca::/H1/影响力的武器#1",
+    "adef6b49d78ac49f3c9c1837d8f8cac4::8bd825c28239d9ca::/H1/社会认同#1",
+    "adef6b49d78ac49f3c9c1837d8f8cac4::8bd825c28239d9ca::/H1/权威#1",
+    "adef6b49d78ac49f3c9c1837d8f8cac4::8bd825c28239d9ca::/H1/社会认同#2",
+    "adef6b49d78ac49f3c9c1837d8f8cac4::8bd825c28239d9ca::#1",
+    "adef6b49d78ac49f3c9c1837d8f8cac4::8bd825c28239d9ca::/H1/喜好#1"
+   ]
+  },
+  "dense": {
+   "latency_ms": 6.7,
+   "top1_sim": 0.6898,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 1.0,
+   "ndcg8": 0.92,
+   "ev_cov_raw": 1.0
+  },
+  "bm25": {
+   "latency_ms": 23.8,
+   "top1_score": 44.871,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 1.0,
+   "ndcg8": 0.92,
+   "ev_cov_raw": 1.0
+  },
+  "ablation": {
+   "0.60": {
+    "n_out": 8,
+    "hit5": 1,
+    "ev_cov_ctx": 1.0
+   }
+  }
+ },
+ {
+  "id": "M10",
+  "cat": "multi_hop",
+  "diff": "hard",
+  "query": "首单加深项目里，销量数据对不上的根因有哪些，时区问题具体是怎么统一解决的？",
+  "gold": [
+   "47632fb6b5da4d7c621c101e6fca9f79::ee3b56ff156691fe::/H1/01-star-完整版c端商详页视角/H2/三30-秒精简版被打断时用#1",
+   "27bf569ad11edfb9d6aa766c45cf4822::40a63640fbce7e84::/H2/q-为什么使用物化视图和我之前的-sql-跑出来的-sql-有一点点不一样呢细微的数据误差按理来说我每天更新一次而得出来的数据是天纬度的应该和原来的数据保持一致吧为什么会造成这种现象呢#2"
+  ],
+  "n_gold": 2,
+  "hybrid": {
+   "n_out": 8,
+   "latency_ms": 209.9,
+   "top1_sim": 0.5377,
+   "hit": {
+    "1": 0,
+    "3": 0,
+    "5": 0,
+    "8": 0,
+    "10": 0
+   },
+   "recall": {
+    "1": 0.0,
+    "3": 0.0,
+    "5": 0.0,
+    "8": 0.0,
+    "10": 0.0
+   },
+   "rr": 0.0,
+   "ndcg8": 0.0,
+   "ev_cov_raw": 1.0,
+   "ev_cov_ctx": 1.0,
+   "pollution": 0.75,
+   "dup": 0.0,
+   "top_files": [
+    "README.md",
+    "README.md",
+    "01-STAR-C端完整版.md",
+    "首单加深物化视图优化.md",
+    "首发加深功能优化复盘.md",
+    "首单加深销量优化——物化视图，和 AI 对线.md",
+    "首单加深物化视图优化.md",
+    "首发加深功能优化复盘.md"
+   ],
+   "top_block_ids": [
+    "50d85470b4b19ba8a5262eeb483a9358::e13157d9d72dad1a::/H1/首单加深-面试-star-素材库c端商详页版/H2/一句话结论面试开场直接说#1",
+    "50d85470b4b19ba8a5262eeb483a9358::e13157d9d72dad1a::/H1/首单加深-面试-star-素材库c端商详页版/H2/与本地业务文档的对应关系#1",
+    "47632fb6b5da4d7c621c101e6fca9f79::ee3b56ff156691fe::/H1/01-star-完整版c端商详页视角/H2/二完整-star-口述版面试直接讲/H3/a-action约25分钟得分区四层#1",
+    "4352c3223932eb16e583d6b3312da025::ed80bab6aff4d35e::/H2/总结#1",
+    "583e276cb4151475023d2c41e3d4ad26::3081c5334ed0e9d5::/H1/一次接口耗时从-30s-到秒开的优化复盘-我做对了什么又踩了什么坑-1/H2/四轮排查层层剥洋葱-1/H3/第三轮数据对不上-灵异事件的真相-1/H4/问题-2时区-国际化系统里被忽视的日界-1#1",
+    "27bf569ad11edfb9d6aa766c45cf4822::40a63640fbce7e84::/H2/q如果考虑到是服务器时间的问题应该怎么排查呢#2-s1",
+    "4352c3223932eb16e583d6b3312da025::ed80bab6aff4d35e::/H2/心酸的过程#1",
+    "583e276cb4151475023d2c41e3d4ad26::3081c5334ed0e9d5::/H1/一次接口耗时从-30s-到秒开的优化复盘-我做对了什么又踩了什么坑-1/H2/四轮排查层层剥洋葱-1/H3/第三轮数据对不上-灵异事件的真相-1/H4/问题-2时区-国际化系统里被忽视的日界-1#3"
+   ]
+  },
+  "dense": {
+   "latency_ms": 7.8,
+   "top1_sim": 0.7356,
+   "hit": {
+    "1": 0,
+    "3": 0,
+    "5": 0,
+    "8": 0,
+    "10": 0
+   },
+   "rr": 0.0588,
+   "ndcg8": 0.0,
+   "ev_cov_raw": 0.5
+  },
+  "bm25": {
+   "latency_ms": 41.6,
+   "top1_score": 56.931,
+   "hit": {
+    "1": 0,
+    "3": 0,
+    "5": 0,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 0.1429,
+   "ndcg8": 0.204,
+   "ev_cov_raw": 1.0
+  },
+  "ablation": {
+   "0.60": {
+    "n_out": 8,
+    "hit5": 0,
+    "ev_cov_ctx": 1.0
+   }
+  }
+ },
+ {
+  "id": "Q01",
+  "cat": "colloquial",
+  "diff": "medium",
+  "query": "我想问一下哈，就那个验证码邮件重复发的问题，到底是啥原因来着？",
+  "gold": [
+   "57d5335f2b40ff160db5521f0d69d103::f4f40bdd2afc5362::/H2/发生原因#1"
+  ],
+  "n_gold": 1,
+  "hybrid": {
+   "n_out": 8,
+   "latency_ms": 249.6,
+   "top1_sim": 0.7438,
+   "hit": {
+    "1": 0,
+    "3": 0,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "recall": {
+    "1": 0.0,
+    "3": 0.0,
+    "5": 1.0,
+    "8": 1.0,
+    "10": 1.0
+   },
+   "rr": 0.2,
+   "ndcg8": 0.387,
+   "ev_cov_raw": 1.0,
+   "ev_cov_ctx": 1.0,
+   "pollution": 0.125,
+   "dup": 0.0,
+   "top_files": [
+    "2024年12月03日，验证码邮件重复发送.md",
+    "2024 年黑五复盘总结.md",
+    "2024年12月03日，验证码邮件重复发送.md",
+    "2024年12月03日，验证码邮件重复发送.md",
+    "2024年12月03日，验证码邮件重复发送.md",
+    "2024年12月03日，验证码邮件重复发送.md",
+    "2024年12月03日，验证码邮件重复发送.md",
+    "2024年12月03日，验证码邮件重复发送.md"
+   ],
+   "top_block_ids": [
+    "57d5335f2b40ff160db5521f0d69d103::f4f40bdd2afc5362::/H2/如何避免/H3/举一反三#1",
+    "f482d81a15a359ea83ddbd3b027068d7::b72eba8d3764a50a::/H1/黑五总体可用性指标/H3/黑五期间事故报告#1",
+    "57d5335f2b40ff160db5521f0d69d103::f4f40bdd2afc5362::/H2/时间线/H3/1005-上线后继续观察日志发现无日志报错问题解决#1",
+    "57d5335f2b40ff160db5521f0d69d103::f4f40bdd2afc5362::/H2/影响范围#1",
+    "57d5335f2b40ff160db5521f0d69d103::f4f40bdd2afc5362::/H2/发生原因#1",
+    "57d5335f2b40ff160db5521f0d69d103::f4f40bdd2afc5362::/H2/时间线/H3/0405-oncall-反馈用户一直收到相同的验证码邮件#1",
+    "57d5335f2b40ff160db5521f0d69d103::f4f40bdd2afc5362::/H2/如何避免/H3/加强监控报警#1",
+    "57d5335f2b40ff160db5521f0d69d103::f4f40bdd2afc5362::/H2/如何避免/H3/代码鲁棒性#1"
+   ]
+  },
+  "dense": {
+   "latency_ms": 8.3,
+   "top1_sim": 0.8396,
+   "hit": {
+    "1": 0,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 0.5,
+   "ndcg8": 0.631,
+   "ev_cov_raw": 1.0
+  },
+  "bm25": {
+   "latency_ms": 35.8,
+   "top1_score": 57.632,
+   "hit": {
+    "1": 0,
+    "3": 0,
+    "5": 0,
+    "8": 0,
+    "10": 1
+   },
+   "rr": 0.1,
+   "ndcg8": 0.0,
+   "ev_cov_raw": 0.5
+  },
+  "ablation": {
+   "0.60": {
+    "n_out": 8,
+    "hit5": 1,
+    "ev_cov_ctx": 1.0
+   }
+  }
+ },
+ {
+  "id": "Q02",
+  "cat": "definition",
+  "diff": "medium",
+  "query": "请问一下 AAB 是什么？",
+  "gold": [
+   "b440a0554aa58f3eae0d94dcae0c5c6d::3aa5f4dad11915ee::/H1/优化三步曲/H2/怎么优化资源懒加载混淆采用特殊的发布格式/H3/针对处理器架构#1"
+  ],
+  "n_gold": 1,
+  "hybrid": {
+   "n_out": 2,
+   "latency_ms": 274.5,
+   "top1_sim": 0.3617,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "recall": {
+    "1": 1.0,
+    "3": 1.0,
+    "5": 1.0,
+    "8": 1.0,
+    "10": 1.0
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0,
+   "ev_cov_ctx": 1.0,
+   "pollution": 0.0,
+   "dup": 0.0,
+   "top_files": [
+    "Cider Android包（APK）体积优化.md",
+    "Cider Android包（APK）体积优化.md"
+   ],
+   "top_block_ids": [
+    "b440a0554aa58f3eae0d94dcae0c5c6d::3aa5f4dad11915ee::/H1/优化三步曲/H2/怎么优化资源懒加载混淆采用特殊的发布格式/H3/针对处理器架构#1",
+    "b440a0554aa58f3eae0d94dcae0c5c6d::3aa5f4dad11915ee::/H1/最后的最后#1"
+   ]
+  },
+  "dense": {
+   "latency_ms": 7.7,
+   "top1_sim": 0.4436,
+   "hit": {
+    "1": 0,
+    "3": 0,
+    "5": 0,
+    "8": 0,
+    "10": 0
+   },
+   "rr": 0.05,
+   "ndcg8": 0.0,
+   "ev_cov_raw": 0.0
+  },
+  "bm25": {
+   "latency_ms": 11.5,
+   "top1_score": 15.602,
+   "hit": {
+    "1": 0,
+    "3": 0,
+    "5": 0,
+    "8": 0,
+    "10": 0
+   },
+   "rr": 0.0,
+   "ndcg8": 0.0,
+   "ev_cov_raw": 0.0
+  },
+  "ablation": {
+   "0.60": {
+    "n_out": 2,
+    "hit5": 1,
+    "ev_cov_ctx": 1.0
+   }
+  }
+ },
+ {
+  "id": "Q03",
+  "cat": "definition",
+  "diff": "hard",
+  "query": "什么是 MVCC？",
+  "gold": [
+   "c98412cdca8386bc4174f56dd742e0ea::8a99b9e8d32f3c58::/H1/423日早上#1"
+  ],
+  "n_gold": 1,
+  "hybrid": {
+   "n_out": 3,
+   "latency_ms": 106.5,
+   "top1_sim": 0.4292,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "recall": {
+    "1": 1.0,
+    "3": 1.0,
+    "5": 1.0,
+    "8": 1.0,
+    "10": 1.0
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0,
+   "ev_cov_ctx": 1.0,
+   "pollution": 0.667,
+   "dup": 0.0,
+   "top_files": [
+    "加字段？锁表？解密数据库不为人知的一面.md",
+    "PostgreSQL 与 MySQL 差异.md",
+    "八股文.md"
+   ],
+   "top_block_ids": [
+    "c98412cdca8386bc4174f56dd742e0ea::8a99b9e8d32f3c58::/H1/423日早上#1",
+    "232419eb4a1146c2d0c755bb3bb28b05::fe8bb3912f9ec061::/H2/1-技术以及实现细节上#1",
+    "446f8e869d36e2eebf6fe4856cb5db63::d3fed198c2be9c14::/H1/08月12日812#1-s1"
+   ]
+  },
+  "dense": {
+   "latency_ms": 6.8,
+   "top1_sim": 0.5448,
+   "hit": {
+    "1": 0,
+    "3": 0,
+    "5": 0,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 0.1429,
+   "ndcg8": 0.333,
+   "ev_cov_raw": 1.0
+  },
+  "bm25": {
+   "latency_ms": 7.5,
+   "top1_score": 18.181,
+   "hit": {
+    "1": 0,
+    "3": 0,
+    "5": 0,
+    "8": 0,
+    "10": 0
+   },
+   "rr": 0.0435,
+   "ndcg8": 0.0,
+   "ev_cov_raw": 0.0
+  },
+  "ablation": {
+   "0.60": {
+    "n_out": 3,
+    "hit5": 1,
+    "ev_cov_ctx": 1.0
+   }
+  }
+ },
+ {
+  "id": "Q04",
+  "cat": "colloquial",
+  "diff": "hard",
+  "query": "我记得好像有个商品服务 503 的事故，是不是 k8s 的问题来着，最后怎么定位的？",
+  "gold": [
+   "49a734a6697c4f1b60fe29787df9f210::d6871eba3f873bce::/H1/时间线#1"
+  ],
+  "n_gold": 1,
+  "hybrid": {
+   "n_out": 8,
+   "latency_ms": 182.3,
+   "top1_sim": 0.7352,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "recall": {
+    "1": 1.0,
+    "3": 1.0,
+    "5": 1.0,
+    "8": 1.0,
+    "10": 1.0
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0,
+   "ev_cov_ctx": 1.0,
+   "pollution": 0.125,
+   "dup": 0.0,
+   "top_files": [
+    "2025年05月29日，K8S路由异常导致商品服务无法访问.md",
+    "线上死循环导致MQ消息堆积问题排查.md",
+    "2025年05月29日，K8S路由异常导致商品服务无法访问.md",
+    "2025年05月29日，K8S路由异常导致商品服务无法访问.md",
+    "2025年05月29日，K8S路由异常导致商品服务无法访问.md",
+    "2025年05月29日，K8S路由异常导致商品服务无法访问.md",
+    "2025年05月29日，K8S路由异常导致商品服务无法访问.md",
+    "2025年05月29日，K8S路由异常导致商品服务无法访问.md"
+   ],
+   "top_block_ids": [
+    "49a734a6697c4f1b60fe29787df9f210::d6871eba3f873bce::/H1/时间线#1",
+    "0508977df28caec1c938d29ab9b525a7::d2ac6148f0445bb0::#1",
+    "49a734a6697c4f1b60fe29787df9f210::d6871eba3f873bce::/H1/事故复盘/H2/未解之谜#2",
+    "49a734a6697c4f1b60fe29787df9f210::d6871eba3f873bce::/H1/事故影响#1",
+    "49a734a6697c4f1b60fe29787df9f210::d6871eba3f873bce::/H1/事故复盘#1",
+    "49a734a6697c4f1b60fe29787df9f210::d6871eba3f873bce::/H1/事故复盘/H2/未解之谜#1",
+    "49a734a6697c4f1b60fe29787df9f210::d6871eba3f873bce::/H1/事故复盘/H2/为什么product服务的标签会丢失#1",
+    "49a734a6697c4f1b60fe29787df9f210::d6871eba3f873bce::/H1/发生原因#1"
+   ]
+  },
+  "dense": {
+   "latency_ms": 8.1,
+   "top1_sim": 0.7352,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0
+  },
+  "bm25": {
+   "latency_ms": 52.0,
+   "top1_score": 34.729,
+   "hit": {
+    "1": 0,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 0.5,
+   "ndcg8": 0.631,
+   "ev_cov_raw": 1.0
+  },
+  "ablation": {
+   "0.60": {
+    "n_out": 8,
+    "hit5": 1,
+    "ev_cov_ctx": 1.0
+   }
+  }
+ },
+ {
+  "id": "Q05",
+  "cat": "definition",
+  "diff": "medium",
+  "query": "PageHelper 是什么，它的原理是什么？",
+  "gold": [
+   "218be1560b4a322b3a2f206761da0ba0::eb2c481d414608ab::/H2/分页#1"
+  ],
+  "n_gold": 1,
+  "hybrid": {
+   "n_out": 2,
+   "latency_ms": 84.3,
+   "top1_sim": 0.6316,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "recall": {
+    "1": 1.0,
+    "3": 1.0,
+    "5": 1.0,
+    "8": 1.0,
+    "10": 1.0
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0,
+   "ev_cov_ctx": 1.0,
+   "pollution": 0.5,
+   "dup": 0.0,
+   "top_files": [
+    "RuoYi-Cloud.md",
+    "PageHelper与缓存ThreadLocal污染问题排查记录.md"
+   ],
+   "top_block_ids": [
+    "218be1560b4a322b3a2f206761da0ba0::eb2c481d414608ab::/H2/分页#1",
+    "e3082db2f787d2bcfc98f94321306100::45fd4578293c999d::/H2/1-问题现象/H3/12-sql语句#3"
+   ]
+  },
+  "dense": {
+   "latency_ms": 7.1,
+   "top1_sim": 0.6316,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0
+  },
+  "bm25": {
+   "latency_ms": 11.2,
+   "top1_score": 26.107,
+   "hit": {
+    "1": 1,
+    "3": 1,
+    "5": 1,
+    "8": 1,
+    "10": 1
+   },
+   "rr": 1.0,
+   "ndcg8": 1.0,
+   "ev_cov_raw": 1.0
+  },
+  "ablation": {
+   "0.60": {
+    "n_out": 2,
+    "hit5": 1,
+    "ev_cov_ctx": 1.0
+   }
+  }
+ },
+ {
+  "id": "N01",
+  "cat": "negative",
+  "diff": "easy",
+  "query": "量子计算中表面码纠错的物理实现原理是什么？",
+  "gold": [],
+  "n_gold": 0,
+  "hybrid": {
+   "n_out": 0,
+   "latency_ms": 86.9,
+   "top1_sim": null,
+   "hit": {
+    "1": 0,
+    "3": 0,
+    "5": 0,
+    "8": 0,
+    "10": 0
+   },
+   "recall": {
+    "1": null,
+    "3": null,
+    "5": null,
+    "8": null,
+    "10": null
+   },
+   "rr": 0.0,
+   "ndcg8": 0.0,
+   "ev_cov_raw": null,
+   "ev_cov_ctx": null,
+   "pollution": null,
+   "dup": 0.0,
+   "top_files": [],
+   "top_block_ids": []
+  },
+  "dense": {
+   "latency_ms": 8.8,
+   "top1_sim": 0.2693,
+   "hit": {
+    "1": 0,
+    "3": 0,
+    "5": 0,
+    "8": 0,
+    "10": 0
+   },
+   "rr": 0.0,
+   "ndcg8": 0.0,
+   "ev_cov_raw": null
+  },
+  "bm25": {
+   "latency_ms": 22.3,
+   "top1_score": 21.617,
+   "hit": {
+    "1": 0,
+    "3": 0,
+    "5": 0,
+    "8": 0,
+    "10": 0
+   },
+   "rr": 0.0,
+   "ndcg8": 0.0,
+   "ev_cov_raw": null
+  },
+  "ablation": {
+   "0.60": {
+    "n_out": 0,
+    "hit5": null,
+    "ev_cov_ctx": null
+   }
+  }
+ },
+ {
+  "id": "N02",
+  "cat": "negative",
+  "diff": "easy",
+  "query": "如何酿造比利时修道院风格的三料啤酒？",
+  "gold": [],
+  "n_gold": 0,
+  "hybrid": {
+   "n_out": 0,
+   "latency_ms": 231.6,
+   "top1_sim": null,
+   "hit": {
+    "1": 0,
+    "3": 0,
+    "5": 0,
+    "8": 0,
+    "10": 0
+   },
+   "recall": {
+    "1": null,
+    "3": null,
+    "5": null,
+    "8": null,
+    "10": null
+   },
+   "rr": 0.0,
+   "ndcg8": 0.0,
+   "ev_cov_raw": null,
+   "ev_cov_ctx": null,
+   "pollution": null,
+   "dup": 0.0,
+   "top_files": [],
+   "top_block_ids": []
+  },
+  "dense": {
+   "latency_ms": 5.8,
+   "top1_sim": 0.3289,
+   "hit": {
+    "1": 0,
+    "3": 0,
+    "5": 0,
+    "8": 0,
+    "10": 0
+   },
+   "rr": 0.0,
+   "ndcg8": 0.0,
+   "ev_cov_raw": null
+  },
+  "bm25": {
+   "latency_ms": 17.8,
+   "top1_score": 13.66,
+   "hit": {
+    "1": 0,
+    "3": 0,
+    "5": 0,
+    "8": 0,
+    "10": 0
+   },
+   "rr": 0.0,
+   "ndcg8": 0.0,
+   "ev_cov_raw": null
+  },
+  "ablation": {
+   "0.60": {
+    "n_out": 0,
+    "hit5": null,
+    "ev_cov_ctx": null
+   }
+  }
+ },
+ {
+  "id": "N03",
+  "cat": "negative",
+  "diff": "easy",
+  "query": "2026 年世界杯的赛程和分组抽签结果是什么？",
+  "gold": [],
+  "n_gold": 0,
+  "hybrid": {
+   "n_out": 0,
+   "latency_ms": 139.4,
+   "top1_sim": null,
+   "hit": {
+    "1": 0,
+    "3": 0,
+    "5": 0,
+    "8": 0,
+    "10": 0
+   },
+   "recall": {
+    "1": null,
+    "3": null,
+    "5": null,
+    "8": null,
+    "10": null
+   },
+   "rr": 0.0,
+   "ndcg8": 0.0,
+   "ev_cov_raw": null,
+   "ev_cov_ctx": null,
+   "pollution": null,
+   "dup": 0.0,
+   "top_files": [],
+   "top_block_ids": []
+  },
+  "dense": {
+   "latency_ms": 9.1,
+   "top1_sim": 0.2951,
+   "hit": {
+    "1": 0,
+    "3": 0,
+    "5": 0,
+    "8": 0,
+    "10": 0
+   },
+   "rr": 0.0,
+   "ndcg8": 0.0,
+   "ev_cov_raw": null
+  },
+  "bm25": {
+   "latency_ms": 19.6,
+   "top1_score": 16.811,
+   "hit": {
+    "1": 0,
+    "3": 0,
+    "5": 0,
+    "8": 0,
+    "10": 0
+   },
+   "rr": 0.0,
+   "ndcg8": 0.0,
+   "ev_cov_raw": null
+  },
+  "ablation": {
+   "0.60": {
+    "n_out": 0,
+    "hit5": null,
+    "ev_cov_ctx": null
+   }
+  }
+ },
+ {
+  "id": "N04",
+  "cat": "negative",
+  "diff": "easy",
+  "query": "在瑞士租房签订的合同需要注意哪些法律条款？",
+  "gold": [],
+  "n_gold": 0,
+  "hybrid": {
+   "n_out": 0,
+   "latency_ms": 134.5,
+   "top1_sim": null,
+   "hit": {
+    "1": 0,
+    "3": 0,
+    "5": 0,
+    "8": 0,
+    "10": 0
+   },
+   "recall": {
+    "1": null,
+    "3": null,
+    "5": null,
+    "8": null,
+    "10": null
+   },
+   "rr": 0.0,
+   "ndcg8": 0.0,
+   "ev_cov_raw": null,
+   "ev_cov_ctx": null,
+   "pollution": null,
+   "dup": 0.0,
+   "top_files": [],
+   "top_block_ids": []
+  },
+  "dense": {
+   "latency_ms": 8.1,
+   "top1_sim": 0.2728,
+   "hit": {
+    "1": 0,
+    "3": 0,
+    "5": 0,
+    "8": 0,
+    "10": 0
+   },
+   "rr": 0.0,
+   "ndcg8": 0.0,
+   "ev_cov_raw": null
+  },
+  "bm25": {
+   "latency_ms": 21.6,
+   "top1_score": 19.658,
+   "hit": {
+    "1": 0,
+    "3": 0,
+    "5": 0,
+    "8": 0,
+    "10": 0
+   },
+   "rr": 0.0,
+   "ndcg8": 0.0,
+   "ev_cov_raw": null
+  },
+  "ablation": {
+   "0.60": {
+    "n_out": 0,
+    "hit5": null,
+    "ev_cov_ctx": null
+   }
+  }
+ },
+ {
+  "id": "N05",
+  "cat": "negative",
+  "diff": "easy",
+  "query": "火星土壤原位资源利用（ISRU）有哪些技术方案？",
+  "gold": [],
+  "n_gold": 0,
+  "hybrid": {
+   "n_out": 0,
+   "latency_ms": 123.9,
+   "top1_sim": null,
+   "hit": {
+    "1": 0,
+    "3": 0,
+    "5": 0,
+    "8": 0,
+    "10": 0
+   },
+   "recall": {
+    "1": null,
+    "3": null,
+    "5": null,
+    "8": null,
+    "10": null
+   },
+   "rr": 0.0,
+   "ndcg8": 0.0,
+   "ev_cov_raw": null,
+   "ev_cov_ctx": null,
+   "pollution": null,
+   "dup": 0.0,
+   "top_files": [],
+   "top_block_ids": []
+  },
+  "dense": {
+   "latency_ms": 7.9,
+   "top1_sim": 0.2562,
+   "hit": {
+    "1": 0,
+    "3": 0,
+    "5": 0,
+    "8": 0,
+    "10": 0
+   },
+   "rr": 0.0,
+   "ndcg8": 0.0,
+   "ev_cov_raw": null
+  },
+  "bm25": {
+   "latency_ms": 22.0,
+   "top1_score": 20.96,
+   "hit": {
+    "1": 0,
+    "3": 0,
+    "5": 0,
+    "8": 0,
+    "10": 0
+   },
+   "rr": 0.0,
+   "ndcg8": 0.0,
+   "ev_cov_raw": null
+  },
+  "ablation": {
+   "0.60": {
+    "n_out": 0,
+    "hit5": null,
+    "ev_cov_ctx": null
+   }
+  }
+ },
+ {
+  "id": "N06",
+  "cat": "negative",
+  "diff": "easy",
+  "query": "贝多芬第九交响曲首演的具体时间和地点是哪里？",
+  "gold": [],
+  "n_gold": 0,
+  "hybrid": {
+   "n_out": 0,
+   "latency_ms": 117.0,
+   "top1_sim": null,
+   "hit": {
+    "1": 0,
+    "3": 0,
+    "5": 0,
+    "8": 0,
+    "10": 0
+   },
+   "recall": {
+    "1": null,
+    "3": null,
+    "5": null,
+    "8": null,
+    "10": null
+   },
+   "rr": 0.0,
+   "ndcg8": 0.0,
+   "ev_cov_raw": null,
+   "ev_cov_ctx": null,
+   "pollution": null,
+   "dup": 0.0,
+   "top_files": [],
+   "top_block_ids": []
+  },
+  "dense": {
+   "latency_ms": 9.2,
+   "top1_sim": 0.1802,
+   "hit": {
+    "1": 0,
+    "3": 0,
+    "5": 0,
+    "8": 0,
+    "10": 0
+   },
+   "rr": 0.0,
+   "ndcg8": 0.0,
+   "ev_cov_raw": null
+  },
+  "bm25": {
+   "latency_ms": 30.6,
+   "top1_score": 35.05,
+   "hit": {
+    "1": 0,
+    "3": 0,
+    "5": 0,
+    "8": 0,
+    "10": 0
+   },
+   "rr": 0.0,
+   "ndcg8": 0.0,
+   "ev_cov_raw": null
+  },
+  "ablation": {
+   "0.60": {
+    "n_out": 0,
+    "hit5": null,
+    "ev_cov_ctx": null
+   }
+  }
+ },
+ {
+  "id": "N07",
+  "cat": "negative",
+  "diff": "easy",
+  "query": "如何申请日本经营管理签证，需要准备哪些材料？",
+  "gold": [],
+  "n_gold": 0,
+  "hybrid": {
+   "n_out": 0,
+   "latency_ms": 169.4,
+   "top1_sim": null,
+   "hit": {
+    "1": 0,
+    "3": 0,
+    "5": 0,
+    "8": 0,
+    "10": 0
+   },
+   "recall": {
+    "1": null,
+    "3": null,
+    "5": null,
+    "8": null,
+    "10": null
+   },
+   "rr": 0.0,
+   "ndcg8": 0.0,
+   "ev_cov_raw": null,
+   "ev_cov_ctx": null,
+   "pollution": null,
+   "dup": 0.0,
+   "top_files": [],
+   "top_block_ids": []
+  },
+  "dense": {
+   "latency_ms": 8.2,
+   "top1_sim": 0.2957,
+   "hit": {
+    "1": 0,
+    "3": 0,
+    "5": 0,
+    "8": 0,
+    "10": 0
+   },
+   "rr": 0.0,
+   "ndcg8": 0.0,
+   "ev_cov_raw": null
+  },
+  "bm25": {
+   "latency_ms": 22.3,
+   "top1_score": 20.95,
+   "hit": {
+    "1": 0,
+    "3": 0,
+    "5": 0,
+    "8": 0,
+    "10": 0
+   },
+   "rr": 0.0,
+   "ndcg8": 0.0,
+   "ev_cov_raw": null
+  },
+  "ablation": {
+   "0.60": {
+    "n_out": 0,
+    "hit5": null,
+    "ev_cov_ctx": null
+   }
+  }
+ },
+ {
+  "id": "N08",
+  "cat": "negative_adversarial",
+  "diff": "hard",
+  "query": "Kubernetes 最新版本有哪些新特性和废弃 API？",
+  "gold": [],
+  "n_gold": 0,
+  "hybrid": {
+   "n_out": 2,
+   "latency_ms": 116.7,
+   "top1_sim": 0.4027,
+   "hit": {
+    "1": 0,
+    "3": 0,
+    "5": 0,
+    "8": 0,
+    "10": 0
+   },
+   "recall": {
+    "1": null,
+    "3": null,
+    "5": null,
+    "8": null,
+    "10": null
+   },
+   "rr": 0.0,
+   "ndcg8": 0.0,
+   "ev_cov_raw": null,
+   "ev_cov_ctx": null,
+   "pollution": null,
+   "dup": 0.0,
+   "top_files": [
+    "cider-基建2023.md",
+    "README.md"
+   ],
+   "top_block_ids": [
+    "6711733679281ee1f12251ae60a3dfb2::2df0e044046b33f0::/H1/2023-11-09/H2/运维建设-吕佳-haon-贾铮-6/H4/运维体系-6#1",
+    "e935fe2a526787ecb9c82d1365ced237::de2c02a6763e7ab1::/H1/obsidian-样式库/H2/注意事项#1"
+   ]
+  },
+  "dense": {
+   "latency_ms": 7.4,
+   "top1_sim": 0.4942,
+   "hit": {
+    "1": 0,
+    "3": 0,
+    "5": 0,
+    "8": 0,
+    "10": 0
+   },
+   "rr": 0.0,
+   "ndcg8": 0.0,
+   "ev_cov_raw": null
+  },
+  "bm25": {
+   "latency_ms": 18.2,
+   "top1_score": 23.636,
+   "hit": {
+    "1": 0,
+    "3": 0,
+    "5": 0,
+    "8": 0,
+    "10": 0
+   },
+   "rr": 0.0,
+   "ndcg8": 0.0,
+   "ev_cov_raw": null
+  },
+  "ablation": {
+   "0.60": {
+    "n_out": 2,
+    "hit5": null,
+    "ev_cov_ctx": null
+   }
+  }
+ },
+ {
+  "id": "N09",
+  "cat": "negative",
+  "diff": "easy",
+  "query": "怎么给三个月大的幼犬做定点如厕训练？",
+  "gold": [],
+  "n_gold": 0,
+  "hybrid": {
+   "n_out": 0,
+   "latency_ms": 150.4,
+   "top1_sim": null,
+   "hit": {
+    "1": 0,
+    "3": 0,
+    "5": 0,
+    "8": 0,
+    "10": 0
+   },
+   "recall": {
+    "1": null,
+    "3": null,
+    "5": null,
+    "8": null,
+    "10": null
+   },
+   "rr": 0.0,
+   "ndcg8": 0.0,
+   "ev_cov_raw": null,
+   "ev_cov_ctx": null,
+   "pollution": null,
+   "dup": 0.0,
+   "top_files": [],
+   "top_block_ids": []
+  },
+  "dense": {
+   "latency_ms": 7.1,
+   "top1_sim": 0.2554,
+   "hit": {
+    "1": 0,
+    "3": 0,
+    "5": 0,
+    "8": 0,
+    "10": 0
+   },
+   "rr": 0.0,
+   "ndcg8": 0.0,
+   "ev_cov_raw": null
+  },
+  "bm25": {
+   "latency_ms": 19.1,
+   "top1_score": 15.704,
+   "hit": {
+    "1": 0,
+    "3": 0,
+    "5": 0,
+    "8": 0,
+    "10": 0
+   },
+   "rr": 0.0,
+   "ndcg8": 0.0,
+   "ev_cov_raw": null
+  },
+  "ablation": {
+   "0.60": {
+    "n_out": 0,
+    "hit5": null,
+    "ev_cov_ctx": null
+   }
+  }
+ },
+ {
+  "id": "N10",
+  "cat": "negative_adversarial",
+  "diff": "hard",
+  "query": "数据库慢查询一般要怎么排查，有什么通用方法？",
+  "gold": [],
+  "n_gold": 0,
+  "hybrid": {
+   "n_out": 8,
+   "latency_ms": 216.7,
+   "top1_sim": 0.5544,
+   "hit": {
+    "1": 0,
+    "3": 0,
+    "5": 0,
+    "8": 0,
+    "10": 0
+   },
+   "recall": {
+    "1": null,
+    "3": null,
+    "5": null,
+    "8": null,
+    "10": null
+   },
+   "rr": 0.0,
+   "ndcg8": 0.0,
+   "ev_cov_raw": null,
+   "ev_cov_ctx": null,
+   "pollution": null,
+   "dup": 0.0,
+   "top_files": [
+    "CIDER 规范.md",
+    "排查bug的真实案例.md",
+    "春招 OKR.md",
+    "Warebase 慢查询排查记录总结.md",
+    "Warebase 慢查询排查记录总结.md",
+    "Warebase 慢查询排查记录总结.md",
+    "Warebase 慢查询排查记录总结.md",
+    "PostgreSQL CPU飙高排查思路.md"
+   ],
+   "top_block_ids": [
+    "246a3d4ad047c15f3e9545e23efc425c::b732e24a9b065d39::/H1/阿里规范#1-s1",
+    "557c166acb72c17af049566751ac81d9::6e9346fee84827a9::/H1/机器抖动偶发的突然重启-20231027-林冠鹏-guanpeng/H2/wms排查/H3/问题确定#2",
+    "284ed678f50fd8d46bfbe652a7775cdd::e7169942cd692dcd::#1",
+    "c6ed9661d0d7cdde58c97ed3b1ef0182::2d8b49d70441362c::/H2/排查思路的亮点#1",
+    "c6ed9661d0d7cdde58c97ed3b1ef0182::2d8b49d70441362c::/H2/4-深入排查-发生矛盾/H3/矛盾分析#1",
+    "c6ed9661d0d7cdde58c97ed3b1ef0182::2d8b49d70441362c::/H2/6-环境对比-定位问题/H3/系统性排查#1",
+    "c6ed9661d0d7cdde58c97ed3b1ef0182::2d8b49d70441362c::/H2/完整时间线总结#1",
+    "e67a63ae8257704791a01ba2c0a1eb52::a1c78af0cf5c37c6::#1"
+   ]
+  },
+  "dense": {
+   "latency_ms": 5.9,
+   "top1_sim": 0.6209,
+   "hit": {
+    "1": 0,
+    "3": 0,
+    "5": 0,
+    "8": 0,
+    "10": 0
+   },
+   "rr": 0.0,
+   "ndcg8": 0.0,
+   "ev_cov_raw": null
+  },
+  "bm25": {
+   "latency_ms": 27.1,
+   "top1_score": 22.475,
+   "hit": {
+    "1": 0,
+    "3": 0,
+    "5": 0,
+    "8": 0,
+    "10": 0
+   },
+   "rr": 0.0,
+   "ndcg8": 0.0,
+   "ev_cov_raw": null
+  },
+  "ablation": {
+   "0.60": {
+    "n_out": 8,
+    "hit5": null,
+    "ev_cov_ctx": null
+   }
+  }
+ },
+ {
+  "id": "N11",
+  "cat": "negative_adversarial",
+  "diff": "hard",
+  "query": "Redis 大 key 热 key 问题要怎么解决？",
+  "gold": [],
+  "n_gold": 0,
+  "hybrid": {
+   "n_out": 8,
+   "latency_ms": 195.0,
+   "top1_sim": 0.3775,
+   "hit": {
+    "1": 0,
+    "3": 0,
+    "5": 0,
+    "8": 0,
+    "10": 0
+   },
+   "recall": {
+    "1": null,
+    "3": null,
+    "5": null,
+    "8": null,
+    "10": null
+   },
+   "rr": 0.0,
+   "ndcg8": 0.0,
+   "ev_cov_raw": null,
+   "ev_cov_ctx": null,
+   "pollution": null,
+   "dup": 0.0,
+   "top_files": [
+    "八股文错题.md",
+    "cider-基建2023.md",
+    "八股文随笔.md",
+    "八股文随笔.md",
+    "黑五分享.md",
+    "八股文随笔.md",
+    "推荐系统架构 + 黑五.md",
+    "八股文随笔.md"
+   ],
+   "top_block_ids": [
+    "ad395f85b10681ee8303fd5298d1b6cb::9d48f1122665a31a::/H1/面经/H2/有赞一面#1",
+    "6711733679281ee1f12251ae60a3dfb2::2df0e044046b33f0::/H1/2023-08-31/H2/运维建设-吕佳-haon-贾铮-张宇-5/H4/监控-5#1",
+    "3c925e381f2111d49dc81931af2de4bf::137681415b5587ce::/H1/场景题/H2/秒杀系统设计#1",
+    "3c925e381f2111d49dc81931af2de4bf::137681415b5587ce::/H1/redis/H2/性能优化#1",
+    "6d87e36ea6fb762ce91968e730a82013::8bac8a611b5bea40::/H1/23-黑五/H2/商品促销缓存热-key-导致-redis-单分片-cpu-居高不下#1",
+    "3c925e381f2111d49dc81931af2de4bf::137681415b5587ce::/H1/redis/H2/内存管理#1",
+    "41c49b124a6c473497475b00f6f87c18::0267ecfa4c2375ec::/H2/黑五回顾/H3/遇到的问题及优化#1",
+    "3c925e381f2111d49dc81931af2de4bf::137681415b5587ce::/H1/redis/H2/生产问题#1"
+   ]
+  },
+  "dense": {
+   "latency_ms": 8.4,
+   "top1_sim": 0.6846,
+   "hit": {
+    "1": 0,
+    "3": 0,
+    "5": 0,
+    "8": 0,
+    "10": 0
+   },
+   "rr": 0.0,
+   "ndcg8": 0.0,
+   "ev_cov_raw": null
+  },
+  "bm25": {
+   "latency_ms": 19.3,
+   "top1_score": 19.783,
+   "hit": {
+    "1": 0,
+    "3": 0,
+    "5": 0,
+    "8": 0,
+    "10": 0
+   },
+   "rr": 0.0,
+   "ndcg8": 0.0,
+   "ev_cov_raw": null
+  },
+  "ablation": {
+   "0.60": {
+    "n_out": 8,
+    "hit5": null,
+    "ev_cov_ctx": null
+   }
+  }
+ },
+ {
+  "id": "N12",
+  "cat": "negative",
+  "diff": "easy",
+  "query": "拜占庭帝国灭亡的经济原因有哪些？",
+  "gold": [],
+  "n_gold": 0,
+  "hybrid": {
+   "n_out": 0,
+   "latency_ms": 110.0,
+   "top1_sim": null,
+   "hit": {
+    "1": 0,
+    "3": 0,
+    "5": 0,
+    "8": 0,
+    "10": 0
+   },
+   "recall": {
+    "1": null,
+    "3": null,
+    "5": null,
+    "8": null,
+    "10": null
+   },
+   "rr": 0.0,
+   "ndcg8": 0.0,
+   "ev_cov_raw": null,
+   "ev_cov_ctx": null,
+   "pollution": null,
+   "dup": 0.0,
+   "top_files": [],
+   "top_block_ids": []
+  },
+  "dense": {
+   "latency_ms": 7.3,
+   "top1_sim": 0.3218,
+   "hit": {
+    "1": 0,
+    "3": 0,
+    "5": 0,
+    "8": 0,
+    "10": 0
+   },
+   "rr": 0.0,
+   "ndcg8": 0.0,
+   "ev_cov_raw": null
+  },
+  "bm25": {
+   "latency_ms": 18.3,
+   "top1_score": 16.426,
+   "hit": {
+    "1": 0,
+    "3": 0,
+    "5": 0,
+    "8": 0,
+    "10": 0
+   },
+   "rr": 0.0,
+   "ndcg8": 0.0,
+   "ev_cov_raw": null
+  },
+  "ablation": {
+   "0.60": {
+    "n_out": 0,
+    "hit5": null,
+    "ev_cov_ctx": null
+   }
+  }
+ }
+]

@@ -287,7 +287,7 @@ export interface Conversation {
   workspace_id?: string;
 }
 
-/** 工作区（对话分区）：侧边栏顶部分区切换器的条目。 */
+/** 工作区（对话分区）：侧边栏文件夹树的条目。 */
 export interface Workspace {
   id: string;
   name: string;
@@ -295,6 +295,10 @@ export interface Workspace {
   updated_at: string;
   /** 默认分区：不可删除。 */
   is_default: boolean;
+  /** 置顶（别针）：排在其他分区之前。 */
+  pinned?: boolean;
+  /** 手工拖拽排序位；null/缺省 = 未排过（按创建时间）。 */
+  order_index?: number | null;
   /** 该分区下的活跃会话数。 */
   conversation_count: number;
 }
