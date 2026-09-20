@@ -25,7 +25,7 @@ function renderMarkdown(content: string, sources: Source[] | null): string {
   md.inline.ruler.before("link", "citation", (state, silent) => {
     const start = state.pos;
     if (state.src.charCodeAt(start) !== 0x5b /* '[' */) return false;
-    const match = /^\[((?:S|W|M)\d+|\d+)\]/.exec(state.src.slice(start));
+    const match = /^\[((?:S|W|M|H)\d+|\d+)\]/.exec(state.src.slice(start));
     if (match === null) return false;
     // 仅当后面紧跟 '(' 时是标准 Markdown 链接（[3](url)），交给 link 规则。
     // 相邻引用（如 [4][6]）要逐个转成徽章，不能当作链接引用 [text][ref] 丢弃。

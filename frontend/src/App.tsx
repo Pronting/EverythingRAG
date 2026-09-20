@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  appendConversationMessages,
   archiveConversation,
   createConversation,
   deleteConversation,
@@ -24,21 +23,29 @@ import Chat from "./components/Chat";
 import { CitationPanel } from "./components/CitationPanel";
 import ConfirmDialog from "./components/ConfirmDialog";
 import ConversationMenu from "./components/ConversationMenu";
+import MemoryPanel from "./components/MemoryPanel";
 import SettingsModal from "./components/SettingsModal";
 import Sidebar from "./components/Sidebar";
 import type { ConversationAction, ConversationMenuState } from "./components/Sidebar";
 import type { DropTarget } from "./components/WorkspaceTree";
 import { getSettings } from "./api/settingsApi";
 import { persistTheme, readStoredTheme } from "./theme";
+import {
+  DEFAULT_PERMISSION_MODE,
+  DEFAULT_REASONING_LEVEL,
+} from "./components/PermissionMenu";
 import type {
   ConversationMessage,
   ConversationSummary,
+  PermissionMode,
+  ReasoningLevel,
   Source,
   StatusResponse,
   ThemeValue,
   ToastType,
   Workspace,
 } from "./types";
+import { DEFAULT_WORKSPACE_ID } from "./types";
 import "./App.css";
 import "./design.css";
 import "./settings.css";
@@ -82,6 +89,11 @@ export default function App() {
    * 否则历史会被重复写一遍（fork 场景尤其明显：分支本来就已含父对话的消息）。
    */
   const loadingConversationRef = useRef(false);
+
+  // V1.2 会话级设置（PRD 14.1）：权限模式与思考深度，默认「请求批准 + 深度思考」。
+  const [permissionMode, setPermissionMode] = useState<PermissionMode>(DEFAULT_PERMISSION_MODE);
+  const [reasoningLevel, setReasoningLevel] = useState<ReasoningLevel>(DEFAULT_REASONING_LEVEL);
+  const [memoryOpen, setMemoryOpen] = useState(false);
 
   const loadStatus = useCallback((): void => {
     fetch("/api/status")
@@ -369,10 +381,11 @@ export default function App() {
     }
   };
 
-  /** 一轮问答完成后：持久化消息；首次交互用 AI 生成标题；刷新侧边栏列表。
+  /** 一轮问答完成后：刷新侧边栏与标题。
    *
-   * 默认会话（未点「新对话」）首次问答时惰性新建会话——否则 activeConversationId
-   * 为 null，本轮会被直接丢弃、不进侧边栏。
+   * V1.2 起消息落库由后端 run 的 `commit_answer` 在同一次事务里完成（用户消息在
+   * `POST /runs` 时写入），前端**不再**调用 `/messages` 追加 —— 否则同一轮会被
+   * 写两遍。这里只负责「首次交互生成标题 + 刷新列表」这些纯界面副作用。
    */
   const handleExchangeComplete = useCallback(
     async (
@@ -405,28 +418,16 @@ export default function App() {
       ];
       const isFirst = chatMessages.length === 0;
 
-      let conversationId = activeConversationId;
-      if (conversationId === null) {
-        // 惰性新建会话：同步更新 activeId + 消息列表，避免 Chat 因 id 变化重置而丢消息
-        try {
-          const conversation = await createConversation(activeWorkspaceId);
-          conversationId = conversation.id;
-          setActiveConversationId(conversation.id);
-          setConversations((prev) => [conversation, ...prev]);
-          setChatMessages(newMessages);
-        } catch (error) {
-          setStatusError(error instanceof Error ? error.message : String(error));
-          return;
-        }
-      } else {
-        setChatMessages((prev) => [...prev, ...newMessages]);
-      }
+      // 会话由 Chat 在创建 run 之前惰性建好（见 handleEnsureConversation）。
+      const conversationId = activeConversationId;
+      if (conversationId === null) return;
 
-      // 会话消息仍在异步装载中：本轮结果没有可靠的历史基线，不追加落库（见 ref 注释）。
+      setChatMessages((prev) => [...prev, ...newMessages]);
+
+      // 会话消息仍在异步装载中：跳过标题等副作用，避免与装载竞态。
       if (loadingConversationRef.current) return;
 
       try {
-        await appendConversationMessages(conversationId, newMessages);
         if (isFirst) {
           await generateConversationTitle(conversationId);
         }
@@ -436,8 +437,31 @@ export default function App() {
         setStatusError(error instanceof Error ? error.message : String(error));
       }
     },
-    [activeConversationId, activeWorkspaceId, chatMessages.length, loadConversations, loadWorkspaces],
+    [activeConversationId, chatMessages.length, loadConversations, loadWorkspaces],
   );
+
+  /**
+   * 惰性确保会话存在并返回 id。
+   *
+   * V1.2 的 `POST /api/workspaces/{w}/runs` 必须带 `conversation_id`，所以会话要在
+   * 创建 run **之前**存在（V1.1 是问答完成后再惰性建会话）。
+   */
+  const handleEnsureConversation = useCallback(async (): Promise<string | null> => {
+    if (activeConversationId !== null) return activeConversationId;
+    try {
+      const conversation = await createConversation(activeWorkspaceId);
+      setActiveConversationId(conversation.id);
+      setConversations((prev) => [conversation, ...prev]);
+      void loadWorkspaces();
+      return conversation.id;
+    } catch (error) {
+      showToast(
+        "error",
+        error instanceof Error ? error.message : "无法创建会话，请稍后重试",
+      );
+      return null;
+    }
+  }, [activeConversationId, activeWorkspaceId, loadWorkspaces, showToast]);
 
   const handleCitationSelect = useCallback((sources: Source[], index: number): void => {
     setCitationPanel({ sources, index });
@@ -579,20 +603,40 @@ export default function App() {
       <main className="app-main">
         <header className="workspace-header">
           <div className="workspace-breadcrumb"><span>个人空间</span><span aria-hidden="true">/</span><strong>知识对话</strong></div>
+          <button
+            type="button"
+            className="workspace-header-action"
+            data-testid="open-memory"
+            onClick={() => setMemoryOpen(true)}
+          >
+            工作区记忆
+          </button>
         </header>
         <Chat
           conversationId={activeConversationId}
           initialMessages={chatMessages}
+          workspaceId={activeWorkspaceId ?? DEFAULT_WORKSPACE_ID}
+          ensureConversation={handleEnsureConversation}
           revision={chatRevision}
           onExchangeComplete={handleExchangeComplete}
           onEditUserMessage={handleEditUserMessage}
           onChatComplete={loadStatus}
           avatars={avatars}
           onCitationSelect={handleCitationSelect}
-          searchConfigured={status?.config.search_configured ?? false}
-          knowledgeOnly={knowledgeOnly}
+          permissionMode={permissionMode}
+          reasoningLevel={reasoningLevel}
+          onPermissionModeChange={setPermissionMode}
+          onReasoningLevelChange={setReasoningLevel}
+          onNotify={showToast}
         />
       </main>
+      {memoryOpen && (
+        <MemoryPanel
+          workspaceId={activeWorkspaceId ?? DEFAULT_WORKSPACE_ID}
+          onClose={() => setMemoryOpen(false)}
+          onNotify={showToast}
+        />
+      )}
       {conversationMenu !== null && (
         <ConversationMenu
           state={conversationMenu}
