@@ -35,6 +35,8 @@ import type { AnswerState } from "../run/answerState";
 import {
   applyRunEvent,
   emptyProcessState,
+  profileIdFromCitations,
+  relevanceEmptyNote,
   retrievalFromRerankTool,
   runningEntryText,
   terminalStatusText,
@@ -458,9 +460,23 @@ export default function Chat({
       if (event.type === "run.status") patch.runStatus = event.payload.status;
       if (event.type === "tool.completed") {
         // 相关性筛选（PRD §8.2）：run 架构没有 `meta.retrieval`，筛选状态由
-        // `tool.completed`（tool_name="rerank"）推出；非 rerank 工具返回 null，不改状态。
+        // `tool.completed`（tool_name="rerank"）的真实入选/候选计数推出；
+        // 非 rerank 工具返回 null，不改状态。
         const retrieval = retrievalFromRerankTool(event.payload);
         if (retrieval !== null) patch.retrieval = retrieval;
+      }
+      if (event.type === "answer.meta") {
+        // 筛选档案 id 只随引用到达（事件负载没有该字段，events.py 只读），而
+        // `answer.meta` 晚于 rerank 进度事件 ⇒ 在这里补全；缺记录保持 null，不编造。
+        const profileId = profileIdFromCitations(event.payload.citations ?? []);
+        if (profileId !== null) {
+          updateMessage(assistantId, (m) => ({
+            ...m,
+            ...patch,
+            retrieval: m.retrieval === null ? null : { ...m.retrieval, profile_id: profileId },
+          }));
+          return;
+        }
       }
       if (event.type === "run.completed") {
         patch.runStatus = event.payload.status;
@@ -1044,6 +1060,14 @@ export default function Chat({
                 {msg.role === "assistant" && msg.answerBasis === "insufficient" && (
                   <p className="message-gaps-note" data-testid="insufficient-note">
                     现有资料不足以支持结论，已在正文标明缺少依据的部分。
+                  </p>
+                )}
+
+                {/* 筛选跑了但一条都没入选（PRD §8.2 的 empty 态）：必须说出来，
+                    否则用户只看到「没有来源」而不知道这是相关性筛选的结果。 */}
+                {msg.role === "assistant" && msg.retrieval?.status === "empty" && (
+                  <p className="message-relevance-note" data-testid="relevance-empty-note">
+                    {relevanceEmptyNote(msg.retrieval)}
                   </p>
                 )}
 

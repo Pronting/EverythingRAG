@@ -1,5 +1,6 @@
 import type {
   AgentKind,
+  CitationEntry,
   EvidenceSummary,
   PlanTaskSummary,
   ProcessEntry,
@@ -45,15 +46,6 @@ export const TOOL_ACTION_LABELS: Record<string, string> = {
   ask_user: "正在向你确认",
 };
 
-/**
- * 相关性筛选进度事件的专用收口文案。
- *
- * 后端发布 rerank 进度时只带 `tool_name` / `status` / `error_code`（`result_count`
- * 与 `source_count` 未发布、取模型默认 0），所以**不能**把 0 当成「没有资料通过筛选」。
- * 入选资料以本轮来源为准（见 `SourceFooter`）。
- */
-const RERANK_DONE_TEXT = "筛选资料：已完成（入选资料见下方来源）";
-
 /** Agent 种类 → 行动说明。 */
 export const AGENT_ACTION_LABELS: Record<string, string> = {
   intent: "正在理解问题",
@@ -74,8 +66,8 @@ export function toolResultText(payload: ToolCompletedPayload): string {
     const reason = payload.error_code === "" ? "执行失败" : `执行失败（${payload.error_code}）`;
     return `${action.replace("正在", "")}：${reason}`;
   }
-  // 筛选进度事件不发布计数（见 RERANK_DONE_TEXT）：按「已完成」收口，不编造条数。
-  if (payload.tool_name === "rerank") return RERANK_DONE_TEXT;
+  // 筛选进度事件的计数自 t5 起是**真实值**（入选数 / 候选数），按真实结果收口。
+  if (payload.tool_name === "rerank") return rerankResultText(payload);
   if (payload.result_count === 0) {
     return `${action.replace("正在", "")}：未找到可用资料`;
   }
@@ -84,26 +76,85 @@ export function toolResultText(payload: ToolCompletedPayload): string {
 }
 
 /**
+ * 相关性筛选完成后的一步说明（PRD §8.2 / §8.3）。
+ *
+ * 只用运行层发布的真实计数（`result_count` = 入选数、`source_count` = 候选数）：
+ * 一条都没入选时必须如实说出来，而**不是**含糊地写「已完成」。
+ */
+function rerankResultText(payload: ToolCompletedPayload): string {
+  const selected = payload.result_count;
+  const candidates = payload.source_count;
+  if (selected > 0) {
+    return candidates > 0
+      ? `筛选资料：入选 ${selected} 条资料（候选 ${candidates} 条）`
+      : `筛选资料：入选 ${selected} 条资料`;
+  }
+  if (candidates > 0) return `筛选资料：候选 ${candidates} 条全部未入选`;
+  return "筛选资料：没有可筛选的候选资料";
+}
+
+/**
  * 相关性筛选完成事件 → 本轮筛选状态（PRD §8.2 的三态）。
  *
  * 仅供 `tool.completed`（tool_name="rerank"）使用；其余工具返回 null。
  *
- * 为什么不区分 `filtered` / `empty`：筛选进度事件**不发布** `result_count`
- * （取默认 0），把它当「0 条入选」会把「已筛选出资料」误报成「没有资料通过筛选」。
- * 因此这里只断言**筛选流程已成功完成**（`filtered`）——此时正文来源正是该工具的
- * 入选结果；未入选则本轮没有知识来源、脚注不渲染。失败时不改状态：真实错误由
- * `tool.completed.error_code` 与 `run.failed` 如实展示，绝不把失败说成「未启用」。
- * `disabled` 由 `null` 表达（前端按来源自身字段判定）。
+ * 计数由运行层发布（集成 t5 起为**真实值**）：`result_count` = 入选数、
+ * `source_count` = 候选数。据此判定：
  *
- * 契约缺口（已上报 captain）：`result_count` / 每来源的 `rerank_score` 等字段目前
- * 只到工具结果层，未进入事件流，故本函数不涉及它们。
+ * * `result_count > 0` ⇒ `filtered`（已筛选，入选 `selected_count` 条）；
+ * * `result_count == 0` 且 `source_count > 0` ⇒ `empty`（有候选、无一条入选）；
+ * * 检索本身没有候选（两者皆 0）⇒ `null`：这不是「筛选掉」的结果，不得说成
+ *   `empty`（否则等于把「知识库里没命中」写成「候选都没通过筛选」）；
+ * * 未启用筛选（全程无 rerank 事件）⇒ `null`（= `disabled`），界面按来源自身字段判定。
+ *
+ * 失败时不改状态：真实错误由 `tool.completed.error_code` 与 `run.failed` 如实展示，
+ * 绝不把失败说成「未启用」或「没有资料通过筛选」。
+ *
+ * `profile_id` 不在事件负载里（`events.py` 只读），只能从**本轮引用**取：
+ * 由 `answer.meta` 后到时用 `profileIdFromCitations` 补全（见 `Chat.tsx`）。
  */
 export function retrievalFromRerankTool(
   payload: ToolCompletedPayload,
+  citations: CitationEntry[] = [],
 ): RetrievalMeta | null {
   if (payload.tool_name !== "rerank") return null;
   if (payload.status !== "succeeded") return null;
-  return { status: "filtered", profile_id: null };
+  const selected = payload.result_count;
+  const candidates = payload.source_count;
+  if (selected <= 0 && candidates <= 0) return null;
+  return {
+    status: selected > 0 ? "filtered" : "empty",
+    selected_count: selected,
+    candidate_count: candidates,
+    profile_id: profileIdFromCitations(citations),
+  };
+}
+
+/**
+ * 本轮引用的筛选档案 id：第一条带 `profile_id` 的引用（缺记录时为 null，不编造）。
+ *
+ * 事件负载没有该字段（`events.py` 只读），它只随 `answer.meta.citations` 到达，
+ * 且真实顺序里 `answer.meta` **晚于** rerank 进度事件，因此需要在答案通道到达时补全。
+ */
+export function profileIdFromCitations(citations: CitationEntry[]): string | null {
+  for (const citation of citations) {
+    const profileId = citation.profile_id;
+    if (typeof profileId === "string" && profileId !== "") return profileId;
+  }
+  return null;
+}
+
+/**
+ * `empty` 态的用户可见说明（PRD §8.2）：有候选但一条都没通过筛选时**必须说出来**，
+ * 否则用户只看到「没有来源」而不知道是筛选的结果。
+ *
+ * 只用事件里的真实候选数；拿不到候选数时不编造条数。
+ */
+export function relevanceEmptyNote(meta: RetrievalMeta): string {
+  const candidates = meta.candidate_count ?? 0;
+  return candidates > 0
+    ? `本轮没有资料通过相关性筛选（候选 ${candidates} 条全部未入选）。`
+    : "本轮没有资料通过相关性筛选。";
 }
 
 /**

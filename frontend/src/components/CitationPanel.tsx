@@ -75,8 +75,16 @@ export function CitationPanel({
   const similarity = vectorSimilarityLabel(source);
   const members = filtered ? source.member_refs ?? [] : [];
 
+  // 诊断属性（PRD 12.5：实现参数只进诊断，不占日常可见文案）：本轮筛选的校准档案 id 与
+  // 证据视图载荷哈希自 t5 起随引用到达界面，这里挂成 data-* 便于排障与 E2E 核对
+  // 「字段真的到了来源层」，而不是把它们写进用户可见的正文/元数据行。
   return (
-    <aside className="citation-panel" aria-label="来源详情">
+    <aside
+      className="citation-panel"
+      aria-label="来源详情"
+      data-profile-id={source.profile_id ?? ""}
+      data-evidence-hash={source.evidence_hash ?? ""}
+    >
       <header className="citation-panel-header">
         <span className="citation-panel-count">
           来源 {index + 1} / {sources.length}

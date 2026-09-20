@@ -299,6 +299,18 @@ export interface CitationSeed {
   source_ref?: string;
   snippet?: string;
   source_status?: string;
+  /**
+   * 「已筛选资料」追加字段（后端 t5 纯追加；与后端 `CitationEntry` 同名同形）。
+   *
+   * 只有**显式给出**的键才会出现在 payload 里：缺省时帧里根本没有这些键，
+   * 与「旧记录 / 未启用筛选」的真实形态一致 —— 用例据此断言界面**不伪造**分数。
+   */
+  relevance_checked?: boolean;
+  rerank_score?: number | null;
+  score_type?: string;
+  profile_id?: string;
+  evidence_hash?: string;
+  member_refs?: Record<string, unknown>[];
 }
 
 // ------------------------------------------------------------ 图片引用（t25）
@@ -347,7 +359,7 @@ export function defaultImageRefs(images: string[]): Record<string, unknown>[] {
 }
 
 export function citationPayload(seed: CitationSeed): Record<string, unknown> {
-  return {
+  const payload: Record<string, unknown> = {
     label: seed.label,
     source_type: seed.source_type ?? "knowledge",
     evidence_id: seed.evidence_id ?? `ev-${seed.label}`,
@@ -357,6 +369,19 @@ export function citationPayload(seed: CitationSeed): Record<string, unknown> {
     snippet: seed.snippet ?? "",
     source_status: seed.source_status ?? "active",
   };
+  // 追加字段按「给了才带」语义注入：缺省时帧里没有这些键（= 旧记录/未启用筛选的真实形态）。
+  const relevance: (keyof CitationSeed)[] = [
+    "relevance_checked",
+    "rerank_score",
+    "score_type",
+    "profile_id",
+    "evidence_hash",
+    "member_refs",
+  ];
+  for (const key of relevance) {
+    if (seed[key] !== undefined) payload[key] = seed[key];
+  }
+  return payload;
 }
 
 export function answerMeta(

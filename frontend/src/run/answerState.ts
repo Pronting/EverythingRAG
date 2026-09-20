@@ -125,12 +125,19 @@ const IMAGE_REF = /^(?:\/api\/knowledge\/images\/[a-f0-9]{16,64}|https?:\/\/\S+\
 /**
  * 引用条目 → 正文/脚注用的来源条目。
  *
- * `similarity` 恒为 `null`：V1.2 的 `CitationEntry` 不携带向量分数，界面必须显示
+ * `similarity` 恒为 `null`：`CitationEntry` 仍不携带向量分数，界面必须显示
  * 「词法命中」而不是伪造 0%（PRD 8.3：来源位置可核）。
+ *
+ * 「已筛选资料」字段（集成 t5）**按原值搬运**：后端把本轮真实筛选结果
+ * （`relevance_checked` / `rerank_score` / `score_type` / `profile_id` /
+ * `evidence_hash` / `member_refs`）写在引用上，这里只拷贝 —— 记录缺失时保持缺省
+ * （`false` / `null` / `""` / `[]`），**绝不补造分数或成员**。
  */
 export function citationToSource(citation: CitationEntry): Source {
   const isWeb = citation.source_type === "web";
   const isImage = IMAGE_REF.test(citation.source_ref);
+  // 只有后端明确标了「经筛选」才搬分数与成员：旧记录/半截 payload 不得被当成已筛选。
+  const filtered = citation.relevance_checked === true;
   return {
     source_id: citation.label,
     block_id: citation.evidence_id,
@@ -145,6 +152,12 @@ export function citationToSource(citation: CitationEntry): Source {
     source_type: isWeb ? "web" : citation.source_type,
     url: isWeb ? citation.source_ref : null,
     image_url: isImage ? citation.source_ref : null,
+    relevance_checked: filtered,
+    rerank_score: filtered ? (citation.rerank_score ?? null) : null,
+    score_type: filtered ? (citation.score_type ?? "") : "",
+    profile_id: filtered ? (citation.profile_id ?? "") : "",
+    evidence_hash: filtered ? (citation.evidence_hash ?? "") : "",
+    member_refs: filtered ? (citation.member_refs ?? []) : [],
   };
 }
 

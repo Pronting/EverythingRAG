@@ -3310,6 +3310,7 @@ body {
 .message-gaps-title { margin: 0 0 4px; font-weight: 600; }
 .message-gaps-line { margin: 0; }
 .message-gaps-note,
+.message-relevance-note,
 .message-stopped-note { margin: 6px 0 0; font-size: 12.5px; color: #6b7280; }
 
 /* ------------------------------------------------------ 权限/思考菜单 */

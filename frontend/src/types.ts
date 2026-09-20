@@ -541,7 +541,14 @@ export const CLOSING_EVENT_TYPES: EventType[] = [
 
 // ---------------------------------------------------------------- 契约对象
 
-/** 引用条目（PRD 8.3）：稳定编号 + 来源身份 + 保存片段 + 来源状态。 */
+/**
+ * 引用条目（PRD 8.3）：稳定编号 + 来源身份 + 保存片段 + 来源状态。
+ *
+ * 后 6 个字段是后端**纯追加**（集成 t5，captain 已批准）：run 架构没有旧
+ * `/api/chat` 的 `meta.sources`，main 展示过的「已筛选资料」信息只能经
+ * `answer.meta.citations` 到达界面。**全部可选**：旧记录/旧后端不带这些键，
+ * 缺省时界面**不显示**该信息（不填 0、不编造分数，PRD §8.3）。
+ */
 export interface CitationEntry {
   label: string;
   source_type: SourceType;
@@ -551,6 +558,18 @@ export interface CitationEntry {
   source_ref: string;
   snippet: string;
   source_status: CitationSourceStatus;
+  /** 本条来源是否经过相关性筛选（PRD §8.3「已筛选资料」）；缺省视为未筛选。 */
+  relevance_checked?: boolean;
+  /** 筛选服务的排序分数（例如 0.812）；未启用筛选或服务未给出时为 null（**不填 0**）。 */
+  rerank_score?: number | null;
+  /** 分数类型："rerank" = 相关性筛选排序分数；其余情况为空串。 */
+  score_type?: string;
+  /** 产生该排序分数的校准档案 id；未筛选时为空串。 */
+  profile_id?: string;
+  /** 证据视图载荷哈希（成员集合与评分正文的稳定指纹）；未筛选时为空串。 */
+  evidence_hash?: string;
+  /** 组合成员引用（与 `MemberRef` 同形，后端 `MemberRef.to_dict()` 原样投影）。 */
+  member_refs?: MemberRef[];
 }
 
 export interface WebReadRange {
