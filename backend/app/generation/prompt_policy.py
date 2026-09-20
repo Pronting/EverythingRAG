@@ -128,25 +128,61 @@ _OVERVIEW_INTENT_RE = re.compile(
 _PRODUCT_SUBJECT_RE = re.compile(
     r"everything[-\s]*rag|(?:这个|当前|本)(?:rag)?(?:项目|产品|助手)", re.IGNORECASE
 )
+#: 对「助手本身」提问的主语（「你能帮我识图吗」这类没有产品名的问题）。
+_ASSISTANT_SUBJECT_RE = re.compile(r"(?:你|您)(?:能|可以|会|支持|帮)")
 _PRODUCT_INTENT_RE = re.compile(
     r"(?:是什么|做什么|干什么|干嘛|能做什么|功能|作用|用途|怎么用|如何使用|介绍|"
     r"总结|概览|概况|整体情况)"
 )
+#: 产品能力问法（PRD 6.3 R7）：问的是产品做什么 / 支持什么，而不是资料内容。
+#: 不含「有没有」这类通用疑问词 —— 它们常出现在资料内容问题里（「文档里有没有提到 X」）。
+_PRODUCT_CAPABILITY_RE = re.compile(
+    r"(?:支持|是否|能不能|可不可以|会不会|可以|功能|能力|权限|设置|配置|"
+    r"开关|上传|云端|隐私|识图|图片|模型|备份|导出|怎么用|如何使用|能做什么|"
+    r"是什么|做什么|干什么|干嘛|作用|用途|介绍)"
+)
+
+
+def is_knowledge_overview(message: str) -> bool:
+    """是否只是在问「本区资料有哪些 / 有多少」（PRD 6.3 R7 的概览分支）。
+
+    V1.2.0 起该判定由意图路由（``app/agent/routing.py``）与既有问答路径共用同一份
+    窄规则，避免出现两套「什么算概览」的定义。
+    """
+
+    normalized = " ".join(message.casefold().split())
+    return any(marker in normalized for marker in _OVERVIEW_MARKERS) or (
+        _OVERVIEW_SUBJECT_RE.search(normalized) is not None
+        and _OVERVIEW_INTENT_RE.search(normalized) is not None
+    )
+
+
+def is_product_help(message: str) -> bool:
+    """是否只是在问产品功能 / 用法（PRD 6.3 R7 的产品分支）。
+
+    三类问法都算：显式产品名问法、以产品/助手为主语的能力问法（「这个项目支持联网吗」
+    「你能帮我识图吗」）。主语限定很窄，避免把资料内容问题误判成产品问题。
+    """
+
+    normalized = " ".join(message.casefold().split())
+    if any(marker in normalized for marker in _PRODUCT_MARKERS):
+        return True
+    if _PRODUCT_SUBJECT_RE.search(normalized) is not None:
+        return (
+            _PRODUCT_INTENT_RE.search(normalized) is not None
+            or _PRODUCT_CAPABILITY_RE.search(normalized) is not None
+        )
+    if _ASSISTANT_SUBJECT_RE.search(normalized) is not None:
+        return _PRODUCT_CAPABILITY_RE.search(normalized) is not None
+    return False
 
 
 def classify_query(message: str) -> QueryMode:
     """按可解释的窄规则路由；概览优先，避免「Everything RAG 库里有什么」误判。"""
 
-    normalized = " ".join(message.casefold().split())
-    if any(marker in normalized for marker in _OVERVIEW_MARKERS) or (
-        _OVERVIEW_SUBJECT_RE.search(normalized) is not None
-        and _OVERVIEW_INTENT_RE.search(normalized) is not None
-    ):
+    if is_knowledge_overview(message):
         return QueryMode.KNOWLEDGE_OVERVIEW
-    if any(marker in normalized for marker in _PRODUCT_MARKERS) or (
-        _PRODUCT_SUBJECT_RE.search(normalized) is not None
-        and _PRODUCT_INTENT_RE.search(normalized) is not None
-    ):
+    if is_product_help(message):
         return QueryMode.PRODUCT_HELP
     return QueryMode.CONTENT_QA
 

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from app.core.conversation_store import ConversationMessage, ConversationStore
 
 
@@ -252,6 +254,55 @@ def test_manual_sidebar_order_overrides_recency(tmp_path: Path) -> None:
     assert ordered[1:] == [third, second]
 
 
+def test_recency_order_is_stable_when_timestamps_tie(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """时间戳打平时顺序必须仍是「越新越靠前」，不能退化成创建顺序。
+
+    冻结 ``_now()`` 精确复现全量测试下的真实条件（Windows 时钟粒度约 15.6ms，
+    连续创建的三条会话常常落在同一时间戳）。修复前该断言会失败：
+    侧边栏回退到「创建顺序」（最早创建的在最前），与 recency 语义相反。
+    """
+
+    import app.core.conversation_store as conversation_store_module
+
+    frozen = "2026-09-19T00:00:00.000000+00:00"
+    monkeypatch.setattr(conversation_store_module, "_now", lambda: frozen)
+
+    store = ConversationStore(tmp_path)
+    first = _conversation_in(store, "default", "第一条")
+    second = _conversation_in(store, "default", "第二条")
+    third = _conversation_in(store, "default", "第三条")
+
+    # 打平的时间戳下仍须按「最近活动」倒序（第三条最后创建 → 排最前）
+    assert [item["id"] for item in store.list_summaries("default")] == [third, second, first]
+
+    # 拖拽后，未排序的两条仍保持同样的相对顺序（不依赖字典迭代顺序）
+    store.move_in_sidebar(first, target_index=0)
+    ordered = [item["id"] for item in store.list_summaries("default")]
+    assert ordered == [first, third, second]
+
+
+def test_archived_order_is_stable_when_timestamps_tie(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """归档列表同样不允许依赖字典迭代顺序：归档时间打平时按最近活动倒序。"""
+
+    import app.core.conversation_store as conversation_store_module
+
+    frozen = "2026-09-19T00:00:00.000000+00:00"
+    monkeypatch.setattr(conversation_store_module, "_now", lambda: frozen)
+
+    store = ConversationStore(tmp_path)
+    first = _conversation_in(store, "default", "第一条")
+    second = _conversation_in(store, "default", "第二条")
+    third = _conversation_in(store, "default", "第三条")
+    for conversation_id in (first, second, third):
+        store.set_archived(conversation_id, True)
+
+    assert [item["id"] for item in store.list_archived_summaries()] == [third, second, first]
+
+
 def test_move_in_sidebar_reorders_within_workspace(tmp_path: Path) -> None:
     store = ConversationStore(tmp_path)
     first = _conversation_in(store, "default", "A")
@@ -291,3 +342,31 @@ def test_move_in_sidebar_order_survives_reload(tmp_path: Path) -> None:
 
     reloaded = ConversationStore(tmp_path)
     assert [item["id"] for item in reloaded.list_summaries("default")] == [second, first]
+
+
+def test_search_order_is_stable_when_timestamps_tie(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """搜索结果同样不允许依赖字典迭代顺序：时间戳打平时按最近活动倒序。
+
+    ``search`` 原先只按 ``updated_at`` 排序（``reverse=True``），打平后退化为
+    **字典插入顺序**，即最早创建的最先返回，与「最近更新优先」的语义相反 ——
+    与侧边栏/归档列表是同一类缺陷（t12 一并修）。
+    """
+
+    import app.core.conversation_store as conversation_store_module
+
+    frozen = "2026-09-19T00:00:00.000000+00:00"
+    monkeypatch.setattr(conversation_store_module, "_now", lambda: frozen)
+
+    store = ConversationStore(tmp_path)
+    first = _conversation_in(store, "default", "共同关键词 第一条")
+    second = _conversation_in(store, "default", "共同关键词 第二条")
+    third = _conversation_in(store, "default", "共同关键词 第三条")
+
+    assert [item["id"] for item in store.search("共同关键词", "default")] == [
+        third,
+        second,
+        first,
+    ]
+

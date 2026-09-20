@@ -5,12 +5,28 @@
 且必须经唯一 OutboundClient 记录审计事件（provider="search"）。
 """
 
-from app.search.base import SearchError, SearchProvider, SearchResult
+from app.search.base import (
+    ExtractedPage,
+    ExtractFailure,
+    ExtractProvider,
+    ExtractResponse,
+    SearchError,
+    SearchProvider,
+    SearchResult,
+    WebSearchProvider,
+    WebSearchResponse,
+)
 from app.search.factory import create_search_provider_from_config
 
 __all__ = [
+    "ExtractFailure",
+    "ExtractProvider",
+    "ExtractResponse",
+    "ExtractedPage",
     "SearchError",
     "SearchProvider",
     "SearchResult",
+    "WebSearchProvider",
+    "WebSearchResponse",
     "create_search_provider_from_config",
 ]

@@ -236,7 +236,7 @@ def test_sync_without_registered_roots_400(client: TestClient) -> None:
 def test_sync_all_registered_roots_completes(client: TestClient, tmp_path: Path) -> None:
     """已登记一个来源根 -> /api/sync 202 + 完成，报告为增量形态且聚合所有根。"""
     state = DocumentStateStore(tmp_path / "state.db")
-    app.dependency_overrides[deps.get_state_store] = lambda: state
+    app.dependency_overrides[deps.get_workspace_state_store] = lambda: state
     try:
         state.register_source(tmp_path / "vault", synced_at="2026-08-12T00:00:00+00:00")
         resp = client.post("/api/sync")
@@ -324,11 +324,20 @@ def _upload_files(
     return client.post("/api/import/upload", files=files)
 
 
+def _documents_root() -> Path:
+    """本用例的规范根：按**当前工作区**解析（V1.2.0 起上传落本区 documents/）。
+
+    T01 之后默认工作区也走每区目录树（data_dir/workspaces/<storage_key>/documents），
+    断言不能再写 data_dir/documents —— 那正是被修掉的全局布局。
+    """
+    from app.api import deps
+
+    return Path(deps.get_workspace_context_factory().resolve(None).documents_dir)
+
 def test_upload_import_returns_task_and_completes(client: TestClient) -> None:
     """上传 2 个 .md（含子目录相对路径）-> 202 + done；报告为增量形态；文件落规范根。"""
     import shutil
 
-    from app.core.config import settings
 
     resp = _upload_files(
         client,
@@ -346,11 +355,11 @@ def test_upload_import_returns_task_and_completes(client: TestClient) -> None:
         assert data["report"]["files_updated"] == 1
         assert data["report"]["files_deleted"] == 1
         # 文件持久落规范根（相对路径身份，非 task_id 目录）
-        docs = settings.data_dir / "documents"
+        docs = _documents_root()
         assert (docs / "a.md").is_file()
         assert (docs / "sub" / "b.md").is_file()
     finally:
-        shutil.rmtree(settings.data_dir / "documents", ignore_errors=True)
+        shutil.rmtree(_documents_root(), ignore_errors=True)
 
 
 def test_upload_registers_source_and_enables_sync(client: TestClient) -> None:
@@ -362,7 +371,6 @@ def test_upload_registers_source_and_enables_sync(client: TestClient) -> None:
     """
     import shutil
 
-    from app.core.config import settings
 
     resp = _upload_files(client, [("a.md", b"# A\n"), ("sub/b.md", b"# B\n")])
     assert resp.status_code == 202
@@ -377,7 +385,7 @@ def test_upload_registers_source_and_enables_sync(client: TestClient) -> None:
         assert sync_resp.status_code == 202
         assert "task_id" in sync_resp.json()
     finally:
-        shutil.rmtree(settings.data_dir / "documents", ignore_errors=True)
+        shutil.rmtree(_documents_root(), ignore_errors=True)
 
 
 def test_upload_rejects_path_traversal(client: TestClient) -> None:
@@ -415,7 +423,6 @@ def test_upload_dedupes_colliding_filenames(client: TestClient) -> None:
     """
     import shutil
 
-    from app.core.config import settings
 
     resp = _upload_files(
         client,
@@ -426,9 +433,9 @@ def test_upload_dedupes_colliding_filenames(client: TestClient) -> None:
     try:
         data = _wait_done(client, task_id)
         assert data["status"] == "done"
-        docs = settings.data_dir / "documents"
+        docs = _documents_root()
         # 两个同名文件都保留，第二个加序号（规范根下）
         assert (docs / "a.md").is_file()
         assert (docs / "a (1).md").is_file()
     finally:
-        shutil.rmtree(settings.data_dir / "documents", ignore_errors=True)
+        shutil.rmtree(_documents_root(), ignore_errors=True)

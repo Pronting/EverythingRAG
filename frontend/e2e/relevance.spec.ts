@@ -1,8 +1,34 @@
 import { expect, test, type Page } from "@playwright/test";
+import {
+  answerDelta,
+  answerMeta,
+  expectRunOnlyTraffic,
+  runCompleted,
+  runStatus,
+  stubRunBackend,
+  toolCompleted,
+  toolStarted,
+  type RunStub,
+} from "./runFixtures";
 
 /**
- * RAG-REL-001 前端接入（PRD §8.1/§8.2/§8.3）：
- * 设置页「资料相关性筛选」、问答进度、来源的「已筛选资料 / 排序分数」与旧记录兼容。
+ * RAG-REL-001 前端接入（PRD §8.1/§8.2/§8.3）：设置页「资料相关性筛选」、问答进度、
+ * 来源的「已筛选资料」脚注与旧记录兼容。
+ *
+ * 集成说明（merge/v120-into-main）：旧的 `POST /api/chat`（meta.retrieval + `tool` 帧）
+ * 已按 PRD 13.2 结构性下线，本文件**全部**改到 V1.2 的任务（run）架构上：
+ * - 进度：`tool.started` / `tool.completed`（`tool_name="rerank"`）——运行层发布的既有事件；
+ * - 来源：`answer.meta` 的 `CitationEntry`（run 架构的引用卡片契约）；
+ * - 守门口径：问答用例调用 `expectRunOnlyTraffic`（≥1 次命中 `/runs`、0 次命中 `/api/chat`）；
+ *   设置页用例不发起任务，改用本地 `expectNoLegacyChatTraffic`（只守 0 次 `/api/chat`）——
+ *   两者都不让 stub 拦住一个再也没人调用的旧端点。
+ *
+ * 契约现状（集成 t5/t7 后）：后端把**真实**的每来源字段随 `answer.meta.citations` 下发 ——
+ * 重排专属的 `relevance_checked` / `rerank_score` / `score_type` / `profile_id` /
+ * `evidence_hash` / `member_refs`，以及**与重排无关**的原始向量分数 `similarity`；
+ * rerank 的 `tool.completed` 另给真实 `result_count`（入选数）/ `source_count`（候选数）。
+ * 本文件据此断言「真实值真的被渲染出来」（排序分数 / 向量相似度 ×100 / 组合成员 range /
+ * chip 与徽标），同时保留「缺字段时**不显示**、不伪造 0% 或正确率/概率」的用例。
  */
 
 const STATUS_BODY = {
@@ -125,44 +151,30 @@ const BLOCKS_BODY = {
   ],
 };
 
-function encodeSse(frames: unknown[]): string {
-  return frames.map((frame) => `data: ${JSON.stringify(frame)}\n\n`).join("");
+/** 语义块库桩：来源面板「读取完整原文」走既有「语义块浏览」入口读它。 */
+async function stubBlocks(page: Page): Promise<void> {
+  await page.route("**/api/blocks", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(BLOCKS_BODY) }),
+  );
 }
 
-/** 基础后端 stub：App 启动需要 status/settings/workspaces/conversations。 */
-async function stubShell(page: Page, settingsView: unknown = SETTINGS_VIEW): Promise<void> {
+/**
+ * 基础后端桩：App 启动需要 status/settings（外加来源面板用的 blocks）。
+ *
+ * 复用 `stubRunBackend`（它已按 V1.2 契约桩好 status/conversations/workspaces/runs），
+ * 再**后注册**设置页用例需要的完整 settings 视图：Playwright 按注册顺序逆序匹配，
+ * 后注册的路由生效（既有设置用例依赖同一条性质）。
+ */
+async function stubShell(page: Page, settingsView: unknown = SETTINGS_VIEW): Promise<RunStub> {
+  const stub = await stubRunBackend(page);
   await page.route("**/api/status", (route) =>
     route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(STATUS_BODY) }),
   );
   await page.route("**/api/settings", (route) =>
     route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(settingsView) }),
   );
-  await page.route("**/api/workspaces**", (route) =>
-    route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify([
-        { id: "default", name: "默认", is_default: true, created_at: "", updated_at: "", conversation_count: 0 },
-      ]),
-    }),
-  );
-  await page.route("**/api/conversations**", (route) => {
-    const url = new URL(route.request().url());
-    if (route.request().method() === "POST") {
-      return route.fulfill({
-        status: 201,
-        contentType: "application/json",
-        body: JSON.stringify({ id: "conv-1", title: "新对话", message_count: 0, workspace_id: "default" }),
-      });
-    }
-    if (url.pathname === "/api/conversations") {
-      return route.fulfill({ status: 200, contentType: "application/json", body: "[]" });
-    }
-    return route.fulfill({ status: 200, contentType: "application/json", body: "{}" });
-  });
-  await page.route("**/api/blocks", (route) =>
-    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(BLOCKS_BODY) }),
-  );
+  await stubBlocks(page);
+  return stub;
 }
 
 async function send(page: Page, message: string): Promise<void> {
@@ -170,127 +182,145 @@ async function send(page: Page, message: string): Promise<void> {
   await page.getByRole("button", { name: "发送", exact: true }).click();
 }
 
-const FILTERED_FRAMES = [
-  { type: "tool", tool: "rerank", status: "running" },
-  {
-    type: "meta",
-    answer_basis: "knowledge",
-    policy_version: "rag-policy-v3",
-    query_mode: "CONTENT_QA",
-    retrieval: { status: "filtered", profile_id: "profile-live", candidate_count: 30, selected_count: 1 },
-    sources: [
-      {
-        source_id: "S1",
-        block_id: "chunk-a",
-        text: "本轮实际采用的证据片段。",
-        source_file: "notes.md",
-        similarity: 0.88,
-        match_type: "rerank",
-        heading_path: "项目笔记 > 概述",
-        anchor: "sec-overview",
-        chunk_type: "text",
-        platform: "local",
-        relevance_checked: true,
-        rerank_score: 0.812,
-        score_type: "rerank",
-        profile_id: "profile-live",
-        evidence_hash: "deadbeef",
-        member_refs: [
-          { block_id: "chunk-a", content_hash: "hash-a", relation: "primary", start: 120, end: 480, block_char_offset: 120 },
-          { block_id: "chunk-b", content_hash: "hash-b", relation: "supplement", start: 0, end: null, block_char_offset: 0 },
-        ],
-      },
-    ],
-  },
-  { type: "tool", tool: "rerank", status: "done" },
-  { type: "token", text: "答案见 [S1]。" },
-  { type: "done" },
-];
+/**
+ * 设置页用例不发起任何任务（不点「发送」），因此不适用「≥1 次命中 `/runs`」，
+ * 但仍必须守住「零次命中 `/api/chat`」——旧入口已结构性下线。
+ */
+function expectNoLegacyChatTraffic(stub: RunStub): void {
+  expect(stub.chatRequestCount(), "不得再请求 /api/chat").toBe(0);
+}
 
-/** 旧记录 / 未启用重排：只有向量相似度与匹配方式标签。 */
-const LEGACY_FRAMES = [
-  {
-    type: "meta",
-    answer_basis: "knowledge",
-    policy_version: "rag-policy-v3",
-    query_mode: "CONTENT_QA",
-    retrieval: { status: "disabled", profile_id: "", candidate_count: 0, selected_count: 2 },
-    sources: [
-      {
-        source_id: "S1",
-        block_id: "legacy-1",
-        text: "旧记录的向量命中片段。",
-        source_file: "legacy.md",
-        similarity: 0.92,
-        heading_path: "旧章节",
-        anchor: null,
-        chunk_type: "text",
-        platform: "local",
-      },
-      {
-        source_id: "S2",
-        block_id: "legacy-2",
-        text: "纯词法命中的旧片段。",
-        source_file: "legacy.md",
-        similarity: null,
-        match_type: "lexical",
-        heading_path: "旧章节",
-        anchor: null,
-        chunk_type: "text",
-        platform: "local",
-      },
-    ],
-  },
-  { type: "token", text: "旧记录回答。" },
-  { type: "done" },
-];
-
-test("问答显示「正在筛选资料」进度，结束后正常出答案", async ({ page }) => {
-  // /api/chat 不 stub：由 dev server 的慢速 SSE 夹具提供（含 rerank running 帧）。
-  await stubShell(page);
+test("问答显示「正在筛选资料」进度，停止后进度关闭", async ({ page }) => {
+  // 只有本用例不 stub run 端点：由 dev server 的慢速 SSE 夹具提供（见 vite.config.ts），
+  // 夹具里带 rerank 的 tool.started 帧。这一条同时是「夹具已从 /api/chat 迁到
+  // /api/workspaces/{w}/runs + .../events」的守门用例：挂错路径就会失败。
+  const stub = await stubRunBackend(page, { skipRuns: true });
   await page.goto("/");
   await send(page, "筛选进度测试");
 
-  // 评分期间不得先出答案：只有进度提示
-  await expect(page.getByText("正在筛选资料", { exact: false })).toBeVisible();
-  await expect(page.getByText("已经生成的前半")).toBeVisible();
-
-  // 用户可见的进度文案不暴露 RRF / tokenizer 等实现参数
+  // 评分期间必须有独立进度提示（此时正文还没开始吐字）
   const progress = page.locator(".chat-searching");
+  await expect(progress).toBeVisible();
+  await expect(progress).toContainText("正在筛选资料");
+  // 用户可见的进度文案不暴露 RRF / tokenizer 等实现参数
   await expect(progress).not.toContainText("RRF");
   await expect(progress).not.toContainText("tokenizer");
 
-  // 停止生成后进度关闭
+  // 夹具随后吐出正文片段：进度提示不得挡住正文
+  await expect(page.getByText("已经生成的前半")).toBeVisible();
+
+  // 过程区域同步显示筛选这一步（文案来自真实事件，不是预置）
+  await page.getByTestId("process-toggle").click();
+  await expect(page.getByTestId("process-entries")).toContainText("正在筛选资料");
+
+  // 停止生成后进度关闭，已吐出的正文保留
   await page.getByRole("button", { name: "停止生成" }).click();
-  await expect(page.getByText("已停止生成")).toBeVisible();
+  await expect(page.getByTestId("stopped-note")).toBeVisible();
   await expect(page.locator(".chat-searching")).not.toBeVisible();
+  await expect(page.getByText("已经生成的前半")).toBeVisible();
+  expect(stub.paths.some((path) => path.endsWith("/cancel"))).toBe(true);
+  expectRunOnlyTraffic(stub);
 });
 
-test("已筛选来源展示排序分数、组合成员与完整原文入口", async ({ page }) => {
-  await stubShell(page);
-  await page.route("**/api/chat", (route) =>
-    route.fulfill({ status: 200, contentType: "text/event-stream", body: encodeSse(FILTERED_FRAMES) }),
-  );
+test("已筛选来源渲染真实排序分数、组合成员与证据哈希", async ({ page }) => {
+  // 后端 t5/t7 起：每来源筛选字段随 `answer.meta.citations` 到达（纯追加、带默认值）。
+  // 本用例给**真实值**，断言界面真的把它们渲染出来（t2 时期这些字段到不了来源层）。
+  // 0.379238 是 PRD §56 记录的**真实**向量相似度（词法保留入选的那条来源）。
+  await stubBlocks(page);
+  const stub = await stubRunBackend(page, {
+    frames: [
+      runStatus("running", "research", "正在检索知识库"),
+      toolStarted("rerank", { operationId: "op-rerank" }),
+      // result_count = 入选数、source_count = 候选数（运行层发布的真实计数）
+      toolCompleted("rerank", { operationId: "op-rerank", status: "succeeded", resultCount: 1, sourceCount: 30 }),
+      answerMeta(
+        [
+          {
+            label: "S1",
+            source_ref: "notes.md",
+            snippet: "本轮实际采用的证据片段。",
+            relevance_checked: true,
+            rerank_score: 0.812,
+            score_type: "rerank",
+            profile_id: "profile-live",
+            evidence_hash: "deadbeef",
+            similarity: 0.379238,
+            member_refs: [
+              {
+                block_id: "chunk-a",
+                content_hash: "hash-a",
+                relation: "primary",
+                start: 120,
+                end: 480,
+                block_char_offset: 120,
+              },
+              {
+                block_id: "chunk-b",
+                content_hash: "hash-b",
+                relation: "supplement",
+                start: 0,
+                end: null,
+                block_char_offset: 0,
+              },
+            ],
+          },
+        ],
+        { basis: "knowledge" },
+      ),
+      answerDelta("答案见 [S1]。"),
+      runCompleted(),
+    ],
+  });
   await page.goto("/");
   await send(page, "已筛选来源测试");
   await expect(page.getByText("答案见")).toBeVisible();
 
-  // 来源脚注标「已筛选资料」，chip 不再是向量百分比
+  // 脚注状态由 rerank 完成事件推出；chip 由**来源自身**的 relevance_checked 渲染
   await expect(page.locator(".source-footer-label")).toHaveText("已筛选资料");
   await expect(page.locator(".source-chip-sim")).toHaveText("已筛选");
+  await expect(page.locator(".source-chip-filtered")).toHaveCount(1);
 
-  // 详细面板：排序分数 0.812，且绝不显示成正确率 / 概率百分比
+  // 过程区域如实收口筛选这一步（真实入选/候选计数）
+  await page.getByTestId("process-toggle").click();
+  await expect(page.getByTestId("process-entries")).toContainText("筛选资料：入选 1 条资料（候选 30 条）");
+
+  // 悬停预览：两个口径并存（PRD §306：原始数值明确叫「向量相似度」）。
+  // 放在打开右侧面板之前，避免两个浮层互相遮挡。
+  await page.locator(".markdown-body .citation").hover();
+  const tooltip = page.locator(".citation-tooltip");
+  await expect(tooltip).toBeVisible();
+  await expect(tooltip).toContainText("已筛选资料 · 排序分数 0.812");
+  await expect(tooltip).toContainText("向量相似度 38%");
+  await page.mouse.move(0, 0);
+
+  // 详细面板：排序分数、向量相似度、组合成员 range、原文；
+  // 档案 id 与证据哈希进诊断属性（不占可见文案）
   await page.getByRole("button", { name: /notes\.md/ }).click();
   const panel = page.getByRole("complementary", { name: "来源详情" });
   await expect(panel.locator(".citation-panel-badge")).toHaveText("已筛选资料");
   await expect(panel.locator(".citation-panel-score")).toHaveText("排序分数 0.812");
   await expect(panel.locator(".citation-panel-score")).not.toContainText("%");
+  // 原始向量分数 ×100 后显示，且**明确叫「向量相似度」**（PRD §52/§306）。
+  // 精度沿用既有 `util/source.ts`（`Math.round(sim*100)` ⇒ 整数百分比）：
+  // 0.379238（PRD §56 的真实值）⇒ 38%，**不是** 0.379 也不是 37.9。
+  await expect(panel.locator(".citation-panel-meta")).toHaveText("向量相似度 38%");
+  // 两条数值互不混淆：排序分数行不是百分比，向量相似度行不是排序分数
+  await expect(panel.locator(".citation-panel-score")).not.toContainText("向量相似度");
+  await expect(panel.locator(".citation-panel-meta")).not.toContainText("排序分数");
+  await expect(panel.locator(".citation-panel-meta")).not.toContainText("0.812");
   await expect(panel).not.toContainText("正确率");
   await expect(panel).not.toContainText("概率");
-  // 原始向量分数保持独立字段，明确叫「向量相似度」
-  await expect(panel.locator(".citation-panel-meta")).toContainText("向量相似度 88%");
-  // 面板展示的就是本轮实际采用的 evidence_text
+  await expect(panel).not.toContainText("未记录向量相似度");
+  await expect(panel).toHaveAttribute("data-profile-id", "profile-live");
+  await expect(panel).toHaveAttribute("data-evidence-hash", "deadbeef");
   await expect(panel.locator(".citation-panel-text")).toHaveText("本轮实际采用的证据片段。");
+
+  // 全页不得出现伪造的百分比分数（既无 0%，也没有正确率/概率的说法）
+  const bodyText = await page.locator("body").innerText();
+  expect(bodyText).not.toContain("0%");
+  expect(bodyText).not.toContain("正确率");
+  expect(bodyText).not.toContain("概率");
+  expect(bodyText).not.toContain("未记录向量相似度");
 
   // 组合成员可追溯：主证据 + 补充原文各带范围
   const members = panel.locator(".citation-panel-member");
@@ -302,42 +332,141 @@ test("已筛选来源展示排序分数、组合成员与完整原文入口", as
 
   // 读取完整原文：复用既有「语义块浏览」入口，完整原文不进入本轮来源片段
   await members.nth(1).getByRole("button", { name: "读取完整原文" }).click();
-  const browser = page.getByRole("dialog", { name: "语义块浏览" });
-  await expect(browser).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "语义块浏览" })).toBeVisible();
   const detail = page.getByRole("dialog", { name: "块详情" });
   await expect(detail.getByText("补充成员的完整原文全文。")).toBeVisible();
   await expect(detail.getByText("chunk-b")).toBeVisible();
+  expectRunOnlyTraffic(stub);
 });
 
-test("未启用筛选的来源保留匹配方式标签与「向量相似度」命名", async ({ page }) => {
-  await stubShell(page);
-  await page.route("**/api/chat", (route) =>
-    route.fulfill({ status: 200, contentType: "text/event-stream", body: encodeSse(LEGACY_FRAMES) }),
-  );
+test("有候选但一条都没入选：显示 empty 态说明，来源为空", async ({ page }) => {
+  // PRD §8.2 的 empty 态：`result_count=0` 且 `source_count>0`（有候选、无一条入选）。
+  // 必须让用户看见「这是筛选的结果」，而不是只剩一片空白。
+  const stub = await stubRunBackend(page, {
+    frames: [
+      runStatus("running", "research", "正在检索知识库"),
+      toolStarted("rerank", { operationId: "op-rerank" }),
+      toolCompleted("rerank", { operationId: "op-rerank", status: "succeeded", resultCount: 0, sourceCount: 3 }),
+      answerMeta([], { basis: "insufficient" }),
+      answerDelta("现有资料不足以支持结论。"),
+      runCompleted({ status: "completed_with_gaps", gaps: ["缺少可核对的资料"] }),
+    ],
+  });
+  await page.goto("/");
+  await send(page, "无材料入选测试");
+
+  const note = page.getByTestId("relevance-empty-note");
+  await expect(note).toBeVisible();
+  await expect(note).toHaveText("本轮没有资料通过相关性筛选（候选 3 条全部未入选）。");
+
+  // 过程区域同步说清这一步的真实结果
+  await page.getByTestId("process-toggle").click();
+  await expect(page.getByTestId("process-entries")).toContainText("筛选资料：候选 3 条全部未入选");
+
+  // 没有来源 ⇒ 不出现脚注/徽标；empty ≠「已筛选出资料」，也不得伪造分数
+  await expect(page.locator(".source-footer")).toHaveCount(0);
+  await expect(page.locator(".citation-panel-badge")).toHaveCount(0);
+  await expect(page.getByText("已筛选资料")).not.toBeVisible();
+  await expect(page.locator(".chat-searching")).not.toBeVisible();
+  await expect(note).not.toContainText("%");
+  expectRunOnlyTraffic(stub);
+});
+
+test("筛选完成但引用缺字段：只显示事件级结论，不伪造每来源分数", async ({ page }) => {
+  // 旧记录 / 半截 payload：rerank 事件在（筛选真的跑过），但引用上没有追加字段。
+  // 脚注（事件级）可以说「已筛选资料」；**每来源**的分数/成员/哈希必须留空 ——
+  // 契约默认值不得被渲染成 0 或假分数（PRD §8.3）。
+  const stub = await stubRunBackend(page, {
+    frames: [
+      runStatus("running", "research", "正在检索知识库"),
+      toolStarted("rerank", { operationId: "op-rerank" }),
+      toolCompleted("rerank", { operationId: "op-rerank", status: "succeeded", resultCount: 1, sourceCount: 5 }),
+      answerMeta([{ label: "S1", source_ref: "legacy.md", snippet: "旧记录引用的片段。" }], {
+        basis: "knowledge",
+      }),
+      answerDelta("答案见 [S1]。"),
+      runCompleted(),
+    ],
+  });
+  await page.goto("/");
+  await send(page, "字段缺失测试");
+  await expect(page.getByText("答案见")).toBeVisible();
+
+  // 事件级：筛选跑过且入选 1 条 ⇒ 脚注说「已筛选资料」
+  await expect(page.locator(".source-footer-label")).toHaveText("已筛选资料");
+  // 每来源级：引用没带 relevance_checked ⇒ chip 仍是匹配方式标签，不是「已筛选」
+  await expect(page.locator(".source-chip-sim")).toHaveText("词法命中");
+  await expect(page.locator(".source-chip-filtered")).toHaveCount(0);
+
+  await page.getByRole("button", { name: /legacy\.md/ }).click();
+  const panel = page.getByRole("complementary", { name: "来源详情" });
+  await expect(panel.locator(".citation-panel-badge")).toHaveCount(0);
+  await expect(panel.locator(".citation-panel-score")).toHaveCount(0);
+  await expect(panel).not.toContainText("排序分数");
+  await expect(panel).not.toContainText("0%");
+  await expect(panel).not.toContainText("正确率");
+  await expect(panel).not.toContainText("概率");
+  // 诊断属性为空 ⇒ 确实没有值可显示，而不是显示了一个 0
+  await expect(panel).toHaveAttribute("data-profile-id", "");
+  await expect(panel).toHaveAttribute("data-evidence-hash", "");
+  expectRunOnlyTraffic(stub);
+});
+
+test("未启用筛选的来源照常显示「向量相似度」，纯词法命中才显示「词法命中」", async ({ page }) => {
+  // 未启用相关性筛选：运行层不发布任何 rerank 事件 ⇒ 脚注回到「来源」。
+  // 但**向量相似度与 rerank 开关正交**（PRD §304）：S1 带原始向量分数 ⇒ 必须显示
+  // 「向量相似度 92%」；S2 真的没有向量分数（纯词法命中）⇒ 显示「词法命中」，
+  // 既不是 0% 也不是「未记录向量相似度」。
+  const stub = await stubRunBackend(page, {
+    frames: [
+      runStatus("running", "research", "正在检索知识库"),
+      toolStarted("search_knowledge", { operationId: "op-search" }),
+      toolCompleted("search_knowledge", { operationId: "op-search", resultCount: 2, sourceCount: 2 }),
+      answerMeta(
+        [
+          { label: "S1", source_ref: "legacy.md", snippet: "旧记录的命中片段。", similarity: 0.92 },
+          { label: "S2", source_ref: "legacy.md", snippet: "纯词法命中的旧片段。" },
+        ],
+        { basis: "knowledge" },
+      ),
+      answerDelta("旧记录回答。"),
+      runCompleted(),
+    ],
+  });
   await page.goto("/");
   await send(page, "旧记录测试");
   await expect(page.getByText("旧记录回答。")).toBeVisible();
 
-  // 未筛选：脚注仍是「来源」，匹配方式标签保留
+  // 未筛选：脚注仍是「来源」；本轮没有 rerank 事件 ⇒ 不出现筛选进度提示
   await expect(page.locator(".source-footer-label")).toHaveText("来源");
-  await expect(page.locator(".source-chip-sim").nth(0)).toHaveText("92%");
-  await expect(page.locator(".source-chip-sim").nth(1)).toHaveText("词法命中");
-  await expect(page.getByText("已筛选资料")).not.toBeVisible();
+  await expect(page.locator(".chat-searching")).not.toBeVisible();
+  const chips = page.locator(".source-chip-sim");
+  await expect(chips).toHaveCount(2);
+  // 有向量分数 ⇒ ×100 显示（92%）；无向量分数 ⇒ 词法命中（绝不 0%）
+  await expect(chips.nth(0)).toHaveText("92%");
+  await expect(chips.nth(1)).toHaveText("词法命中");
 
-  // 旧记录原始数值明确叫「向量相似度」，且不出现「排序分数」
+  // S1（未启用筛选 + 有向量分数）：面板明确叫「向量相似度」，且不出现「排序分数」
   await page.getByRole("button", { name: /legacy\.md/ }).first().click();
   const panel = page.getByRole("complementary", { name: "来源详情" });
   await expect(panel.locator(".citation-panel-meta")).toHaveText("向量相似度 92%");
+  await expect(panel.locator(".citation-panel-badge")).toHaveCount(0);
   await expect(panel).not.toContainText("排序分数");
+  await expect(panel).not.toContainText("0%");
+  // 未启用筛选 ⇒ 没有「已筛选资料」的措辞，也没有档案/哈希可显示
+  await expect(panel).toHaveAttribute("data-profile-id", "");
+  await expect(panel).toHaveAttribute("data-evidence-hash", "");
 
-  // 纯词法来源没有向量分数，绝不伪造 0%
+  // S2（真的没有向量分数）：如实显示「词法命中」，不伪造 0%
   await panel.getByRole("button", { name: "下一个来源" }).click();
   await expect(panel.locator(".citation-panel-meta")).toHaveText("词法命中");
   await expect(panel).not.toContainText("0%");
+  await expect(panel).not.toContainText("未记录向量相似度");
+  expectRunOnlyTraffic(stub);
 });
 
 test("设置页相关性筛选：状态、档案验证日期、密钥不回显、连接测试不代表质量通过", async ({ page }) => {
-  await stubShell(page);
+  const stub = await stubShell(page);
   let tested: unknown = null;
   await page.route("**/api/settings/rerank/test", (route) => {
     tested = route.request().postDataJSON();
@@ -392,10 +521,11 @@ test("设置页相关性筛选：状态、档案验证日期、密钥不回显�
   });
   await dialog.getByRole("button", { name: "关闭", exact: true }).click();
   expect(await page.locator("body").innerText()).not.toContain(UNSAVED_KEY);
+  expectNoLegacyChatTraffic(stub);
 });
 
 test("设置页相关性筛选：启用保存写入 rerank 字段，422 显示后端原因", async ({ page }) => {
-  await stubShell(page);
+  const stub = await stubShell(page);
   let view: Record<string, unknown> = structuredClone(SETTINGS_VIEW) as unknown as Record<string, unknown>;
   let putBody: Record<string, unknown> | null = null;
   let reject = false;
@@ -435,10 +565,11 @@ test("设置页相关性筛选：启用保存写入 rerank 字段，422 显示�
   await page.getByRole("button", { name: "保存", exact: true }).click();
   await expect(page.locator(".settings-error")).toHaveText("当前模型或设置与验证档案不匹配");
   await expect(page.getByRole("dialog", { name: "设置", exact: true })).toBeVisible();
+  expectNoLegacyChatTraffic(stub);
 });
 
 test("设置页相关性筛选：手机与桌面布局不溢出", async ({ page }) => {
-  await stubShell(page);
+  const stub = await stubShell(page);
   await page.goto("/");
   await page.getByRole("button", { name: "设置", exact: true }).click();
   for (const width of [1280, 390]) {
@@ -446,19 +577,24 @@ test("设置页相关性筛选：手机与桌面布局不溢出", async ({ page 
     await page.getByRole("button", { name: "相关性筛选", exact: true }).click();
     const section = page.locator(".settings-rerank");
     await expect(section.getByRole("heading", { name: "资料相关性筛选" })).toBeVisible();
-    for (const target of [section, section.getByRole("button", { name: "测试相关性筛选连接" }), section.getByLabel("筛选服务 API Key")]) {
+    for (const target of [
+      section,
+      section.getByRole("button", { name: "测试相关性筛选连接" }),
+      section.getByLabel("筛选服务 API Key"),
+    ]) {
       const box = await target.boundingBox();
       expect(box!.x).toBeGreaterThanOrEqual(0);
       expect(box!.x + box!.width).toBeLessThanOrEqual(width);
     }
   }
+  expectNoLegacyChatTraffic(stub);
 });
 
 test("设置页相关性筛选：启用但缺档案时前端拦截，不发起保存", async ({ page }) => {
   let puts = 0;
   const viewWithoutProfiles = structuredClone(SETTINGS_VIEW);
   viewWithoutProfiles.rerank = { ...RERANK_VIEW, enabled: false, profile_id: null, profiles: [] };
-  await stubShell(page);
+  const stub = await stubShell(page, viewWithoutProfiles);
   await page.route("**/api/settings", (route) => {
     if (route.request().method() === "PUT") {
       puts += 1;
@@ -477,4 +613,5 @@ test("设置页相关性筛选：启用但缺档案时前端拦截，不发起�
     "启用资料相关性筛选需要服务地址、模型、API Key 与校准档案齐备",
   );
   expect(puts).toBe(0);
+  expectNoLegacyChatTraffic(stub);
 });

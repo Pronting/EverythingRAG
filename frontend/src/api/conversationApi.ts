@@ -50,35 +50,177 @@ export async function createConversation(workspaceId?: string | null): Promise<C
   return (await response.json()) as ConversationSummary;
 }
 
-/** 侧边栏拖拽落点：把会话移到目标工作区（缺省原地）的第 targetIndex 位。 */
+// =====================================================================
+// 会话移动（PRD 5.4 / 13.2；A27 / A28）
+//
+// ⚠️ 两条硬要求，任何一条缺失都会让真实 UI 上的移动失败：
+// 1. **`confirm`**：会话携带历史或存在活动任务时，后端返回 409 要求显式确认
+//    （PRD 5.4 首句：移动会携带历史内容）。**必须在用户确认之后**才置 true ——
+//    默认静默 true 等于绕过用户确认语义。
+// 2. **`expected_context_epoch`**：乐观并发校验。后端只在运行期核对它，不一致 → 409。
+//
+// `t35` 把 `POST /{id}/move`（拖拽）与 `POST /{id}/workspace`（右键）收敛到**同一个**
+// 状态机实现，两者请求体/响应/错误映射完全一致，所以这里两条路径共用一套字段。
+//
+// ⚠️ 诚实声明：E2E 用 `page.route` 造响应只能验证**请求形状与前端分支**，无法证明
+// 前后端契约在真实服务上可用（这正是该缺陷此前被 Playwright 全绿掩盖的原因）。
+// =====================================================================
+
+/** 移动冲突（409）的两种成因，界面处理方式不同。 */
+export type MoveConflictKind = "confirm_required" | "context_epoch_conflict" | "unknown";
+
+export class MoveConflictError extends Error {
+  readonly kind: MoveConflictKind;
+  readonly detail: string;
+
+  constructor(kind: MoveConflictKind, detail: string) {
+    super(detail);
+    this.name = "MoveConflictError";
+    this.kind = kind;
+    this.detail = detail;
+  }
+}
+
+export class MoveApiError extends Error {
+  readonly status: number;
+
+  constructor(status: number, message: string) {
+    super(message);
+    this.name = "MoveApiError";
+    this.status = status;
+  }
+}
+
+/**
+ * 409 detail → 成因分类。
+ *
+ * 后端两种 409 共用状态码，只能靠 detail 文案区分（契约如此）：
+ * - 缺确认："移动会话会携带历史内容，请确认后再移动（confirm=true，PRD 5.4）"
+ * - epoch 不符："会话上下文版本已变化：期望 X，实际 Y" / "…无法核对 expected_context_epoch…"
+ * 判 epoch 优先：确认文案里不含 `context_epoch`，而 epoch 文案里一定含。
+ */
+export function classifyMoveConflict(detail: string): MoveConflictKind {
+  if (/context_epoch|上下文版本/i.test(detail)) return "context_epoch_conflict";
+  if (/confirm|确认/i.test(detail)) return "confirm_required";
+  return "unknown";
+}
+
+/** 一次移动的结果（后端纯追加字段；同区排序时 `steps` 为空）。 */
+export interface MoveOutcome extends ConversationSummary {
+  from_workspace_id?: string | null;
+  context_epoch?: number | null;
+  previous_context_epoch?: number | null;
+  stopped_run_ids?: string[];
+  superseded_approvals?: number;
+  superseded_inputs?: number;
+  memory_snapshot_rebound?: boolean;
+  permission_rebound?: boolean;
+  steps?: string[];
+}
+
+export interface MoveOptions {
+  /**
+   * 用户已确认「移动会携带历史内容、并停止当前任务」。
+   *
+   * 会话**无历史且无活动任务**时后端不要求确认，可省略（保持既有交互）。
+   */
+  confirm?: boolean;
+  /**
+   * 预期 `context_epoch`（乐观并发）。缺省/`null` = 不做该校验。
+   *
+   * ⚠️ `GET /api/conversations/{id}` **不返回** `context_epoch`（`Conversation` 存档模型
+   * 没有该字段），所以前端只能在拿到过真实值时才发：
+   * `RunDetail.context_epoch`（后端在建 run 时从会话复制）与移动响应的 `context_epoch`。
+   * 见 `knownConversationEpoch()`。
+   */
+  expectedContextEpoch?: number | null;
+}
+
+// ------------------------------------------------- 已观测到的 context_epoch
+//
+// 后端没有「读会话 context_epoch」的端点，但会在两处把它交给前端：建 run 的响应
+// （`RunDetail.context_epoch`）与移动响应（`MoveOutcome.context_epoch`）。
+// 这里缓存「最近一次观测到的值」，移动时作为乐观并发预期发出。
+//
+// 注意这是**观测值**不是权威读数：期间若有他人移动/上下文压缩，值会过期并触发 409。
+// 那时 `forgetConversationEpoch()` 丢弃它，让用户重新确认后以 null 重试（不再无限重试）。
+
+const observedEpochs = new Map<string, number>();
+
+/** 记下后端交给我们的会话 `context_epoch`（仅接受 >=1 的整数）。 */
+export function rememberConversationEpoch(conversationId: string, epoch: unknown): void {
+  if (typeof epoch !== "number" || !Number.isInteger(epoch) || epoch < 1) return;
+  observedEpochs.set(conversationId, epoch);
+}
+
+/** 丢弃已观测值（epoch 冲突后调用，避免用同一个过期值反复重试）。 */
+export function forgetConversationEpoch(conversationId: string): void {
+  observedEpochs.delete(conversationId);
+}
+
+/** 当前已知的 `context_epoch`；从未观测到则为 null（此时不发该校验字段）。 */
+export function knownConversationEpoch(conversationId: string): number | null {
+  return observedEpochs.get(conversationId) ?? null;
+}
+
+async function postMove(url: string, body: unknown): Promise<MoveOutcome> {
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  } catch {
+    throw new MoveApiError(0, "无法连接本地服务，请确认后端已启动");
+  }
+  if (response.status === 409) {
+    const detail = await readErrorDetail(response);
+    throw new MoveConflictError(classifyMoveConflict(detail), detail);
+  }
+  if (!response.ok) throw new MoveApiError(response.status, await readErrorDetail(response));
+  const payload = (await response.json()) as MoveOutcome;
+  // 把后端回传的权威 epoch 记下来，供后续移动做乐观并发校验。
+  if (typeof payload.context_epoch === "number") {
+    rememberConversationEpoch(payload.id, payload.context_epoch);
+  }
+  return payload;
+}
+
+/**
+ * 侧边栏拖拽落点：把会话移到目标工作区（缺省原地）的第 targetIndex 位。
+ *
+ * 跨区 == 归属变更，与 `moveConversationToWorkspace` 是同一条状态机（`t35` 收敛），
+ * 因此同样需要 `confirm` / `expected_context_epoch`；同区排序不需要确认。
+ */
 export async function moveConversationInSidebar(
   id: string,
   target: { workspaceId?: string; targetIndex?: number },
-): Promise<ConversationSummary> {
-  const response = await fetch(`${CONVERSATIONS_ENDPOINT}/${encodeURIComponent(id)}/move`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      workspace_id: target.workspaceId ?? null,
-      target_index: target.targetIndex ?? null,
-    }),
+  options: MoveOptions = {},
+): Promise<MoveOutcome> {
+  return postMove(`${CONVERSATIONS_ENDPOINT}/${encodeURIComponent(id)}/move`, {
+    workspace_id: target.workspaceId ?? null,
+    target_index: target.targetIndex ?? null,
+    confirm: options.confirm ?? false,
+    expected_context_epoch: options.expectedContextEpoch ?? null,
   });
-  if (!response.ok) throw new Error(await readErrorDetail(response));
-  return (await response.json()) as ConversationSummary;
 }
 
-/** 把会话移动到指定工作区（分区归类）。 */
+/**
+ * 把会话移动到指定工作区（分区归类）；右键「移动到工作区」走这里。
+ *
+ * 会话携带历史或存在活动任务时**必须**由用户确认后传 `confirm: true`，否则 409。
+ */
 export async function moveConversationToWorkspace(
   id: string,
   workspaceId: string,
-): Promise<ConversationSummary> {
-  const response = await fetch(`${CONVERSATIONS_ENDPOINT}/${encodeURIComponent(id)}/workspace`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ workspace_id: workspaceId }),
+  options: MoveOptions = {},
+): Promise<MoveOutcome> {
+  return postMove(`${CONVERSATIONS_ENDPOINT}/${encodeURIComponent(id)}/workspace`, {
+    workspace_id: workspaceId,
+    confirm: options.confirm ?? false,
+    expected_context_epoch: options.expectedContextEpoch ?? null,
   });
-  if (!response.ok) throw new Error(await readErrorDetail(response));
-  return (await response.json()) as ConversationSummary;
 }
 
 /** 读取完整会话（含消息）。 */

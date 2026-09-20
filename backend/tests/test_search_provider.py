@@ -1,14 +1,20 @@
-"""联网搜索 provider 测试：Tavily（mock httpx，零出网）+ 工厂（配置校验）。
+"""联网搜索 provider 测试：Tavily（MockTransport 注入，零出网）+ 工厂（配置校验）。
 
 隐私红线：全部 fake/mock，无真实网络；出网审计经 OutboundClient 记录
 （provider="search" / destination=host / method="web_search"），异常 status=None，
 绝不泄露 key / 路径 / 正文。
+
+T04 变更（重要）：本文件原先用
+``monkeypatch.setattr(tavily_mod.httpx, "AsyncClient", lambda **kw: client)``
+替换 **全局 httpx 模块**的 ``AsyncClient`` —— 那是进程级篡改，会改变并行执行的
+所有 httpx 消费者的行为（同类全局状态曾让 Chroma 出现跨用例随机失败）。
+现改为注入 ``httpx.MockTransport``（provider 的 ``transport`` 参数），不再触碰全局对象。
 """
 
 from __future__ import annotations
 
-from types import TracebackType
-from typing import Any, Self
+import json
+from typing import Any
 
 import httpx
 import pytest
@@ -16,54 +22,38 @@ from pydantic import SecretStr
 
 from app.core.outbound import OutboundClient
 from app.core.settings_store import SearchConfig
-from app.search import tavily as tavily_mod
 from app.search.base import SearchError
 from app.search.factory import create_search_provider_from_config
 from app.search.tavily import TavilySearchProvider
 
 
-class _FakeResponse:
-    def __init__(self, status_code: int = 200, payload: dict[str, Any] | None = None) -> None:
-        self.status_code = status_code
-        self._payload = payload if payload is not None else {"results": []}
+class _Recorder:
+    """``httpx.MockTransport`` 处理器：记录请求，并按配置返回响应或抛异常。"""
 
-    def raise_for_status(self) -> None:
-        if self.status_code >= 400:
-            raise httpx.HTTPStatusError(
-                f"server error {self.status_code}", request=None, response=self
-            )
-
-    def json(self) -> dict[str, Any]:
-        return self._payload
-
-
-class _FakeAsyncClient:
     def __init__(
         self,
-        response: _FakeResponse | None = None,
+        *,
+        status_code: int = 200,
+        payload: dict[str, Any] | None = None,
         error: Exception | None = None,
     ) -> None:
-        self._response = response
-        self._error = error
-        self.posted: list[tuple[str, dict[str, Any]]] = []
+        self.status_code = status_code
+        self.payload = payload if payload is not None else {"results": []}
+        self.error = error
+        self.requests: list[httpx.Request] = []
 
-    async def __aenter__(self) -> Self:
-        return self
+    def __call__(self, request: httpx.Request) -> httpx.Response:
+        self.requests.append(request)
+        if self.error is not None:
+            raise self.error
+        return httpx.Response(self.status_code, json=self.payload)
 
-    async def __aexit__(
-        self,
-        exc_type: type[BaseException] | None,
-        exc: BaseException | None,
-        tb: TracebackType | None,
-    ) -> bool:
-        return False
-
-    async def post(self, url: str, json: dict[str, Any]) -> _FakeResponse:
-        self.posted.append((url, json))
-        if self._error is not None:
-            raise self._error
-        assert self._response is not None
-        return self._response
+    @property
+    def posted(self) -> list[tuple[str, dict[str, Any]]]:
+        return [
+            (str(request.url), json.loads(request.content.decode("utf-8")))
+            for request in self.requests
+        ]
 
 
 def _results_payload() -> dict[str, Any]:
@@ -75,21 +65,21 @@ def _results_payload() -> dict[str, Any]:
     }
 
 
-def _make_provider(outbound: OutboundClient | None) -> TavilySearchProvider:
-    return TavilySearchProvider(api_key="sk-tavily", outbound=outbound)
+def _make_provider(recorder: _Recorder, outbound: OutboundClient | None) -> TavilySearchProvider:
+    return TavilySearchProvider(
+        api_key="sk-tavily", outbound=outbound, transport=httpx.MockTransport(recorder)
+    )
 
 
 # ---------------------------------------------------------------- 1. 成功路径
 
 
-async def test_tavily_search_success_maps_results_and_audits(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+async def test_tavily_search_success_maps_results_and_audits() -> None:
     """成功搜索 -> 结果映射（title/url/content）+ 恰一条 provider="search" 审计事件。"""
+
     outbound = OutboundClient(max_entries=10)
-    client = _FakeAsyncClient(response=_FakeResponse(200, _results_payload()))
-    monkeypatch.setattr(tavily_mod.httpx, "AsyncClient", lambda **kw: client)
-    provider = _make_provider(outbound)
+    recorder = _Recorder(payload=_results_payload())
+    provider = _make_provider(recorder, outbound)
 
     results = await provider.search("DeepSeek V4", max_results=5)
 
@@ -98,7 +88,7 @@ async def test_tavily_search_success_maps_results_and_audits(
     assert results[0].content == "正文一"
 
     # 请求体：query / max_results / api_key 齐全
-    url, payload = client.posted[0]
+    url, payload = recorder.posted[0]
     assert url == "https://api.tavily.com/search"
     assert payload["query"] == "DeepSeek V4"
     assert payload["max_results"] == 5
@@ -114,27 +104,32 @@ async def test_tavily_search_success_maps_results_and_audits(
     assert event.duration_ms is not None
 
 
-async def test_tavily_construction_zero_outbound(monkeypatch: pytest.MonkeyPatch) -> None:
-    """构造 provider 零联网：不创建 client、不记录审计。"""
+async def test_tavily_construction_zero_outbound() -> None:
+    """构造 provider 零联网：不发请求、不记录审计。
+
+    原断言是「构造阶段未创建 ``httpx.AsyncClient``」（靠全局 monkeypatch 观察）；
+    改为注入 transport 后不再 patch 全局，因此用**行为等价且更硬**的断言：
+    构造后传输层没有被调用过，审计为空。（「首次 search 才建 client」由上面
+    ``test_tavily_search_success_maps_results_and_audits`` 覆盖。）
+    """
+
     outbound = OutboundClient(max_entries=10)
-    created: list[Any] = []
-    monkeypatch.setattr(
-        tavily_mod.httpx, "AsyncClient", lambda **kw: created.append(kw) or _FakeAsyncClient()
-    )
-    _make_provider(outbound)
-    assert created == []  # 构造阶段未建 client
+    recorder = _Recorder(payload=_results_payload())
+    _make_provider(recorder, outbound)
+
+    assert recorder.requests == []
     assert outbound.entries() == []
 
 
 # ---------------------------------------------------------------- 2. 失败路径
 
 
-async def test_tavily_http_error_records_status(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_tavily_http_error_records_status() -> None:
     """HTTP 4xx/5xx -> SearchError（含状态码）+ 审计 status 记录真实状态码。"""
+
     outbound = OutboundClient(max_entries=10)
-    client = _FakeAsyncClient(response=_FakeResponse(429, {"results": []}))
-    monkeypatch.setattr(tavily_mod.httpx, "AsyncClient", lambda **kw: client)
-    provider = _make_provider(outbound)
+    recorder = _Recorder(status_code=429, payload={"results": []})
+    provider = _make_provider(recorder, outbound)
 
     with pytest.raises(SearchError, match="HTTP 429"):
         await provider.search("q")
@@ -145,14 +140,12 @@ async def test_tavily_http_error_records_status(monkeypatch: pytest.MonkeyPatch)
     assert entries[0].provider == "search"
 
 
-async def test_tavily_network_error_records_none_and_sanitizes(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+async def test_tavily_network_error_records_none_and_sanitizes() -> None:
     """连接异常 -> SearchError（脱敏，只含异常类名）+ 审计 status=None。"""
+
     outbound = OutboundClient(max_entries=10)
-    client = _FakeAsyncClient(error=ConnectionError("boom-internal-detail"))
-    monkeypatch.setattr(tavily_mod.httpx, "AsyncClient", lambda **kw: client)
-    provider = _make_provider(outbound)
+    recorder = _Recorder(error=httpx.ConnectError("boom-internal-detail"))
+    provider = _make_provider(recorder, outbound)
 
     with pytest.raises(SearchError, match="联网搜索失败"):
         await provider.search("q")
@@ -163,12 +156,14 @@ async def test_tavily_network_error_records_none_and_sanitizes(
     assert "boom-internal-detail" not in str(entries[0])
 
 
-async def test_tavily_without_outbound_records_nothing(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_tavily_without_outbound_records_nothing() -> None:
     """outbound=None -> 不记录审计，行为照常。"""
-    client = _FakeAsyncClient(response=_FakeResponse(200, _results_payload()))
-    monkeypatch.setattr(tavily_mod.httpx, "AsyncClient", lambda **kw: client)
-    provider = TavilySearchProvider(api_key="sk-t", outbound=None)
+
+    recorder = _Recorder(payload=_results_payload())
+    provider = _make_provider(recorder, outbound=None)
+
     results = await provider.search("q")
+
     assert len(results) == 2
 
 
@@ -177,18 +172,21 @@ async def test_tavily_without_outbound_records_nothing(monkeypatch: pytest.Monke
 
 def test_factory_not_enabled_raises() -> None:
     """未启用 -> SearchError「未启用」。"""
+
     with pytest.raises(SearchError, match="未启用"):
         create_search_provider_from_config(SearchConfig(enabled=False))
 
 
 def test_factory_tavily_missing_key_raises() -> None:
     """Tavily 缺 api_key -> SearchError「需要 API Key」。"""
+
     with pytest.raises(SearchError, match="需要 API Key"):
         create_search_provider_from_config(SearchConfig(enabled=True, api_key=None))
 
 
 def test_factory_tavily_ok() -> None:
     """Tavily 配齐 -> 返回 TavilySearchProvider，destination 为官方 host。"""
+
     provider = create_search_provider_from_config(
         SearchConfig(enabled=True, api_key=SecretStr("sk-t")), outbound=None
     )
@@ -198,6 +196,7 @@ def test_factory_tavily_ok() -> None:
 
 def test_factory_searxng_not_implemented() -> None:
     """SearXNG 未实现 -> SearchError「尚未实现」（可插拔接口预留）。"""
+
     with pytest.raises(SearchError, match="尚未实现"):
         create_search_provider_from_config(
             SearchConfig(enabled=True, provider_type="searxng", base_url="http://searxng:8080"),
@@ -207,6 +206,7 @@ def test_factory_searxng_not_implemented() -> None:
 
 def test_unknown_provider_rejected_by_schema() -> None:
     """未知 provider -> pydantic 在 SearchConfig 构造阶段即拒绝（Literal 约束）。"""
+
     from pydantic import ValidationError
 
     with pytest.raises(ValidationError):

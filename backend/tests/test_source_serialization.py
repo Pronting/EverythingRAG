@@ -163,11 +163,12 @@ def test_relevance_fields_survive_save_reload_move_and_fork() -> None:
     assert source["similarity"] == VECTOR_SIMILARITY
     assert "rerank_score" not in (source.get("similarity"),)
 
-    # 移动到另一个工作区后字段保持不变
+    # 移动到另一个工作区后字段保持不变。
+    # V1.2.0（PRD 5.4）：携带历史的会话迁移必须显式 confirm，否则 409 要求二次确认。
     workspace = client.post("/api/workspaces", json={"name": "私密分区"}).json()
     moved = client.post(
         f"/api/conversations/{conversation_id}/workspace",
-        json={"workspace_id": workspace["id"]},
+        json={"workspace_id": workspace["id"], "confirm": True},
     )
     assert moved.status_code == 200, moved.text
     after_move = client.get(f"/api/conversations/{conversation_id}").json()

@@ -351,6 +351,15 @@ test("右键「移动到工作区」可把对话挪到别的文件夹", async ({
   await page.getByRole("menuitem", { name: "移动到工作区" }).click();
   await page.getByRole("menuitem", { name: /^研究/ }).click();
 
+  // 会话携带历史 ⇒ PRD 5.4 要求先确认；确认后才真正移动。
+  const dialog = page.getByRole("alertdialog", { name: "移动会话到其他工作区" });
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toContainText("停止该会话正在执行的任务");
+  await expect(dialog).toContainText("历史在新的工作区里只读保留");
+  // 未确认前不得发生移动
+  expect(stub.moves).toHaveLength(0);
+  await dialog.getByRole("button", { name: "确认移动" }).click();
+
   await expect(page.locator(".ws-folder").nth(1).getByText("默认区对话")).toBeVisible();
   await expect(page.locator(".toast")).toContainText("已移动到「研究」");
   expect(stub.conversations.find((row) => row.id === "c1")?.workspace_id).toBe("research");
@@ -361,15 +370,21 @@ test("拖拽会话可排序，也可拖进另一个工作区文件夹", async ({
   const stub = await stubBackend(page);
   await page.goto("/");
 
-  // 1) 同区排序：把「另一条默认对话」拖到「默认区对话」上面
+  // 1) 同区排序：不涉及归属，**不需要确认**（后端也只排序）
   await dragTo(page, page.getByText("另一条默认对话"), page.getByText("默认区对话"));
   await expect
     .poll(() => stub.moves.at(-1) ?? null)
     .toMatchObject({ id: "c3", workspaceId: "default", targetIndex: 0 });
   await expect.poll(() => stub.ordered("default").map((row) => row.id)).toEqual(["c3", "c1"]);
+  await expect(page.getByRole("alertdialog", { name: "移动会话到其他工作区" })).toHaveCount(0);
 
-  // 2) 跨区拖动：把「研究区对话」拖到「默认」文件夹头
+  // 2) 跨区拖动：归属变更 ⇒ 先确认（PRD 5.4）
   await dragTo(page, page.getByText("研究区对话"), page.locator(".ws-folder-name").first());
+  const dialog = page.getByRole("alertdialog", { name: "移动会话到其他工作区" });
+  await expect(dialog).toBeVisible();
+  expect(stub.moves).toHaveLength(1); // 仍只有同区那次
+  await dialog.getByRole("button", { name: "确认移动" }).click();
+
   await expect.poll(() => stub.moves.at(-1) ?? null).toMatchObject({ id: "c2", workspaceId: "default" });
   await expect.poll(() => stub.conversations.find((row) => row.id === "c2")?.workspace_id).toBe("default");
   await expect(page.locator(".ws-folder").nth(0).getByText("研究区对话")).toBeVisible();

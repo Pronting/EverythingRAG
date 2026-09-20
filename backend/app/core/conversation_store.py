@@ -90,7 +90,10 @@ def _sidebar_sort_key(conv: Conversation) -> tuple[float, float, float, str]:
 
     - 手工拖拽过的：``(0, sort_index)``（位次越小越靠前）；
     - 没拖过的：``(1, -updated_at)`` 排在其后，组内越新越靠前；
-    - 末位用创建序号兜底：同一毫秒创建的两条会话时间戳完全相同，否则顺序不稳定。
+    - 末位用创建序号**倒序**兜底：同一时刻（时间戳打平）活动过的会话必须仍然
+      「越新越靠前」，因此取 ``-sort_seq``。这里若用升序，打平时会退化成
+      「创建顺序」，与 recency 语义相反（Windows 时钟粒度约 15.6ms 时，
+      连续创建的会话极易打平 → 表现为全量测试下的顺序 flake）。
     """
 
     if conv.sort_index is not None:
@@ -101,7 +104,7 @@ def _sidebar_sort_key(conv: Conversation) -> tuple[float, float, float, str]:
         return (1.0, 0.0, 0.0, conv.updated_at)
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=UTC)
-    return (1.0, -parsed.timestamp(), float(conv.sort_seq), conv.updated_at)
+    return (1.0, -parsed.timestamp(), -float(conv.sort_seq), conv.updated_at)
 
 
 class ConversationStore:
@@ -154,11 +157,15 @@ class ConversationStore:
         )
 
     def list_archived_summaries(self) -> list[dict[str, Any]]:
-        """已归档会话摘要列表（按归档时间倒序，退化到更新时间）。"""
+        """已归档会话摘要列表（按归档时间倒序，退化到更新时间）。
+
+        末位用活动序号倒序兜底：归档时间打平时仍按「最近活动的排在前面」，
+        不依赖字典迭代顺序（同一批归档的会话时间戳可能完全相同）。
+        """
 
         return self._summaries(
             lambda conv: conv.archived,
-            key=lambda conv: (conv.archived_at or conv.updated_at),
+            key=lambda conv: (conv.archived_at or conv.updated_at, conv.sort_seq),
             reverse=True,
         )
 
@@ -290,7 +297,7 @@ class ConversationStore:
                 and conv.messages
                 and (workspace_id is None or conv.workspace_id == workspace_id)
             ]
-            for conv in sorted(candidates, key=lambda c: c.updated_at, reverse=True):
+            for conv in sorted(candidates, key=lambda c: (c.updated_at, c.sort_seq), reverse=True):
                 messages = [m.content for m in conv.messages if m.role in ("user", "assistant")]
                 haystack = "\n".join([conv.title, *messages]).casefold()
                 if not all(term in haystack for term in terms):
@@ -309,11 +316,19 @@ class ConversationStore:
                 })
             return results
 
-    def create(self, workspace_id: str = DEFAULT_WORKSPACE_ID) -> Conversation:
-        """在指定工作区创建空会话并落盘。"""
+    def create(
+        self, workspace_id: str = DEFAULT_WORKSPACE_ID, conversation_id: str | None = None
+    ) -> Conversation:
+        """在指定工作区创建空会话并落盘。
+
+        ``conversation_id`` 可选（默认自动生成）：**迁移后的会话在 ``app.db`` 里已有固定 id**，
+        侧边栏存档需要与之对齐时由调用方显式给出（T_a27 的移动编排与其测试）。
+        本参数纯追加，排序与时间戳语义一字未改（t12）。
+        """
+
         now = _now()
         conv = Conversation(
-            id=uuid4().hex,
+            id=conversation_id or uuid4().hex,
             title="新对话",
             created_at=now,
             updated_at=now,

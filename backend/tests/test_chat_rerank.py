@@ -8,6 +8,28 @@
 * 标题从块元数据补齐（真实索引的 heading_path）并参与 ranking_text。
 
 全部 fake 依赖，零出网。
+
+**集成现状（V1.2.0 合并 main 后）**：本文件驱动的是 ``ChatService.stream_answer``，即
+V1.1.0 ``/api/chat`` 的帧契约（``meta/tool/token/done/error``）。V1.2.0 按 PRD 13.2 把
+``/api/chat`` 下线为 410，问答统一走 run API；``ChatService`` 因此在本仓库里**已无调用方**
+（保留其代码与用例是为了记录既有筛选语义，不构成产品路径）。
+
+同一批不变量已在 **run 管线**上重新表达并通过：见 ``tests/test_run_rerank.py``（进度改走
+v2 ``tool.started`` / ``tool.completed``，``tool_name="rerank"``）。对应关系：
+
+============================  ==================================================
+本文件（ChatService 帧）         run 管线（v2 事件 / 工具结果）
+============================  ==================================================
+tool=rerank running/done        ``tool.started`` / ``tool.completed``（succeeded）
+tool=rerank error + error 帧    ``tool.completed``（failed，error_code）+ run.failed
+meta.retrieval.status           ``search_knowledge`` 工具结果的 ``data.retrieval.status``
+meta.sources[*]（来源面板）        ``evidence.added`` / ``answer.meta.citations``
+meta.sources[].rerank_score     ``data.chunks[].rerank_score``
+============================  ==================================================
+
+**未在本版覆盖（需契约追加，见集成分支回报）**：每来源的 ``rerank_score`` /
+``evidence_hash`` / ``profile_id`` 目前只到工具结果层；要在 ``answer.meta`` 引用卡片上显示，
+需给 ``contracts.CitationEntry`` 或 ``events.EvidenceSummary`` 追加字段（冻结契约，需先报告）。
 """
 
 from __future__ import annotations

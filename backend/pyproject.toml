@@ -29,7 +29,12 @@ dependencies = [
     "charset-normalizer>=3.4",
     "Pillow>=10.4",
     # 状态存储
-    "aiosqlite>=0.20",
+    "aiosqlite==0.22.1",
+    # Agent 编排（V1.2.0）：LangGraph 主图/研究图 + 每工作区 checkpoint
+    "langgraph==1.2.11",
+    "langgraph-checkpoint-sqlite==3.1.1",
+    # 历史检索：FTS5 前置中文分词（PRD 11.5）
+    "jieba==0.42.1",
 ]
 
 [project.optional-dependencies]
@@ -48,3 +53,10 @@ pythonpath = ["."]
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+
+[tool.ruff.lint.per-file-ignores]
+# pytest 惯例：把 `tests/fakes_agent.py` 的共享夹具导入到测试模块命名空间
+# （pytest 只自动发现 conftest.py 的夹具），此时测试函数参数与导入同名，
+# pyflakes 会误报 F811（redefinition of unused name）。夹具名由 pytest 解析，
+# 不是真实的重复定义。仅对测试目录放宽这一条，其余规则照常。
+"tests/*.py" = ["F811"]

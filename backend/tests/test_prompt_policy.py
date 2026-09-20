@@ -16,6 +16,8 @@ from app.generation.prompt_policy import (
     build_system_prompt,
     choose_answer_basis,
     classify_query,
+    is_knowledge_overview,
+    is_product_help,
 )
 
 
@@ -79,6 +81,41 @@ def test_all_six_answer_bases(
 )
 def test_query_modes(question: str, expected: QueryMode) -> None:
     assert classify_query(question) is expected
+
+
+@pytest.mark.parametrize(
+    ("question", "expected"),
+    [
+        # V1.2.0（T06）：产品能力问法也走产品说明，不再掉进通用路径。
+        ("这个项目支持联网搜索吗？", QueryMode.PRODUCT_HELP),
+        ("Everything RAG 会把我的资料上传到云端吗？", QueryMode.PRODUCT_HELP),
+        ("Everything RAG 支持哪些模型？", QueryMode.PRODUCT_HELP),
+        ("这个助手有几种权限模式？", QueryMode.PRODUCT_HELP),
+        ("你能帮我识图吗？", QueryMode.PRODUCT_HELP),
+        ("你支持导出对话吗？", QueryMode.PRODUCT_HELP),
+        # 主语/意图不构成产品问题时必须保持内容问答（不能被放宽带偏）。
+        ("这个项目的文档里有没有提到限流方案？", QueryMode.CONTENT_QA),
+        ("这个项目里有哪些文档？", QueryMode.KNOWLEDGE_OVERVIEW),
+        ("总结一下内部风控方案", QueryMode.CONTENT_QA),
+    ],
+)
+def test_capability_questions_route_to_product(question: str, expected: QueryMode) -> None:
+    assert classify_query(question) is expected
+
+
+def test_is_product_help_and_is_knowledge_overview_agree_with_classify_query() -> None:
+    questions = [
+        "知识库里有什么内容？",
+        "Everything RAG 是做什么的？",
+        "这个项目支持联网搜索吗？",
+        "购物车为什么需要分表？",
+        "总结《行为风控数据分析》",
+        "我的资料库一共有多少个切片？",
+    ]
+    for question in questions:
+        mode = classify_query(question)
+        assert is_knowledge_overview(question) is (mode is QueryMode.KNOWLEDGE_OVERVIEW)
+        assert is_product_help(question) is (mode is QueryMode.PRODUCT_HELP)
 
 
 def test_preferences_only_append_whitelisted_expression_rules() -> None:
