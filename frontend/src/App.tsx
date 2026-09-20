@@ -1,17 +1,22 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  appendConversationMessages,
+  MoveApiError,
+  MoveConflictError,
   archiveConversation,
   createConversation,
   deleteConversation,
+  forgetConversationEpoch,
   forkConversation,
   generateConversationTitle,
   getConversation,
+  knownConversationEpoch,
   listConversations,
   moveConversationInSidebar,
   moveConversationToWorkspace,
   truncateConversation,
 } from "./api/conversationApi";
+import type { MoveOutcome } from "./api/conversationApi";
+import { listConversationRuns } from "./api/runApi";
 import {
   createWorkspace,
   deleteWorkspace,
@@ -25,21 +30,29 @@ import BlockBrowser from "./components/BlockBrowser";
 import { CitationPanel } from "./components/CitationPanel";
 import ConfirmDialog from "./components/ConfirmDialog";
 import ConversationMenu from "./components/ConversationMenu";
+import MemoryPanel from "./components/MemoryPanel";
 import SettingsModal from "./components/SettingsModal";
 import Sidebar from "./components/Sidebar";
 import type { ConversationAction, ConversationMenuState } from "./components/Sidebar";
 import type { DropTarget } from "./components/WorkspaceTree";
 import { getSettings } from "./api/settingsApi";
 import { persistTheme, readStoredTheme } from "./theme";
+import {
+  DEFAULT_PERMISSION_MODE,
+  DEFAULT_REASONING_LEVEL,
+} from "./components/PermissionMenu";
 import type {
   ConversationMessage,
   ConversationSummary,
+  PermissionMode,
+  ReasoningLevel,
   Source,
   StatusResponse,
   ThemeValue,
   ToastType,
   Workspace,
 } from "./types";
+import { DEFAULT_WORKSPACE_ID } from "./types";
 import "./App.css";
 import "./design.css";
 import "./settings.css";
@@ -89,6 +102,32 @@ export default function App() {
    * 否则历史会被重复写一遍（fork 场景尤其明显：分支本来就已含父对话的消息）。
    */
   const loadingConversationRef = useRef(false);
+
+  // V1.2 会话级设置（PRD 14.1）：权限模式与思考深度，默认「请求批准 + 深度思考」。
+  const [permissionMode, setPermissionMode] = useState<PermissionMode>(DEFAULT_PERMISSION_MODE);
+  const [reasoningLevel, setReasoningLevel] = useState<ReasoningLevel>(DEFAULT_REASONING_LEVEL);
+  const [memoryOpen, setMemoryOpen] = useState(false);
+
+  /**
+   * 待用户确认的移动（PRD 5.4）。
+   *
+   * 只有会话**携带历史/有活动任务**时才需要确认：移动会携带历史内容、停止当前任务，
+   * 原区未发布的结果不会进入新执行。用户确认后才带 `confirm: true` 发送。
+   */
+  const [pendingMove, setPendingMove] = useState<{
+    conversation: ConversationSummary;
+    targetWorkspaceId: string;
+    targetIndex?: number;
+    reason: "needs_confirm" | "epoch_changed";
+  } | null>(null);
+  const [moveBusy, setMoveBusy] = useState(false);
+  /**
+   * 移动后「本次执行承接自哪一次 run」（PRD 5.4 末句）。
+   *
+   * 后端 `POST /runs` 接受 `origin_run_id` 但**不回显**，所以来源必须由前端记住并在
+   * 过程区域展示，否则用户会以为历史凭空消失。
+   */
+  const [originRunIds, setOriginRunIds] = useState<Record<string, string>>({});
 
   const loadStatus = useCallback((): void => {
     fetch("/api/status")
@@ -219,6 +258,143 @@ export default function App() {
    * 目标位次按「落点前后的兄弟会话」在当前排序里的下标推算：
    * 插到 before 之前 / after 之后；落在文件夹空白处则排到末尾。
    */
+  /**
+   * 目标区里最后一次执行（用于**静态移动**的承接来源）。
+   *
+   * 静态移动没有 `stopped_run_ids`，但 PRD 5.4 末句仍要求新执行记录「承接自哪一次 run」，
+   * 所以从原区的 run 列表里取最后一次。取不到就返回 null（不编造）。
+   */
+  const latestRunIdFor = useCallback(
+    async (workspaceId: string, conversationId: string): Promise<string | null> => {
+      try {
+        const runs = await listConversationRuns(workspaceId, conversationId);
+        return runs.length > 0 ? runs[runs.length - 1].run_id : null;
+      } catch {
+        return null;
+      }
+    },
+    [],
+  );
+
+  /** 移动成功后：刷新列表、记录承接来源、如实告知影响了什么。 */
+  const afterMove = useCallback(
+    async (
+      conversationId: string,
+      targetWorkspaceId: string,
+      outcome: MoveOutcome,
+    ): Promise<void> => {
+      await loadConversations();
+      await loadWorkspaces();
+      if (conversationId === activeConversationId) setActiveWorkspaceId(targetWorkspaceId);
+
+      // PRD 5.4 末句：记录本次执行承接自哪一次 run（被停止的那次优先）。
+      const stopped = outcome.stopped_run_ids ?? [];
+      let origin = stopped.length > 0 ? stopped[stopped.length - 1] : null;
+      if (origin === null && outcome.from_workspace_id) {
+        origin = await latestRunIdFor(outcome.from_workspace_id, conversationId);
+      }
+      if (origin !== null) {
+        setOriginRunIds((prev) => ({ ...prev, [conversationId]: origin }));
+      }
+
+      const effects: string[] = [];
+      if (stopped.length > 0) effects.push(`已停止 ${stopped.length} 个进行中的任务`);
+      if ((outcome.superseded_approvals ?? 0) > 0) {
+        effects.push(`${outcome.superseded_approvals} 个待批准已失效`);
+      }
+      if ((outcome.superseded_inputs ?? 0) > 0) {
+        effects.push(`${outcome.superseded_inputs} 个待澄清已失效`);
+      }
+      const target = workspaces.find((item) => item.id === targetWorkspaceId);
+      const suffix = effects.length > 0 ? `（${effects.join("；")}）` : "";
+      showToast("success", `已移动到「${target?.name ?? "工作区"}」${suffix}`);
+    },
+    [
+      activeConversationId,
+      latestRunIdFor,
+      loadConversations,
+      loadWorkspaces,
+      showToast,
+      workspaces,
+    ],
+  );
+
+  /**
+   * 会话移动的**唯一执行入口**（右键与拖拽共用；PRD 5.4 / A27）。
+   *
+   * 两条入口在后端已收敛到同一状态机（`t35`），所以这里也只走一套逻辑：
+   * - 会话携带历史或存在活动任务时**必须**先拿到用户确认，才带 `confirm: true`；
+   *   绝不默认静默 confirm（那等于绕过 PRD 5.4 的用户确认语义）。
+   * - `expected_context_epoch` 用「后端交给前端过的最近观测值」；epoch 冲突 → 丢弃该值、
+   *   让用户重新确认，**不自动重试**（避免用同一个过期值反复撞 409）。
+   */
+  const runMove = useCallback(
+    async (
+      conversation: ConversationSummary,
+      targetWorkspaceId: string,
+      targetIndex: number | undefined,
+      confirm: boolean,
+    ): Promise<void> => {
+      const options = {
+        confirm,
+        expectedContextEpoch: knownConversationEpoch(conversation.id),
+      };
+      setMoveBusy(true);
+      try {
+        const outcome =
+          targetIndex === undefined
+            ? await moveConversationToWorkspace(conversation.id, targetWorkspaceId, options)
+            : await moveConversationInSidebar(
+                conversation.id,
+                { workspaceId: targetWorkspaceId, targetIndex },
+                options,
+              );
+        setPendingMove(null);
+        setConversationMenu(null);
+        await afterMove(conversation.id, targetWorkspaceId, outcome);
+      } catch (error) {
+        if (error instanceof MoveConflictError) {
+          if (error.kind === "context_epoch_conflict") {
+            // 观测值已过期：丢弃它，要求用户重新确认（重试时会以 null 发出，不再撞同一个值）。
+            forgetConversationEpoch(conversation.id);
+            showToast("error", "会话状态已变化，请重新确认后再移动");
+            setPendingMove({
+              conversation,
+              targetWorkspaceId,
+              targetIndex,
+              reason: "epoch_changed",
+            });
+            return;
+          }
+          if (error.kind === "confirm_required" && !confirm) {
+            setPendingMove({ conversation, targetWorkspaceId, targetIndex, reason: "needs_confirm" });
+            return;
+          }
+          // 已经确认过却仍被判需要确认：说明判断口径与后端不一致，如实报错而不是再弹一次（防死循环）。
+          showToast("error", error.detail || "移动被拒绝，请刷新页面后重试");
+          return;
+        }
+        if (error instanceof MoveApiError) {
+          showToast("error", error.message);
+          return;
+        }
+        showToast("error", error instanceof Error ? error.message : "移动失败，请稍后重试");
+      } finally {
+        setMoveBusy(false);
+      }
+    },
+    [afterMove, showToast],
+  );
+
+  /**
+   * 侧边栏拖拽落点：把会话移到目标工作区的指定位置（同区即为手动排序）。
+   *
+   * 目标位次按「落点前后的兄弟会话」在当前排序里的下标推算：
+   * 插到 before 之前 / after 之后；落在文件夹空白处则排到末尾。
+   *
+   * 跨区拖拽 == 归属变更，与右键「移动到工作区」同一条状态机；**同区排序不需要确认**
+   * （后端也只排序，不递增 epoch、不写权威行）。
+   */
   const handleDropConversation = useCallback(
     async (conversationId: string, target: DropTarget): Promise<void> => {
       const conversation = conversations.find((item) => item.id === conversationId);
@@ -241,40 +417,39 @@ export default function App() {
         if (index >= 0) targetIndex = index + 1;
       }
 
-      try {
-        await moveConversationInSidebar(conversationId, {
-          workspaceId: target.workspaceId,
-          targetIndex,
-        });
-        await loadConversations();
-        await loadWorkspaces();
-        if (conversationId === activeConversationId) setActiveWorkspaceId(target.workspaceId);
-      } catch (error) {
-        showToast("error", error instanceof Error ? error.message : "移动失败，请稍后重试");
+      const currentWorkspaceId = conversation.workspace_id ?? DEFAULT_WORKSPACE_ID;
+      if (currentWorkspaceId === target.workspaceId) {
+        // 同区：仅排序，不涉及归属，无需确认。
+        await runMove(conversation, target.workspaceId, targetIndex, false);
+        return;
       }
+      // 跨区：携带历史时先让用户确认真实影响（空会话交给后端的 409 判定，不无谓打扰）。
+      if (conversation.message_count > 0) {
+        setPendingMove({
+          conversation,
+          targetWorkspaceId: target.workspaceId,
+          targetIndex,
+          reason: "needs_confirm",
+        });
+        return;
+      }
+      await runMove(conversation, target.workspaceId, targetIndex, false);
     },
-    [activeConversationId, conversations, loadConversations, loadWorkspaces, showToast],
+    [conversations, runMove],
   );
 
   /** 右键菜单「移动到工作区」：移动到目标分区（排在末尾，位置由拖拽微调）。 */
   const handleMoveConversation = useCallback(
     async (conversation: ConversationSummary, workspaceId: string): Promise<void> => {
-      setMenuBusy(true);
-      try {
-        await moveConversationToWorkspace(conversation.id, workspaceId);
-        setConversationMenu(null);
-        await loadConversations();
-        await loadWorkspaces();
-        if (activeConversationId === conversation.id) setActiveWorkspaceId(workspaceId);
-        const target = workspaces.find((item) => item.id === workspaceId);
-        showToast("success", `已移动到「${target?.name ?? "工作区"}」`);
-      } catch (error) {
-        showToast("error", error instanceof Error ? error.message : "移动失败，请稍后重试");
-      } finally {
-        setMenuBusy(false);
+      if ((conversation.workspace_id ?? DEFAULT_WORKSPACE_ID) === workspaceId) return;
+      // 携带历史的会话必须先确认（PRD 5.4 首句）；空会话照旧直接移。
+      if (conversation.message_count > 0) {
+        setPendingMove({ conversation, targetWorkspaceId: workspaceId, reason: "needs_confirm" });
+        return;
       }
+      await runMove(conversation, workspaceId, undefined, false);
     },
-    [activeConversationId, loadConversations, loadWorkspaces, showToast, workspaces],
+    [runMove],
   );
 
   // 应用主题到 <html>：animate=true 时带短促全局过渡，否则即时（用于初始加载）。
@@ -376,10 +551,11 @@ export default function App() {
     }
   };
 
-  /** 一轮问答完成后：持久化消息；首次交互用 AI 生成标题；刷新侧边栏列表。
+  /** 一轮问答完成后：刷新侧边栏与标题。
    *
-   * 默认会话（未点「新对话」）首次问答时惰性新建会话——否则 activeConversationId
-   * 为 null，本轮会被直接丢弃、不进侧边栏。
+   * V1.2 起消息落库由后端 run 的 `commit_answer` 在同一次事务里完成（用户消息在
+   * `POST /runs` 时写入），前端**不再**调用 `/messages` 追加 —— 否则同一轮会被
+   * 写两遍。这里只负责「首次交互生成标题 + 刷新列表」这些纯界面副作用。
    */
   const handleExchangeComplete = useCallback(
     async (
@@ -412,28 +588,16 @@ export default function App() {
       ];
       const isFirst = chatMessages.length === 0;
 
-      let conversationId = activeConversationId;
-      if (conversationId === null) {
-        // 惰性新建会话：同步更新 activeId + 消息列表，避免 Chat 因 id 变化重置而丢消息
-        try {
-          const conversation = await createConversation(activeWorkspaceId);
-          conversationId = conversation.id;
-          setActiveConversationId(conversation.id);
-          setConversations((prev) => [conversation, ...prev]);
-          setChatMessages(newMessages);
-        } catch (error) {
-          setStatusError(error instanceof Error ? error.message : String(error));
-          return;
-        }
-      } else {
-        setChatMessages((prev) => [...prev, ...newMessages]);
-      }
+      // 会话由 Chat 在创建 run 之前惰性建好（见 handleEnsureConversation）。
+      const conversationId = activeConversationId;
+      if (conversationId === null) return;
 
-      // 会话消息仍在异步装载中：本轮结果没有可靠的历史基线，不追加落库（见 ref 注释）。
+      setChatMessages((prev) => [...prev, ...newMessages]);
+
+      // 会话消息仍在异步装载中：跳过标题等副作用，避免与装载竞态。
       if (loadingConversationRef.current) return;
 
       try {
-        await appendConversationMessages(conversationId, newMessages);
         if (isFirst) {
           await generateConversationTitle(conversationId);
         }
@@ -443,8 +607,31 @@ export default function App() {
         setStatusError(error instanceof Error ? error.message : String(error));
       }
     },
-    [activeConversationId, activeWorkspaceId, chatMessages.length, loadConversations, loadWorkspaces],
+    [activeConversationId, chatMessages.length, loadConversations, loadWorkspaces],
   );
+
+  /**
+   * 惰性确保会话存在并返回 id。
+   *
+   * V1.2 的 `POST /api/workspaces/{w}/runs` 必须带 `conversation_id`，所以会话要在
+   * 创建 run **之前**存在（V1.1 是问答完成后再惰性建会话）。
+   */
+  const handleEnsureConversation = useCallback(async (): Promise<string | null> => {
+    if (activeConversationId !== null) return activeConversationId;
+    try {
+      const conversation = await createConversation(activeWorkspaceId);
+      setActiveConversationId(conversation.id);
+      setConversations((prev) => [conversation, ...prev]);
+      void loadWorkspaces();
+      return conversation.id;
+    } catch (error) {
+      showToast(
+        "error",
+        error instanceof Error ? error.message : "无法创建会话，请稍后重试",
+      );
+      return null;
+    }
+  }, [activeConversationId, activeWorkspaceId, loadWorkspaces, showToast]);
 
   const handleCitationSelect = useCallback((sources: Source[], index: number): void => {
     setCitationPanel({ sources, index });
@@ -586,20 +773,75 @@ export default function App() {
       <main className="app-main">
         <header className="workspace-header">
           <div className="workspace-breadcrumb"><span>个人空间</span><span aria-hidden="true">/</span><strong>知识对话</strong></div>
+          <button
+            type="button"
+            className="workspace-header-action"
+            data-testid="open-memory"
+            onClick={() => setMemoryOpen(true)}
+          >
+            工作区记忆
+          </button>
         </header>
         <Chat
           conversationId={activeConversationId}
           initialMessages={chatMessages}
+          workspaceId={activeWorkspaceId ?? DEFAULT_WORKSPACE_ID}
+          ensureConversation={handleEnsureConversation}
           revision={chatRevision}
           onExchangeComplete={handleExchangeComplete}
           onEditUserMessage={handleEditUserMessage}
           onChatComplete={loadStatus}
           avatars={avatars}
           onCitationSelect={handleCitationSelect}
-          searchConfigured={status?.config.search_configured ?? false}
-          knowledgeOnly={knowledgeOnly}
+          permissionMode={permissionMode}
+          reasoningLevel={reasoningLevel}
+          onPermissionModeChange={setPermissionMode}
+          onReasoningLevelChange={setReasoningLevel}
+          onNotify={showToast}
+          originRunId={
+            activeConversationId === null ? null : (originRunIds[activeConversationId] ?? null)
+          }
         />
       </main>
+      {/*
+        移动确认（PRD 5.4）：会话携带历史或存在活动任务时必须由用户确认。
+        文案如实说明后果 —— 停止当前任务、原区未发布结果不进入新执行、原审批失效。
+      */}
+      <ConfirmDialog
+        open={pendingMove !== null}
+        title="移动会话到其他工作区"
+        description={
+          pendingMove === null
+            ? ""
+            : `「${pendingMove.conversation.title}」携带 ${
+                pendingMove.conversation.message_count
+              } 条历史消息。移动会：① 停止该会话正在执行的任务与子任务；② 未发布的结果不会进入新工作区的执行；③ 待批准/待澄清的卡片失效；④ 历史在新的工作区里只读保留。${
+                pendingMove.reason === "epoch_changed"
+                  ? "（会话状态刚刚发生了变化，请重新确认本次移动。）"
+                  : ""
+              }`
+        }
+        confirmLabel="确认移动"
+        busy={moveBusy}
+        testId="move-confirm"
+        onConfirm={() => {
+          if (pendingMove === null) return;
+          void runMove(
+            pendingMove.conversation,
+            pendingMove.targetWorkspaceId,
+            pendingMove.targetIndex,
+            true,
+          );
+        }}
+        onCancel={() => setPendingMove(null)}
+      />
+      {memoryOpen && (
+        <MemoryPanel
+          workspaceId={activeWorkspaceId ?? DEFAULT_WORKSPACE_ID}
+          onClose={() => setMemoryOpen(false)}
+          onNotify={showToast}
+        />
+      )}
       {conversationMenu !== null && (
         <ConversationMenu
           state={conversationMenu}

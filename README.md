@@ -160,6 +160,27 @@ cd frontend && npm test
 
 
 
+## V1.2.0：Agent 编排与工作区隔离
+
+V1.2.0 把问答链路从「单次检索 + 单次生成」升级为**受控的多 Agent 编排**，并把「数据不出本机、答案永远带来源」落到可验收的机制上。
+
+- **工作区隔离**：每个工作区一份独立目录树（`documents/` / `chroma/` / `state.db` / `app.db` / `memory.json` / `checkpoints.db`），dense、BM25、章节补充、浏览、统计与图片/任务身份**只读本区**；跨区图片 hash 或任务 ID 一律 404。
+- **Agent 编排（LangGraph）**：意图路由 → 计划（多任务）→ 并行研究 → 综合 → 核对 → 发布；研究子图有轮数与停滞上限，核对不通过时发布**带缺口的答案**而不是编造结论。
+- **RunManager 与 SSE**：`POST /api/workspaces/{id}/runs` 建任务（**202**），`GET .../runs/{id}/events` 订阅 v2 事件（`schema_version=2`，20 类事件），支持 `after=` / `Last-Event-ID` 补读、取消与恢复；`POST /api/chat` 旧入口已下线（**410**，附替代路径）。
+- **模型能力与工具协议**：按 `base_url + model` 解析能力（上下文/最大输出/工具/思考档），DeepSeek 官方 `deepseek-flash` 已入表；四档思考强度（关闭/轻度/深度/最高）映射到真实请求参数；多轮工具调用完整回传协议历史与 usage。
+- **权限与批准**：三种权限模式（请求批准/自动批准/完全访问），联网工具执行前停顿并落批准卡片；重复批准幂等、参数或上下文变化后旧决定被拒（409）；非公开姓名在**真正出网前**脱敏。
+- **工作区记忆**：`memory.json` 原子写入 + 乐观并发 + `operation_id` 幂等；快照在会话创建时冻结（会话 A 的快照不会因后续记忆更新而改变）；人工删除/纠正/关闭在下一次模型请求的上下文中生效；中文历史检索走 FTS5 + jieba。
+- **前端工作流**：过程区域（折叠时间线 + 可展开研究任务）、批准卡片（允许本次/允许本轮同类/拒绝 + 编辑查询）、权限与思考菜单、记忆面板；断线/刷新按 `event_seq` 补读，答案片段先于完成事件。
+
+验收与评测：`docs/tech/v1.2.0-acceptance-report.md`（A01–A32 逐条）、`v1.2.0-quality-report.md`（路由/答案质量）、`v1.2.0-migration-report.md`（迁移与保留/排除清单）。
+
+**验证状态（2026-09-20 实测，只写数字）**
+
+- 验收套件：`backend/tests/test_acceptance_v120.py`（A01–A32 + 检查点中断/恢复）+ `test_acceptance_t27_followups.py`（6 条端点级 + 3 条装配级）= **42 passed / 4 skipped(live) / 0 failed / 0 xfailed**。
+- 回归：后端全量 `2 failed / 1719 passed / 86 skipped`（2 failed 恒为本机固定端口基线 `test_run_py.py`；86 skipped 全部是 live 闸：4 条 A 项 + 82 条真实索引召回门禁）；`ruff check app tests` 全绿；前端 `npm run build` 零错误 + Playwright **75 passed**。
+- 路由评测 M1–M6 全达标（155 条 = 真实 87 + 构造 68，产物可复现）。
+- **未达标/未执行（不粉饰）**：会话移动（A27）**后端端点级达标但真实前端路径未达标**（前端未发送 `confirm`/`expected_context_epoch`/`origin_run_id`，携带历史的会话在 UI 上会得到 409；另有拖拽用的旧移动入口绕过状态机）；live 四项（真实新闻、四档真实问答、真实多轮工具调用、真实数据迁移）与 PRD 16.4 答案质量/思考强度评测 **未执行**（等用户授权，见 `docs/tech/v1.2.0-live-eval-plan.md`）。启用方式：`EVERYTHING_RAG_LIVE_EVAL=1`（A 档）/ `EVERYTHING_RAG_RUN_LIVE_EVAL=1`（真实索引召回门禁）。
+
 ## 未来功能
 
 * mcp ，skills 支持

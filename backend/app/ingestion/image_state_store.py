@@ -133,6 +133,39 @@ class ImageStateStore:
             for r in rows
         ]
 
+    def get_task(self, block_id: str) -> ImageTask | None:
+        """按 block_id 取单条任务；本区不存在返回 None（PRD 5.3.5 / A07）。
+
+        任务 ID 的身份校验靠**本区独立数据库**完成：A 区的任务 ID 在 B 区的库里
+        查不到，调用方据此返回 404，而不是把别的区的任务信息答出去。
+        """
+
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT block_id, src, doc_id, source_file, heading_path, anchor "
+                "FROM image_tasks WHERE block_id = ?",
+                (block_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        return ImageTask(
+            block_id=row["block_id"],
+            src=row["src"],
+            doc_id=row["doc_id"],
+            source_file=row["source_file"],
+            heading_path=row["heading_path"],
+            anchor=row["anchor"],
+        )
+
+    def task_status(self, block_id: str) -> str | None:
+        """任务处理状态（pending/done/failed）；本区不存在返回 None。"""
+
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT status FROM image_tasks WHERE block_id = ?", (block_id,)
+            ).fetchone()
+        return None if row is None else str(row["status"])
+
     def mark_done(self, block_id: str) -> None:
         with self._lock:
             self._conn.execute(

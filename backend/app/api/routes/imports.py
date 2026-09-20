@@ -23,14 +23,16 @@ from pydantic import BaseModel, Field
 
 from app.api.deps import (
     get_embedder,
-    get_image_state_store,
     get_import_task_store,
-    get_state_store,
-    get_vector_store,
+    get_workspace_context,
+    get_workspace_state_store,
+    get_workspace_vector_store,
+    workspace_image_state_store,
 )
 from app.core.config import settings
 from app.core.outbound import outbound_client
 from app.core.settings_store import get_settings_store, is_vision_configured
+from app.core.workspace_context import BackgroundTaskScope, WorkspaceContext
 from app.generation.base import VisionModel
 from app.generation.vision import create_vision_model_from_config
 from app.ingestion.image_fetch import ImageFetcher
@@ -67,15 +69,17 @@ def _build_vision_pair() -> tuple[VisionModel | None, ImageFetcher | None]:
 
 
 def get_import_pipeline(
-    vectorstore: VectorStore = Depends(get_vector_store),  # noqa: B008
-    document_state_store: DocumentStateStore = Depends(get_state_store),  # noqa: B008
+    context: WorkspaceContext = Depends(get_workspace_context),  # noqa: B008
+    vectorstore: VectorStore = Depends(get_workspace_vector_store),  # noqa: B008
+    document_state_store: DocumentStateStore = Depends(get_workspace_state_store),  # noqa: B008
 ) -> IngestionPipeline:
-    """构造导入管线（共享云端嵌入器 + 共享向量库；构造零出网）。
+    """构造**本工作区**的导入管线（共享云端嵌入器 + 本区向量库；构造零出网）。
 
-    嵌入器用共享单例（get_embedder），与向量库同源，保证 dim 惰性解析结果一致。
+    嵌入器用共享单例（get_embedder），与向量库同源，保证 dim 惰性解析结果一致；
+    向量库 / 状态库 / 图片库全部按 ``context`` 解析：导入只写本区索引（PRD 5.3）。
     """
     vision, fetcher = _build_vision_pair()
-    image_store = get_image_state_store()
+    image_store = workspace_image_state_store(context)
     pipeline = IngestionPipeline(
         embedder=get_embedder(),
         vectorstore=vectorstore,
@@ -95,10 +99,11 @@ def get_import_pipeline(
 
 
 def get_sync_service(
-    vectorstore: VectorStore = Depends(get_vector_store),  # noqa: B008
-    state_store: DocumentStateStore = Depends(get_state_store),  # noqa: B008
+    context: WorkspaceContext = Depends(get_workspace_context),  # noqa: B008
+    vectorstore: VectorStore = Depends(get_workspace_vector_store),  # noqa: B008
+    state_store: DocumentStateStore = Depends(get_workspace_state_store),  # noqa: B008
 ) -> SyncService:
-    """构造增量同步服务（共享云端嵌入器 + 共享向量库 + 状态库；构造零出网）。"""
+    """构造**本工作区**的增量同步服务（本区向量库 + 状态库 + 图片库；构造零出网）。"""
     vision, fetcher = _build_vision_pair()
     return SyncService(
         embedder=get_embedder(),
@@ -106,7 +111,7 @@ def get_sync_service(
         state_store=state_store,
         vision=vision,
         fetcher=fetcher,
-        image_state_store=get_image_state_store(),
+        image_state_store=workspace_image_state_store(context),
     )
 
 
@@ -142,19 +147,25 @@ async def start_import(
 async def upload_import(
     files: list[UploadFile] = File(...),  # noqa: B008
     mode: Literal["full", "incremental"] = Form("incremental"),
+    context: WorkspaceContext = Depends(get_workspace_context),  # noqa: B008
     store: ImportTaskStore = Depends(get_import_task_store),  # noqa: B008
     sync: SyncService = Depends(get_sync_service),  # noqa: B008
-    state_store: DocumentStateStore = Depends(get_state_store),  # noqa: B008
+    state_store: DocumentStateStore = Depends(get_workspace_state_store),  # noqa: B008
 ) -> dict[str, str]:
-    """上传式导入：多选文件夹/文件 multipart 上传，落规范根后异步导入。
+    """上传式导入：多选文件夹/文件 multipart 上传，落**本区**规范根后异步导入。
 
     mode=incremental（默认）：重新选择同一批文件夹上传 = 增量对账——指纹比对只
     处理新增/更新/删除，未变文件零重嵌入；删除只作用于本次重传的顶层目录。
     mode=full：仅入库/更新，不删除（旧语义，保守）。
+
+    规范根是**本工作区**的 ``documents/``（PRD 5.1）：A 区上传的文件不会出现在
+    B 区的相对路径身份里。后台线程用 :class:`BackgroundTaskScope` 绑定创建时的工作区
+    （A08）：导入途中用户切换工作区，落盘与索引仍写回本区。
     """
     if not files:
         raise HTTPException(status_code=400, detail="未收到任何文件")
-    documents_root = _documents_root().resolve()
+    scope = BackgroundTaskScope.bind(context)
+    documents_root = Path(scope.documents_dir).resolve()
     documents_root.mkdir(parents=True, exist_ok=True)
     try:
         saved_paths = await _save_uploads(files, documents_root)
@@ -176,11 +187,11 @@ async def upload_import(
 async def start_sync(
     store: ImportTaskStore = Depends(get_import_task_store),  # noqa: B008
     sync: SyncService = Depends(get_sync_service),  # noqa: B008
-    state_store: DocumentStateStore = Depends(get_state_store),  # noqa: B008
+    state_store: DocumentStateStore = Depends(get_workspace_state_store),  # noqa: B008
 ) -> dict[str, str]:
-    """一键增量同步：对全部已登记的知识库目录做增量同步，立即返回 task_id。
+    """一键增量同步：对**本工作区**全部已登记目录做增量同步，立即返回 task_id。
 
-    前端「同步」按钮免重选目录——目录在导入/同步时已登记到 state_store.sources。
+    前端「同步」按钮免重选目录——目录在导入/同步时已登记到本区 state_store.sources。
     未登记任何目录 -> 400 提示先导入。
     """
     roots = state_store.list_sources()
@@ -315,11 +326,11 @@ def _cleanup_stale_files(
             path.unlink(missing_ok=True)
 
 
-def _documents_root() -> Path:
-    """上传文档规范根：data_dir/documents（稳定相对路径 = 文档身份，增量同步用）。
+def _legacy_documents_root() -> Path:
+    """**旧**全局规范根：``data_dir/documents``（V1.1.0 布局，仅兼容工具/脚本引用）。
 
-    不再按 task_id 分目录——否则同一文件两次上传路径不同，指纹身份对不上，
-    无法增量。知识库自持数据、来源可回溯均保留。
+    上传式导入自 V1.2.0 起改用**本工作区**的 ``documents_dir``（见 ``upload_import``）：
+    文档身份是「相对本区规范根的路径」，沿用全局根会让两个区的同名文件互相顶替。
     """
     return settings.data_dir / "documents"
 

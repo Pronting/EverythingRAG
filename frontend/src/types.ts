@@ -52,7 +52,15 @@ export interface MemberRef {
   block_char_offset: number | null;
 }
 
-/** meta.retrieval（PRD §8.2）：仅 CONTENT_QA 下发，报告本轮筛选状态与计数。 */
+/**
+ * 本轮相关性筛选状态与计数（PRD §8.2）。
+ *
+ * 集成说明（V1.2 的 run 架构）：旧架构由 `POST /api/chat` 的 `meta.retrieval` 下发；
+ * run 架构**没有**该负载字段，前端改由**既有事件**推导（见 `run/processState.ts`
+ * 的 `retrievalFromToolEvents`）：`tool.completed`（tool_name="rerank"）成功且
+ * `result_count > 0` ⇒ `filtered`；成功且为 0 ⇒ `empty`；全程无 rerank 事件 ⇒
+ * `disabled`。**未新增/未改动任何后端契约**（字段回落为 null 时界面按来源自身字段判定）。
+ */
 export interface RetrievalMeta {
   /** filtered = 已筛选；empty = 无通过筛选的资料；disabled = 未启用筛选。 */
   status: "filtered" | "empty" | "disabled";
@@ -63,37 +71,19 @@ export interface RetrievalMeta {
   missing_headings?: number;
 }
 
+/** 答案依据（PRD 8.3，9 值；与 app.agent.contracts.AnswerBasis 同步）。 */
 export type AnswerBasis =
   | "knowledge"
   | "web"
   | "general"
   | "product"
   | "catalog"
+  | "memory"
+  | "history"
+  | "mixed"
   | "insufficient";
 
 export type QueryMode = "PRODUCT_HELP" | "KNOWLEDGE_OVERVIEW" | "CONTENT_QA";
-
-/**
- * SSE 帧联合类型。
- *
- * `reasoning` 为推理模型思维链增量（本地展示，前端默认折叠）；
- * 原始 provider 报文不会越过 SSE 边界。
- */
-export type SSEFrame =
-  | {
-      type: "meta";
-      sources: Source[];
-      answer_basis: AnswerBasis;
-      policy_version: string;
-      query_mode: QueryMode;
-      /** 可选：本轮相关性筛选状态（PRD §8.2，仅 CONTENT_QA 下发）。 */
-      retrieval?: RetrievalMeta;
-    }
-  | { type: "reasoning"; text: string }
-  | { type: "token"; text: string }
-  | { type: "tool"; tool: string; status: string }
-  | { type: "done" }
-  | { type: "error"; message: string };
 
 /** /api/status 响应中前端关心的字段（app 元信息 + 配置 + 知识计数 + 隐私基线）。 */
 export interface StatusResponse {
@@ -418,3 +408,614 @@ export interface Workspace {
 
 /** 默认工作区 id（后端常量，旧会话 / 未指定归属时落这里）。 */
 export const DEFAULT_WORKSPACE_ID = "default";
+
+// =====================================================================
+// V1.2.0 run 契约（schema_version = 2）
+//
+// 单一事实来源是 `backend/app/agent/contracts.py` 与 `events.py`；本区只做
+// 类型投影。任何字段增删都必须与后端同时改，否则 SSE 负载校验会失败
+// （PRD 13.3 末段：未知版本或负载校验失败显示协议错误，不静默降级）。
+// =====================================================================
+
+/** 事件/负载 schema 版本（PRD 13.3）。 */
+export const RUN_SCHEMA_VERSION = 2;
+
+/** 用户输入长度上限（PRD 13.2 / DEFAULT_USER_INPUT_MAX_CHARS）。 */
+export const USER_INPUT_MAX_CHARS = 32000;
+
+/** run 与 task 共用同一套状态取值（PRD 12.3，11 值）。 */
+export type RunStatus =
+  | "queued"
+  | "running"
+  | "waiting_children"
+  | "waiting_approval"
+  | "waiting_input"
+  | "interrupted"
+  | "failed"
+  | "cancelling"
+  | "cancelled"
+  | "completed"
+  | "completed_with_gaps";
+
+export type TaskStatus = RunStatus;
+
+/** run 已进入终态（不再有新事件）。 */
+export const TERMINAL_RUN_STATUSES: RunStatus[] = [
+  "failed",
+  "cancelled",
+  "completed",
+  "completed_with_gaps",
+];
+
+/** 子任务正在等待外部输入（卡片保持可见，PRD 14.3）。 */
+export const WAITING_RUN_STATUSES: RunStatus[] = [
+  "waiting_approval",
+  "waiting_input",
+  "waiting_children",
+];
+
+export type AgentKind =
+  | "intent"
+  | "planner"
+  | "general"
+  | "rag"
+  | "web"
+  | "synthesis"
+  | "verifier"
+  | "approval_reviewer"
+  | "memory_extractor";
+
+/** 权限模式（PRD 10.1，默认请求批准）。 */
+export type PermissionMode = "ask" | "auto" | "full";
+
+/** 思考深度（PRD 9.1，默认深度思考）。 */
+export type ReasoningLevel = "off" | "low" | "high" | "max";
+
+export type ApprovalDecisionKind = "allow_once" | "allow_scope" | "deny";
+export type ApprovalStatus = "pending" | "approved" | "denied" | "superseded";
+export type InputRequestStatus = "pending" | "answered" | "superseded";
+
+/** 引用/答案依据的来源类型（PRD 8.3，6 值；决定 [S]/[W]/[M]/[H] 前缀）。 */
+export type SourceType = "knowledge" | "web" | "memory" | "history" | "catalog" | "product";
+
+/** 证据来源类型（PRD 8.1，8 值；后两者不产生文档引用编号）。 */
+export type EvidenceSourceType = SourceType | "general_knowledge" | "proposal";
+
+export type VerifierVerdict = "pass" | "revise" | "research" | "clarify" | "insufficient";
+
+/** 核对项目（PRD 8.2，八项）。 */
+export type VerificationCheck =
+  | "requirement_coverage"
+  | "factual_support"
+  | "numbers_and_units"
+  | "version_and_scope"
+  | "source_conflict"
+  | "internal_fact"
+  | "citation_validity"
+  | "material_status";
+
+export type VerificationSeverity = "low" | "medium" | "high";
+
+/** 已保存引用的来源状态（知识被删/工作区归档时保留片段并标记，PRD 14.4）。 */
+export type CitationSourceStatus = "active" | "deleted" | "archived";
+
+export type IntentKind =
+  | "general"
+  | "research"
+  | "product"
+  | "catalog"
+  | "memory"
+  | "clarification";
+
+export type Freshness = "none" | "current" | "date_range";
+
+/** 20 类 SSE 事件 type（PRD 13.3，见架构文档 D1）。 */
+export type EventType =
+  | "run.status"
+  | "route.decided"
+  | "plan.updated"
+  | "agent.started"
+  | "agent.completed"
+  | "tool.started"
+  | "tool.completed"
+  | "approval.requested"
+  | "approval.resolved"
+  | "input.requested"
+  | "input.resolved"
+  | "evidence.added"
+  | "verification.updated"
+  | "answer.meta"
+  | "answer.delta"
+  | "run.completed"
+  | "run.failed"
+  | "run.cancelled"
+  | "memory.updated"
+  | "memory.failed";
+
+/** 订阅据此关闭的事件（终态帧）。 */
+export const CLOSING_EVENT_TYPES: EventType[] = [
+  "run.completed",
+  "run.failed",
+  "run.cancelled",
+];
+
+// ---------------------------------------------------------------- 契约对象
+
+/** 引用条目（PRD 8.3）：稳定编号 + 来源身份 + 保存片段 + 来源状态。 */
+export interface CitationEntry {
+  label: string;
+  source_type: SourceType;
+  evidence_id: string;
+  workspace_id: string;
+  workspace_name: string;
+  source_ref: string;
+  snippet: string;
+  source_status: CitationSourceStatus;
+}
+
+export interface WebReadRange {
+  offset: number;
+  length: number;
+  total: number;
+  complete: boolean;
+}
+
+/** 证据对象（PRD 8.1，12 字段）。 */
+export interface Evidence {
+  evidence_id: string;
+  workspace_id: string;
+  run_id: string;
+  task_id: string | null;
+  source_type: EvidenceSourceType;
+  source_ref: string;
+  content: string;
+  content_hash: string;
+  document_revision: string;
+  retrieved_at: string;
+  supported_requirements: string[];
+  limitations: string[];
+}
+
+export interface RouteDecision {
+  question: string;
+  resolved_question: string;
+  intent: IntentKind;
+  needs_knowledge: boolean;
+  needs_web: boolean;
+  needs_history: boolean;
+  needs_general: boolean;
+  freshness: Freshness;
+  entities: string[];
+  scope_evidence_ids: string[];
+  unresolved_terms: string[];
+  reason_summary: string;
+}
+
+export interface VerificationIssue {
+  check: VerificationCheck;
+  requirement_ids: string[];
+  statement: string;
+  evidence_ids: string[];
+  required_action: string;
+  severity: VerificationSeverity;
+}
+
+export interface VerificationResult {
+  verdict: VerifierVerdict;
+  issues: VerificationIssue[];
+  covered_requirements: string[];
+  uncovered_requirements: string[];
+  open_questions: string[];
+  conflicts: string[];
+  checked_at: string;
+}
+
+export interface AgentError {
+  error_code: string;
+  message: string;
+  node: string;
+  operation_id: string | null;
+  resumable: boolean;
+  required_action: string;
+  created_at: string;
+}
+
+export interface AnswerArtifact {
+  answer_id: string;
+  run_id: string;
+  workspace_id: string;
+  content: string;
+  citations: CitationEntry[];
+  verification: VerificationResult | null;
+  content_hash: string;
+  answer_basis: AnswerBasis;
+  basis_components: SourceType[];
+  status: RunStatus;
+  created_at: string;
+}
+
+/** 批准卡片的作用范围（「允许本轮同类操作」的匹配键，四项全等）。 */
+export interface ApprovalScope {
+  run_id: string;
+  tool_category: string;
+  question_scope: string;
+  rule_version: string;
+}
+
+/** 批准卡片展示字段（PRD 14.3：目的/工具/查询或 URL/日期范围/所属子任务/脱敏提示）。 */
+export interface ApprovalDisplay {
+  purpose: string;
+  tool_name: string;
+  query_or_urls: string[];
+  date_range: string;
+  task_question: string;
+  redaction_notice: string;
+  parameters: Record<string, unknown>;
+}
+
+/** 批准请求（PRD 10.2，11 字段 + 展示与范围）。 */
+export interface ApprovalRequest {
+  approval_id: string;
+  run_id: string;
+  task_id: string | null;
+  interrupt_id: string;
+  operation_id: string;
+  args_hash: string;
+  context_epoch: number;
+  rule_version: string;
+  display: ApprovalDisplay;
+  status: ApprovalStatus;
+  decision: unknown;
+  scope: ApprovalScope | null;
+  superseded_reason: string;
+  created_at: string;
+  resolved_at: string | null;
+}
+
+/** 澄清请求（PRD 13.2）。 */
+export interface InputRequest {
+  input_request_id: string;
+  run_id: string;
+  task_id: string | null;
+  question: string;
+  options: string[];
+  reason: string;
+  status: InputRequestStatus;
+  answer: string | null;
+  question_version: number;
+  created_at: string;
+  resolved_at: string | null;
+}
+
+// ---------------------------------------------------------------- run 摘要
+
+export interface TaskSummary {
+  task_id: string;
+  agent_kind: string;
+  question: string;
+  status: TaskStatus;
+  depends_on: string[];
+  requirement_ids: string[];
+  thread_id: string | null;
+  result_ref: string | null;
+  /**
+   * 父任务 id（PRD 14.2 父子任务）。
+   *
+   * 只有 run 详情（`RunDetail.tasks[]`）会带；`plan.updated` 事件的负载里没有该字段
+   * （后端固定契约未改），所以事件流阶段先用 `depends_on` 近似，快照到达后再补正。
+   */
+  parent_task_id: string | null;
+}
+
+/** 图片引用形态（后端 `app/api/run_images.py::_kind_of`）。 */
+export type RunImageKind = "data_uri" | "url" | "invalid";
+
+/**
+ * 一条图片引用的处理结果（PRD 13.2「图片引用」）。
+ *
+ * `status` 是**如实上报**的处理程度，界面必须照它显示，不得把非 `described` 说成已生效：
+ * - `described`：原图已缓存 + 描述已入库 → `verify_image` 本轮可核对；
+ * - `cached`：原图已缓存、任务已登记，但**未识图**（视觉未配置），待续跑补做；
+ * - `pending_vision`：登记成功但流水线报告处理失败（例如识图模型报错）；
+ * - `unavailable`：引用形态可识别，但当前环境取不到字节（未配置下载通道）；
+ * - `rejected`：引用本身不可用（非法 data URI / 非 http(s) / 超出张数上限）。
+ */
+export type RunImageStatus =
+  | "described"
+  | "cached"
+  | "pending_vision"
+  | "unavailable"
+  | "rejected";
+
+export interface RunImageRef {
+  image_id: string;
+  block_id: string;
+  content_hash: string;
+  kind: RunImageKind | string;
+  status: RunImageStatus | string;
+  reason: string;
+  src_ref: string;
+  recorded_at: string;
+}
+
+export interface RunSummary {
+  run_id: string;
+  conversation_id: string;
+  workspace_id: string;
+  status: RunStatus;
+  permission_mode: PermissionMode;
+  reasoning_level: ReasoningLevel;
+  answer_id: string | null;
+  error_code: string | null;
+  stop_reason: string | null;
+  resumable: boolean;
+  context_epoch: number;
+  created_at: string;
+  updated_at: string;
+}
+
+/** `GET/POST .../runs/{id}` 详情：状态 + 子任务 + 待处理卡片 + 末事件位置。 */
+export interface RunDetail extends RunSummary {
+  events_url: string;
+  tasks: TaskSummary[];
+  approvals: ApprovalRequest[];
+  inputs: InputRequest[];
+  /** 本次 run 附带的图片引用逐条处理结果（PRD 13.2；后端如实上报）。 */
+  image_refs: RunImageRef[];
+  /** 末事件位置：刷新后从这里继续补读（PRD 14.3）。 */
+  last_event_seq: number;
+  // Last-Event-ID 的服务端等价物见 `event-log?after=`。
+}
+
+// ---------------------------------------------------------------- 事件负载
+
+export interface ToolStartedPayload {
+  tool_name: string;
+  args_summary: string;
+  operation_id: string;
+  task_id: string | null;
+}
+
+export interface ToolCompletedPayload {
+  tool_name: string;
+  operation_id: string;
+  status: string;
+  result_count: number;
+  source_count: number;
+  error_code: string;
+}
+
+export interface RunStatusPayload {
+  status: RunStatus;
+  phase: string;
+  message: string;
+}
+
+export interface PlanTaskSummary {
+  task_id: string;
+  question: string;
+  agent_kind: AgentKind;
+  status: TaskStatus;
+  depends_on: string[];
+  requirement_ids: string[];
+}
+
+export interface PlanUpdatedPayload {
+  tasks: PlanTaskSummary[];
+  covered_requirements: string[];
+  uncovered_requirements: string[];
+}
+
+export interface AgentStartedPayload {
+  agent_kind: AgentKind;
+  thread_id: string;
+  task_id: string | null;
+  question: string;
+}
+
+export interface AgentCompletedPayload {
+  agent_kind: AgentKind;
+  status: TaskStatus;
+  summary: string;
+}
+
+export interface EvidenceSummary {
+  evidence_id: string;
+  source_type: EvidenceSourceType;
+  title: string;
+  source_ref: string;
+  snippet: string;
+}
+
+export interface EvidenceAddedPayload {
+  items: EvidenceSummary[];
+}
+
+export interface ApprovalRequestedPayload {
+  approval: ApprovalRequest;
+}
+
+export interface ApprovalResolvedPayload {
+  approval_id: string;
+  status: string;
+  decision_kind: ApprovalDecisionKind | null;
+}
+
+export interface InputRequestedPayload {
+  request: InputRequest;
+}
+
+export interface InputResolvedPayload {
+  input_request_id: string;
+  answer: string;
+}
+
+export interface VerificationUpdatedPayload {
+  result: VerificationResult;
+  pending: string[];
+}
+
+export interface AnswerMetaPayload {
+  answer_id: string;
+  answer_basis: AnswerBasis;
+  basis_components: SourceType[];
+  citations: CitationEntry[];
+  content_hash: string;
+  status: RunStatus;
+}
+
+export interface AnswerDeltaPayload {
+  answer_id: string;
+  index: number;
+  text: string;
+}
+
+export interface UsageInfo {
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
+  reasoning_tokens: number;
+  prompt_cache_hit_tokens: number;
+  prompt_cache_miss_tokens: number;
+}
+
+export interface RunCompletedPayload {
+  answer_id: string;
+  status: RunStatus;
+  content_hash: string;
+  usage: UsageInfo;
+  gaps: string[];
+}
+
+export interface RunFailedPayload {
+  error: AgentError;
+}
+
+export interface RunCancelledPayload {
+  stop_reason: string;
+  resumable: boolean;
+}
+
+export interface MemoryUpdatedPayload {
+  revision: number;
+  invalidation_revision: number;
+  entries_added: number;
+  entries_updated: number;
+}
+
+export interface MemoryFailedPayload {
+  reason: string;
+  retryable: boolean;
+}
+
+/** 统一事件对象（PRD 13.3）：SSE `data` 即本模型的 JSON。 */
+export interface RunEvent<T extends EventType = EventType> {
+  schema_version: number;
+  run_id: string;
+  event_seq: number;
+  execution_id: string;
+  task_id: string | null;
+  type: T;
+  created_at: string;
+  payload: unknown;
+  object_id?: string | null;
+  version?: number | null;
+}
+
+/** 协议错误帧（不在 20 类存储事件里）：界面据此显示协议错误，不静默丢帧。 */
+export interface RunProtocolErrorFrame {
+  type: "error";
+  error_code: string;
+  message: string;
+}
+
+/** SSE `data` 的两种形态。 */
+export type RunStreamFrame = RunEvent | RunProtocolErrorFrame;
+
+/** 带具体负载的强类型事件，供事件归约器使用。 */
+export type RunEventTyped =
+  | RunEvent<"run.status"> & { payload: RunStatusPayload }
+  | RunEvent<"route.decided"> & { payload: { decision: RouteDecision } }
+  | RunEvent<"plan.updated"> & { payload: PlanUpdatedPayload }
+  | RunEvent<"agent.started"> & { payload: AgentStartedPayload }
+  | RunEvent<"agent.completed"> & { payload: AgentCompletedPayload }
+  | RunEvent<"tool.started"> & { payload: ToolStartedPayload }
+  | RunEvent<"tool.completed"> & { payload: ToolCompletedPayload }
+  | RunEvent<"approval.requested"> & { payload: ApprovalRequestedPayload }
+  | RunEvent<"approval.resolved"> & { payload: ApprovalResolvedPayload }
+  | RunEvent<"input.requested"> & { payload: InputRequestedPayload }
+  | RunEvent<"input.resolved"> & { payload: InputResolvedPayload }
+  | RunEvent<"evidence.added"> & { payload: EvidenceAddedPayload }
+  | RunEvent<"verification.updated"> & { payload: VerificationUpdatedPayload }
+  | RunEvent<"answer.meta"> & { payload: AnswerMetaPayload }
+  | RunEvent<"answer.delta"> & { payload: AnswerDeltaPayload }
+  | RunEvent<"run.completed"> & { payload: RunCompletedPayload }
+  | RunEvent<"run.failed"> & { payload: RunFailedPayload }
+  | RunEvent<"run.cancelled"> & { payload: RunCancelledPayload }
+  | RunEvent<"memory.updated"> & { payload: MemoryUpdatedPayload }
+  | RunEvent<"memory.failed"> & { payload: MemoryFailedPayload };
+
+// ------------------------------------------------------- 过程区域条目模型
+
+/** 过程区域条目种类（PRD 14.2：计划/Agent/工具/资料/批准/澄清/核对/状态）。 */
+export type ProcessEntryKind =
+  | "route"
+  | "plan"
+  | "agent"
+  | "tool"
+  | "evidence"
+  | "approval"
+  | "input"
+  | "verification"
+  | "status"
+  | "memory"
+  | "error";
+
+/** 过程区域条目：全部由**实际事件**生成，不是预先编好的文案。 */
+export interface ProcessEntry {
+  /** 稳定 key：同一条目被后续事件更新时复用（如工具 running → succeeded）。 */
+  id: string;
+  kind: ProcessEntryKind;
+  text: string;
+  /** 事件序号（排序与去重依据）。 */
+  seq: number;
+  at: string;
+  status: "running" | "done" | "failed" | "waiting";
+  taskId: string | null;
+  /** 工具名 / Agent 名 / 核对项目键（测试与样式挂钩）。 */
+  tag?: string;
+  /** 可展开的细项（读过的来源、结果摘要、核对发现）。 */
+  details?: string[];
+}
+
+/** 过程区域内的研究任务视图（父任务展示整体完成情况，PRD 14.2）。 */
+export interface ProcessTask {
+  taskId: string;
+  question: string;
+  agentKind: string;
+  status: TaskStatus;
+  dependsOn: string[];
+  parentTaskId: string | null;
+  /** 子问题（本任务派生出的子任务 id）。 */
+  childTaskIds: string[];
+  /** 读过的来源（source_ref + 标题）。 */
+  sources: EvidenceSummary[];
+  /** 结果摘要（agent.completed.summary）。 */
+  resultSummary: string;
+}
+
+/** 过程区域的完整归约结果。 */
+export interface ProcessState {
+  entries: ProcessEntry[];
+  tasks: ProcessTask[];
+  /** 主图与子图的 thread_id（`run:<id>:main` / `run:<id>:task:<task_id>`）。 */
+  threads: string[];
+  /** 已处理的最大事件序号（去重与断线补读的游标）。 */
+  lastSeq: number;
+}
+
+/** 批准/澄清卡片在对话中的位置（PRD 14.3：直接位于对话中）。 */
+export interface PendingCards {
+  approvals: ApprovalRequest[];
+  inputs: InputRequest[];
+}

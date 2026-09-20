@@ -1,34 +1,12 @@
 import { expect, test, type Page } from "@playwright/test";
-
-const STATUS_BODY = JSON.stringify({
-  app: { name: "everything-rag", version: "0.1.0" },
-  config: {
-    wizard_completed: false,
-    embed_configured: true,
-    chat_configured: true,
-    vision_configured: false,
-    vision_enabled: false,
-    search_enabled: false,
-    search_configured: false,
-  },
-  knowledge: { file_count: 0, chunk_count: 0, image_count: 0, last_sync_at: null, needs_rebuild: false },
-  privacy: { outbound_state: "local-only", providers: {} },
-});
-
-const ANSWER_FRAMES: unknown[] = [
-  { type: "meta", answer_basis: "knowledge", policy_version: "rag-policy-v3", query_mode: "CONTENT_QA", sources: [] },
-  { type: "token", text: "分支里的回答" },
-  { type: "done" },
-];
-
-/** 把帧序列编码为线上 SSE 格式。 */
-function encodeSse(frames: unknown[]): string {
-  return frames.map((frame) => `data: ${JSON.stringify(frame)}\n\n`).join("");
-}
+import { answerDelta, expectRunOnlyTraffic, runCompleted, runStatus, stubRunBackend } from "./runFixtures";
 
 /**
  * 分支对话的竞态回归：fork 后消息仍在异步装载时用户就发问，
  * 这一轮结果不能追加落库（否则分支历史会被重复写一遍）。
+ *
+ * V1.2：消息落库由后端 run 完成，前端不再调用 `/messages` —— 本用例继续守住
+ * 「装载窗口内不产生任何 `/messages` 写入」这条不变量。
  */
 test("分支装载未完成时提问不重复写入历史", async ({ page }: { page: Page }) => {
   const calls: string[] = [];
@@ -37,24 +15,12 @@ test("分支装载未完成时提问不重复写入历史", async ({ page }: { p
     releaseDetail = resolve;
   });
 
-  await page.route("**/api/status", (route) =>
-    route.fulfill({ status: 200, contentType: "application/json", body: STATUS_BODY }),
-  );
-  await page.route("**/api/settings", (route) =>
-    route.fulfill({ status: 200, contentType: "application/json", body: "{}" }),
-  );
-  await page.route("**/api/workspaces**", (route) =>
-    route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify([
-        { id: "default", name: "默认", is_default: true, created_at: "", updated_at: "", conversation_count: 1 },
-      ]),
-    }),
-  );
-  await page.route("**/api/chat", (route) =>
-    route.fulfill({ status: 200, contentType: "text/event-stream", body: encodeSse(ANSWER_FRAMES) }),
-  );
+  const stub = await stubRunBackend(page, {
+    frames: [runStatus("running"), answerDelta("分支里的回答"), runCompleted()],
+  });
+
+  // 工作区列表 / settings / status 由 stubRunBackend 提供；这里不要再注册
+  // `**/api/workspaces**`（后注册者优先，会把同前缀的 /runs 路由一起吃掉）。
   await page.route("**/api/conversations**", async (route) => {
     const url = new URL(route.request().url());
     const segments = url.pathname.split("/").filter((part) => part !== "");
@@ -97,4 +63,5 @@ test("分支装载未完成时提问不重复写入历史", async ({ page }: { p
   releaseDetail();
   await expect(page.getByText("继承来的历史")).toBeVisible();
   expect(calls.filter((call) => call.includes("/messages"))).toHaveLength(0);
+  expectRunOnlyTraffic(stub);
 });

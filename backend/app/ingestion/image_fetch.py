@@ -6,6 +6,10 @@
 Pillow verify 兜底。失败抛 ImageFetchError（可读原因，不含 URL 敏感片段）。
 
 同步 httpx 模型：与 CloudEmbedder 一致，供导入后台线程调用（不占事件循环）。
+
+可测试性：``transport`` 是可选注入点（默认 ``None`` 时行为与 V1.1.0 完全一致）。测试注入
+``httpx.MockTransport``，不再 monkeypatch 全局 ``httpx.Client``——那会篡改进程内所有
+httpx 同步消费者，并行跑测试时产生跨用例串扰。
 """
 
 from __future__ import annotations
@@ -34,10 +38,12 @@ class ImageFetcher:
         timeout_s: float = DEFAULT_TIMEOUT_S,
         max_bytes: int = MAX_BYTES,
         outbound: OutboundClient | None = None,
+        transport: httpx.BaseTransport | None = None,
     ) -> None:
         self._timeout = timeout_s
         self._max_bytes = max(1, int(max_bytes))
         self._outbound = outbound
+        self._transport = transport
 
     def fetch(self, url: str) -> bytes:
         """下载 ``url`` 的图片字节；失败抛 ImageFetchError（含可读原因）。"""
@@ -47,7 +53,11 @@ class ImageFetcher:
         started_at = _utcnow() if self._outbound is not None else None
         try:
             with (
-                httpx.Client(timeout=self._timeout, follow_redirects=True) as client,
+                httpx.Client(
+                    timeout=self._timeout,
+                    follow_redirects=True,
+                    transport=self._transport,
+                ) as client,
                 client.stream("GET", url) as response,
             ):
                 if response.status_code != 200:

@@ -1,255 +1,60 @@
-"""POST /api/chat SSE 端点测试（TestClient + dependency_overrides 注入 fake，零出网）。
+"""``POST /api/chat`` 下线验证（PRD 13.2）：旧入口**必须** 410，新入口必须在位。
 
-隐私红线：端点在测试中全部替换为 fake 依赖，不触发真实嵌入 / 检索 / 云端模型；
-另有阻断一切 socket 连接的用例实证全链路零出网。
+V1.2.0 把单轮 SSE 问答换成持久任务（run API + v2 事件）。本文件保留「证明旧入口
+下线」的用例，而不是删掉整个文件：
+
+1. 旧入口对任何请求体都返回 **410 Gone**（不是 404 —— 404 会被前端误判成「服务没起来」）；
+2. 旧链路的依赖（``get_chat_service`` / ChatService 注入点）**结构性不可达**：
+   路由模块里不再存在这个 provider，``dependency_overrides`` 也就无从挂上；
+3. 410 路径**零出网**（阻断非回环连接后仍然正常返回）；
+4. 替代入口在 OpenAPI 里真实存在（前端照此迁移，耦合点清单见 T09 回报）。
 """
 
 from __future__ import annotations
 
-import json
 import socket
-from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
 
-from app.api.routes.chat import get_chat_service
-from app.generation.base import ChatChunk
-from app.generation.chat_service import ChatService
-from app.generation.providers import ChatProviderError, UnconfiguredChatModel
+from app.api.routes import chat as chat_module
 from app.main import app
-from app.retrieval.vector_retriever import RetrievalError, RetrievedChunk
 
 
-class FakeEmbedder:
-    fingerprint = "fake"
-    dim = 4
-
-    def embed_texts(self, texts: list[str]) -> list[list[float]]:
-        return [[0.1, 0.2, 0.3, 0.4]]
-
-
-class FakeRetriever:
-    def __init__(
-        self,
-        chunks: list[RetrievedChunk] | None = None,
-        error: Exception | None = None,
-    ) -> None:
-        self._chunks = chunks if chunks is not None else []
-        self._error = error
-
-    def retrieve(
-        self,
-        query_vector: list[float],
-        where: dict[str, Any] | None = None,
-    ) -> list[RetrievedChunk]:
-        if self._error is not None:
-            raise self._error
-        return self._chunks
+def test_old_endpoint_returns_410_gone() -> None:
+    client = TestClient(app)
+    response = client.post("/api/chat", json={"message": "你好"})
+    assert response.status_code == 410
+    body = response.json()
+    assert body["error_code"] == "chat_endpoint_removed"
+    assert body["replacement"] == "/api/workspaces/{workspace_id}/runs"
+    assert "run API" in body["detail"] or "runs" in body["detail"]
 
 
-class FakeChatModel:
-    def __init__(
-        self,
-        tokens: list[str] | None = None,
-        error: Exception | None = None,
-    ) -> None:
-        self._tokens = tokens if tokens is not None else ["你", "好"]
-        self._error = error
+def test_old_endpoint_is_410_even_with_legacy_payload() -> None:
+    """旧格式（history / web_search / images）也返回 410：不再解析旧请求体。"""
 
-    @property
-    def supports_image_input(self) -> bool:
-        return False
-
-    async def stream_chat(self, messages: list[dict[str, Any]], **kwargs: Any) -> Any:
-        if self._error is not None:
-            raise self._error
-        for token in self._tokens:
-            yield ChatChunk("content", token)
+    client = TestClient(app)
+    legacy = {
+        "message": "你好",
+        "history": [{"role": "user", "content": "上一轮"}],
+        "web_search": True,
+        "images": ["data:image/png;base64,AAAA"],
+    }
+    response = client.post("/api/chat", json=legacy)
+    assert response.status_code == 410
 
 
-def _chunk(
-    block_id: str = "b1",
-    text: str = "第一块内容",
-    similarity: float = 0.92,
-) -> RetrievedChunk:
-    return RetrievedChunk(
-        block_id=block_id,
-        text=text,
-        similarity=similarity,
-        source_file="notes.md",
-        platform="kimi",
-        chunk_type="text",
-        anchor="a1",
-        heading_path="s1",
-        metadata={"source_file": "notes.md"},
-    )
+def test_old_service_dependency_is_unreachable() -> None:
+    """旧链路的依赖注入点已随路由一起移除（不会被 dependency_overrides 复活）。"""
+
+    assert not hasattr(chat_module, "get_chat_service")
+    assert "GET" not in {method for route in chat_module.router.routes for method in route.methods}
 
 
-def _override(service: ChatService) -> None:
-    """用 fake service 覆盖 get_chat_service 依赖（fastapi 规则：覆盖精确依赖）。"""
-    app.dependency_overrides[get_chat_service] = lambda: service
+def test_old_endpoint_does_not_touch_the_network(monkeypatch: pytest.MonkeyPatch) -> None:
+    """410 路径零外发：阻断一切非回环连接后仍然正常返回。"""
 
-
-def _parse_sse(body: str) -> list[dict[str, Any]]:
-    """解析 SSE body：每行 'data: {json}' -> 帧 dict 列表。"""
-    return [
-        json.loads(line[len("data: ") :])
-        for line in body.splitlines()
-        if line.startswith("data: ")
-    ]
-
-
-def _stream_body(client: TestClient, message: str) -> tuple[int, str]:
-    """POST /api/chat 并以流方式读回完整 body，返回 (status_code, body)。"""
-    with client.stream("POST", "/api/chat", json={"message": message}) as resp:
-        return resp.status_code, resp.read().decode("utf-8")
-
-
-# ---------------------------------------------------------------- 1. 帧顺序
-
-
-def test_chat_sse_frame_order() -> None:
-    """meta -> token -> token -> done；meta.sources 含检索来源字段（similarity 保留 float）。"""
-    service = ChatService(
-        FakeEmbedder(),
-        FakeRetriever(chunks=[_chunk()]),
-        FakeChatModel(tokens=["你", "好"]),
-    )
-    _override(service)
-    try:
-        client = TestClient(app)
-        status, body = _stream_body(client, "你好")
-    finally:
-        app.dependency_overrides.clear()
-
-    assert status == 200
-    frames = _parse_sse(body)
-    assert [frame["type"] for frame in frames] == ["meta", "token", "token", "done"]
-
-    source = frames[0]["sources"][0]
-    assert source["block_id"] == "b1"
-    assert source["text"] == "第一块内容"
-    assert source["source_file"] == "notes.md"
-    assert source["platform"] == "kimi"
-    assert source["chunk_type"] == "text"
-    assert source["heading_path"] == "s1"
-    assert source["anchor"] == "a1"
-    assert source["similarity"] == pytest.approx(0.92)
-    assert isinstance(source["similarity"], float)
-
-    assert frames[1] == {"type": "token", "text": "你"}
-    assert frames[2] == {"type": "token", "text": "好"}
-    assert frames[3] == {"type": "done"}
-
-
-# ---------------------------------------------------------------- 2. 错误路径不崩
-
-
-def test_retrieval_error_returns_single_error_frame() -> None:
-    """检索抛 RetrievalError -> 仅 error 帧，message 含「未建索引」，HTTP 200（SSE 流式错误）。"""
-    service = ChatService(
-        FakeEmbedder(),
-        FakeRetriever(error=RetrievalError("知识库尚未建立索引，请先导入并同步文档")),
-        FakeChatModel(),
-    )
-    _override(service)
-    try:
-        client = TestClient(app)
-        status, body = _stream_body(client, "你好")
-    finally:
-        app.dependency_overrides.clear()
-
-    assert status == 200
-    frames = _parse_sse(body)
-    assert [frame["type"] for frame in frames] == ["error"]
-    assert "尚未建立索引" in frames[0]["message"]
-
-
-def test_chat_model_error_returns_single_error_frame() -> None:
-    """对话模型抛异常 -> 仅 error 帧，消息脱敏不泄漏异常正文。"""
-    service = ChatService(
-        FakeEmbedder(),
-        FakeRetriever(chunks=[_chunk()]),
-        FakeChatModel(error=RuntimeError("boom-internal")),
-    )
-    _override(service)
-    try:
-        client = TestClient(app)
-        status, body = _stream_body(client, "你好")
-    finally:
-        app.dependency_overrides.clear()
-
-    assert status == 200
-    frames = _parse_sse(body)
-    assert [frame["type"] for frame in frames] == ["error"]
-    assert "boom-internal" not in frames[0]["message"]
-
-
-def test_unconfigured_provider_returns_error_frame() -> None:
-    """provider 未配置（占位模型）-> 仅 error 帧，消息列出缺失的环境变量名。"""
-    error = ChatProviderError(
-        "对话 provider 未配置，缺少环境变量: EVERYTHING_RAG_CHAT_MODEL"
-    )
-    service = ChatService(
-        FakeEmbedder(),
-        FakeRetriever(chunks=[_chunk()]),
-        UnconfiguredChatModel(error),
-    )
-    _override(service)
-    try:
-        client = TestClient(app)
-        status, body = _stream_body(client, "你好")
-    finally:
-        app.dependency_overrides.clear()
-
-    assert status == 200
-    frames = _parse_sse(body)
-    assert [frame["type"] for frame in frames] == ["error"]
-    assert "EVERYTHING_RAG_CHAT_MODEL" in frames[0]["message"]
-
-
-def test_empty_message_returns_422() -> None:
-    """空消息 -> FastAPI 请求校验 422（非 500）。"""
-    _override(ChatService(FakeEmbedder(), FakeRetriever(), FakeChatModel()))
-    try:
-        client = TestClient(app)
-        resp = client.post("/api/chat", json={"message": ""})
-    finally:
-        app.dependency_overrides.clear()
-
-    assert resp.status_code == 422
-
-
-# ---------------------------------------------------------------- 3. 零出网
-
-
-def test_full_chain_zero_outbound(monkeypatch: pytest.MonkeyPatch) -> None:
-    """阻断一切非回环网络连接，SSE 全链路（fake 依赖）仍成功 => 零出网。
-
-    TestClient 的 anyio 事件循环在 Windows 依赖回环自环 socket（socketpair），
-    故仅放行回环；任何真实外呼（非回环目的地）即判定失败。
-    """
-    _block_non_loopback(monkeypatch)
-    service = ChatService(
-        FakeEmbedder(),
-        FakeRetriever(chunks=[_chunk()]),
-        FakeChatModel(tokens=["好"]),
-    )
-    _override(service)
-    try:
-        client = TestClient(app)
-        status, body = _stream_body(client, "你好")
-    finally:
-        app.dependency_overrides.clear()
-
-    assert status == 200
-    frames = _parse_sse(body)
-    assert [frame["type"] for frame in frames] == ["meta", "token", "done"]
-
-
-def _block_non_loopback(monkeypatch: pytest.MonkeyPatch) -> None:
-    """阻断一切非回环连接（真实外呼）；回环目的地放行（事件循环自环所需）。"""
     monkeypatch.setattr(socket, "create_connection", _raise_outbound)
     original_connect = socket.socket.connect
 
@@ -265,54 +70,25 @@ def _block_non_loopback(monkeypatch: pytest.MonkeyPatch) -> None:
         return original_connect(self, address, *args, **kwargs)
 
     monkeypatch.setattr(socket.socket, "connect", guarded_connect)
+    client = TestClient(app)
+    assert client.post("/api/chat", json={"message": "你好"}).status_code == 410
 
 
 def _raise_outbound(*args: object, **kwargs: object) -> None:
     raise AssertionError("Unexpected outbound network call")
 
 
-# ---------------------------------------------------------------- 4. web_search 字段转发
+def test_replacement_run_endpoints_are_registered() -> None:
+    """替代入口必须在位：建 run、订阅事件、批准、澄清、停止、继续（PRD 13.2）。"""
 
-
-class _SpyService:
-    """记录 stream_answer 收到的 web_search 参数（验证请求体字段透传）。"""
-
-    def __init__(self) -> None:
-        self.web_search: bool | None = None
-
-    async def stream_answer(
-        self,
-        message: str,
-        history: list[dict[str, Any]] | None = None,
-        web_search: bool = False,
-        images: list[str] | None = None,
-    ) -> Any:
-        self.web_search = web_search
-        self.images = images
-        yield {"type": "done"}
-
-
-def test_web_search_field_forwarded_to_service() -> None:
-    """请求体 web_search=true -> service.stream_answer 收到 True；缺省 -> False。"""
-    spy = _SpyService()
-    _override(spy)  # type: ignore[arg-type]
-    try:
-        client = TestClient(app)
-        status, _body = _stream_body(client, "你好")
-        assert status == 200
-        assert spy.web_search is False
-    finally:
-        app.dependency_overrides.clear()
-
-    spy2 = _SpyService()
-    _override(spy2)  # type: ignore[arg-type]
-    try:
-        client = TestClient(app)
-        with client.stream(
-            "POST", "/api/chat", json={"message": "你好", "web_search": True}
-        ) as resp:
-            assert resp.status_code == 200
-            resp.read()
-        assert spy2.web_search is True
-    finally:
-        app.dependency_overrides.clear()
+    paths = set(app.openapi()["paths"])
+    for path in (
+        "/api/workspaces/{workspace_id}/runs",
+        "/api/workspaces/{workspace_id}/runs/{run_id}",
+        "/api/workspaces/{workspace_id}/runs/{run_id}/events",
+        "/api/workspaces/{workspace_id}/runs/{run_id}/cancel",
+        "/api/workspaces/{workspace_id}/runs/{run_id}/resume",
+        "/api/workspaces/{workspace_id}/approvals/{approval_id}",
+        "/api/workspaces/{workspace_id}/inputs/{input_request_id}",
+    ):
+        assert path in paths, path

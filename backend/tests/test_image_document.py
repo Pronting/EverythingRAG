@@ -46,13 +46,15 @@ def test_reader_uses_cached_original_without_downloading(monkeypatch, tmp_path):
 def test_original_image_endpoint_returns_cached_bytes_and_handles_missing(tmp_path):
     from fastapi.testclient import TestClient
 
-    from app.api.deps import get_image_state_store
+    from app.api.deps import get_image_state_store, get_workspace_image_state_store
     from app.main import app
     cache = ImageStateStore(tmp_path / "images.db")
     output = io.BytesIO()
     Image.new("RGB", (64, 64)).save(output, format="PNG")
     cache.save_image_bytes("a" * 16, output.getvalue())
     app.dependency_overrides[get_image_state_store] = lambda: cache
+    # T01（V1.2.0）：原图端点按工作区校验身份，override 需同时覆盖按区 provider。
+    app.dependency_overrides[get_workspace_image_state_store] = lambda: cache
     client = TestClient(app)
     try:
         response = client.get("/api/knowledge/images/" + "a" * 16)
@@ -63,6 +65,7 @@ def test_original_image_endpoint_returns_cached_bytes_and_handles_missing(tmp_pa
         assert client.get("/api/knowledge/images/invalid").status_code == 404
     finally:
         app.dependency_overrides.pop(get_image_state_store, None)
+        app.dependency_overrides.pop(get_workspace_image_state_store, None)
         cache.close()
 
 

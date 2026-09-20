@@ -5,55 +5,186 @@ import react from "@vitejs/plugin-react";
 // 开发时可用环境变量 EVERYTHING_RAG_BACKEND_URL 指定（默认 127.0.0.1:9999）。
 const backendUrl = process.env.EVERYTHING_RAG_BACKEND_URL || "http://127.0.0.1:9999";
 
-// E2E：把 /api/chat 换成可控的慢速 SSE 夹具，用真流式验证「停止生成」；
+// E2E：把 V1.2 的任务（run）端点换成可控的慢速 SSE 夹具，用真流式验证「停止生成」；
 // 同时把 /api 代理指向不可达地址，任何没被 page.route stub 的请求都会立刻失败，
 // 避免测试意外打到用户真实运行中的后端（读到真实会话数据、甚至写坏它）。
 // 仅当显式设置 EVERYTHING_RAG_SSE_FIXTURE=slow 时生效。
+//
+// V1.2 迁移：旧夹具挂在 `POST /api/chat`（该入口已结构性移除，只剩 410），现在挂在
+// `POST /api/workspaces/{w}/runs`（创建任务）+ `GET .../runs/{r}/events`（SSE）。
 const sseFixture = process.env.EVERYTHING_RAG_SSE_FIXTURE ?? "";
 const SSE_FIXTURE_DELAY_MS = Number(process.env.EVERYTHING_RAG_SSE_FIXTURE_DELAY_MS ?? "6000");
 // 1 端口回环：连接必然被拒，不会连到真实后端
 const e2eBackendUrl = "http://127.0.0.1:1";
 
+const FIXTURE_RUN_ID = "fixture-run-1";
+
+/** 夹具 run 详情（与后端 `RunDetail` 同形，含 `image_refs`）。 */
+function fixtureRunDetail(imageRefs: unknown[] = []): string {
+  return JSON.stringify({
+    run_id: FIXTURE_RUN_ID,
+    conversation_id: "fixture-conv-1",
+    workspace_id: "default",
+    status: "running",
+    permission_mode: "ask",
+    reasoning_level: "high",
+    answer_id: null,
+    error_code: null,
+    stop_reason: null,
+    resumable: false,
+    context_epoch: 1,
+    created_at: "2026-09-19T10:00:00Z",
+    updated_at: "2026-09-19T10:00:00Z",
+    events_url: `/api/workspaces/default/runs/${FIXTURE_RUN_ID}/events`,
+    tasks: [],
+    approvals: [],
+    inputs: [],
+    image_refs: imageRefs,
+    last_event_seq: 0,
+  });
+}
+
+/** 已吐出的前半段：answer.meta + 一段正文，之后长时间不吐字。 */
+const FIXTURE_EVENTS: { type: string; payload: unknown }[] = [
+  {
+    type: "run.status",
+    payload: { status: "running", phase: "research", message: "正在检索知识库" },
+  },
+  {
+    // 相关性筛选进度（PRD §8.2）：评分期间不到任何 token，进度以 tool.started 先行上报
+    // （真实顺序就是 rerank 进度先于 answer.meta）。旧夹具用的是 `/api/chat` 的
+    // `{"type":"tool","tool":"rerank","status":"running"}` 帧，已随旧入口一起迁到这里。
+    type: "tool.started",
+    payload: { tool_name: "rerank", args_summary: "", operation_id: "op-rerank", task_id: null },
+  },
+  {
+    type: "answer.meta",
+    payload: {
+      answer_id: "fixture-answer-1",
+      answer_basis: "knowledge",
+      basis_components: ["knowledge"],
+      citations: [],
+      content_hash: "",
+      status: "running",
+    },
+  },
+  {
+    type: "answer.delta",
+    payload: { answer_id: "fixture-answer-1", index: 0, text: "已经生成的前半" },
+  },
+];
+
 function sseFixturePlugin(): Plugin {
   return {
-    name: "everything-rag-sse-fixture",
+    name: "everything-rag-run-sse-fixture",
     configureServer(server) {
-      server.middlewares.use("/api/chat", (request, response) => {
+      server.middlewares.use("/api/workspaces", (request, response, next) => {
         if (sseFixture !== "slow") {
           response.statusCode = 404;
-          response.end("sse fixture disabled");
+          response.end("run sse fixture disabled");
           return;
         }
-        const frames = [
-          // 相关性筛选进度帧（PRD §8.2）：真实顺序是 tool/rerank/running 先于 meta。
-          { type: "tool", tool: "rerank", status: "running" },
-          {
-            type: "meta",
-            answer_basis: "knowledge",
-            policy_version: "rag-policy-v3",
-            query_mode: "CONTENT_QA",
-            sources: [],
-          },
-          { type: "reasoning", text: "夹具思维链：先确认检索命中" },
-          { type: "token", text: "已经生成的前半" },
-        ];
-        response.writeHead(200, {
-          "Content-Type": "text/event-stream",
-          "Cache-Control": "no-cache",
-          Connection: "keep-alive",
-        });
-        for (const frame of frames) {
-          response.write(`data: ${JSON.stringify(frame)}\n\n`);
+        // Connect 风格中间件会**剥掉挂载前缀**：request.url 只剩 `/default/runs/...`，
+        // 所以这里必须把 `/api/workspaces` 拼回来再解析，否则所有路由判断都会失配。
+        const raw = request.url ?? "/";
+        const queryIndex = raw.indexOf("?");
+        const pathOnly = queryIndex < 0 ? raw : raw.slice(0, queryIndex);
+        const search = queryIndex < 0 ? "" : raw.slice(queryIndex);
+        const url = new URL(`/api/workspaces${pathOnly}${search}`, "http://127.0.0.1");
+        const path = url.pathname;
+        const method = request.method ?? "GET";
+        const notFound = (): void => {
+          response.statusCode = 404;
+          response.end("not found in fixture");
+        };
+
+        // 创建 run：POST /api/workspaces/{w}/runs → **202 Accepted**（PRD 13.2）
+        if (method === "POST" && /^\/api\/workspaces\/[^/]+\/runs\/?$/.test(path)) {
+          response.writeHead(202, { "Content-Type": "application/json" });
+          response.end(fixtureRunDetail());
+          return;
         }
-        // 之后不再吐字：客户端只能靠 abort 结束这一轮（模拟长回答生成中）
-        const timer = setTimeout(() => {
-          response.write('data: {"type":"tool","tool":"rerank","status":"done"}\n\n');
-          response.end('data: {"type":"done"}\n\n');
-        }, SSE_FIXTURE_DELAY_MS);
-        // 客户端断开（fetch abort）：Node 会在响应对象上抛出 EPIPE / ECONNRESET
-        response.on("error", () => clearTimeout(timer));
-        response.on("close", () => clearTimeout(timer));
-        void request;
+        // 最后事件位置快照：GET /api/workspaces/{w}/runs/{r}
+        if (method === "GET" && /^\/api\/workspaces\/[^/]+\/runs\/[^/]+\/?$/.test(path)) {
+          response.writeHead(200, { "Content-Type": "application/json" });
+          response.end(fixtureRunDetail());
+          return;
+        }
+        // 取消：POST /api/workspaces/{w}/runs/{r}/cancel
+        if (method === "POST" && /\/cancel$/.test(path)) {
+          response.writeHead(200, { "Content-Type": "application/json" });
+          response.end(
+            JSON.stringify({ ...(JSON.parse(fixtureRunDetail()) as object), status: "cancelled" }),
+          );
+          return;
+        }
+        // SSE 订阅：GET /api/workspaces/{w}/runs/{r}/events
+        if (method === "GET" && /\/events$/.test(path)) {
+          response.writeHead(200, {
+            "Content-Type": "text/event-stream",
+            "Cache-Control": "no-cache",
+            Connection: "keep-alive",
+          });
+          const after = Number(url.searchParams.get("after") ?? "0");
+          FIXTURE_EVENTS.forEach((frame, index) => {
+            const seq = index + 1;
+            if (seq <= after) return;
+            const body = {
+              schema_version: 2,
+              run_id: FIXTURE_RUN_ID,
+              event_seq: seq,
+              execution_id: "fixture-exec",
+              task_id: null,
+              type: frame.type,
+              created_at: "2026-09-19T10:00:00Z",
+              payload: frame.payload,
+            };
+            response.write(`id: ${seq}\ndata: ${JSON.stringify(body)}\n\n`);
+          });
+          // 之后不再吐字：客户端只能靠 cancel 结束这一轮（模拟长回答生成中）。
+          const timer = setTimeout(() => {
+            // 收尾按真实顺序：先收口 rerank 工具（tool.completed），再结束 run。
+            const toolSeq = FIXTURE_EVENTS.length + 1;
+            response.write(
+              `id: ${toolSeq}\ndata: ${JSON.stringify({
+                schema_version: 2,
+                run_id: FIXTURE_RUN_ID,
+                event_seq: toolSeq,
+                execution_id: "fixture-exec",
+                task_id: null,
+                type: "tool.completed",
+                created_at: "2026-09-19T10:00:05Z",
+                payload: {
+                  tool_name: "rerank",
+                  operation_id: "op-rerank",
+                  status: "succeeded",
+                  result_count: 1,
+                  source_count: 1,
+                  error_code: "",
+                },
+              })}\n\n`,
+            );
+            const seq = toolSeq + 1;
+            const body = {
+              schema_version: 2,
+              run_id: FIXTURE_RUN_ID,
+              event_seq: seq,
+              execution_id: "fixture-exec",
+              task_id: null,
+              type: "run.completed",
+              created_at: "2026-09-19T10:00:10Z",
+              payload: { answer_id: "fixture-answer-1", status: "completed", content_hash: "", usage: {}, gaps: [] },
+            };
+            response.write(`id: ${seq}\ndata: ${JSON.stringify(body)}\n\n`);
+            response.end();
+          }, SSE_FIXTURE_DELAY_MS);
+          // 客户端断开（订阅关闭）：Node 会在响应对象上抛出 EPIPE / ECONNRESET
+          response.on("error", () => clearTimeout(timer));
+          response.on("close", () => clearTimeout(timer));
+          return;
+        }
+        void next;
+        notFound();
       });
     },
   };

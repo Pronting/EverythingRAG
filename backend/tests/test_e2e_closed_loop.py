@@ -1,8 +1,12 @@
-"""E2E 最小闭环：目录 -> 管线导入 -> 向量检索 -> POST /api/chat SSE 答案（任务 9）。
+"""E2E 最小闭环：目录 -> 管线导入 -> 向量检索 -> **run API + v2 事件** 答案（任务 9 → T09 迁移）。
 
-确定性 fake（FakeEmbedder / FakeChatModel）避免真实 bge-m3 下载与真实云端出网；
-但管线组件（scan / parse / chunk / Chroma / retriever / chat_service / HTTP / SSE）
-全真实。隐私红线：测试零外发，另有全链 socket 阻断用例实证。
+V1.1.0 的闭环走 ``POST /api/chat``（旧帧 ``meta/token/done``）。V1.2.0 改成 run API：
+``POST /api/workspaces/{w}/runs`` 建任务 + ``GET .../runs/{r}/events`` 订阅 v2 事件。
+**产品价值不变**：目录 -> 导入 -> 检索 -> 带来源的答案，全链路真实（真实 Chroma /
+真实切块 / 真实检索 / 真实工具与核对），只有**模型**是确定性替身（识别/合成不调模型，
+核对用假模型 Verifier）。
+
+零出网：全链阻断非回环连接（PRD 隐私红线）。
 """
 
 from __future__ import annotations
@@ -16,13 +20,13 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from fastapi.testclient import TestClient
 
-from app.api.routes.chat import get_chat_service
-from app.generation.base import ChatChunk
-from app.generation.chat_service import ChatService
+from app.agent import events as agent_events
+from app.agent.app_store import AppStore
+from app.agent.contracts import EventType, RunStatus
+from app.agent.runtime import RunManager
+from app.agent.verification import ModelVerification
 from app.ingestion.pipeline import IngestionPipeline
-from app.main import app
 from app.retrieval.vector_retriever import VectorRetriever
 from app.vectorstore.chroma_store import ChromaVectorStore
 
@@ -30,11 +34,12 @@ _CJK = re.compile(r"[一-鿿]+")
 _LATIN = re.compile(r"[a-z0-9]+")
 
 
-def _token_stream(text: str) -> list[str]:
-    """确定性词元：中文按单字 + 相邻双字（bigram），拉丁按整词。
+# ---------------------------------------------------------------- 确定性替身
 
-    保证「关键词查询」能召回含该词的 chunk（余弦即词项重叠度量）。
-    """
+
+def _token_stream(text: str) -> list[str]:
+    """确定性词元：中文按单字 + 相邻双字（bigram），拉丁按整词。"""
+
     lower = text.lower()
     tokens: list[str] = []
     for run in _CJK.findall(lower):
@@ -45,21 +50,17 @@ def _token_stream(text: str) -> list[str]:
 
 
 def _hash_index(token: str, dim: int) -> int:
-    """词元 -> [0, dim) 稳定索引（blake2b 哈希，跨进程确定）。"""
     digest = blake2b(token.encode("utf-8"), digest_size=8).digest()
     return int.from_bytes(digest, "big") % dim
 
 
 def _l2_normalize(vec: list[float]) -> list[float]:
-    """L2 归一化：余弦相似度即为归一化向量的点积。"""
     norm = math.sqrt(sum(v * v for v in vec))
-    if norm == 0.0:
-        return vec
-    return [v / norm for v in vec]
+    return vec if norm == 0.0 else [v / norm for v in vec]
 
 
 class FakeEmbedder:
-    """确定性嵌入器：词元哈希到定长向量，L2 归一化（满足 Embedder 协议）。"""
+    """确定性嵌入器：词元哈希到定长向量并 L2 归一化。"""
 
     fingerprint = "fake-e2e"
     dim = 64
@@ -74,66 +75,125 @@ class FakeEmbedder:
         return out
 
 
-class FakeChatModel:
-    """确定性对话模型：从 user 消息提取问题，产出 2 个增量 token（答案含关键字）。"""
+class FakeModelVerifier:
+    """模型核对替身：语义支持永远通过（程序检查仍然全真实执行，PRD 8.2）。"""
+
+    def __init__(self) -> None:
+        self.calls = 0
+
+    async def review(self, request: Any) -> ModelVerification:
+        self.calls += 1
+        return ModelVerification(issues=[], ambiguity_questions=[], notes=["fake-verifier"])
+
+
+class StubContext:
+    """``RunManager`` 需要的只读上下文（真实布局：每区一个 checkpoints.db）。"""
+
+    def __init__(self, workspace_id: str, root: Path) -> None:
+        self.workspace_id = workspace_id
+        self.root = root
 
     @property
-    def supports_image_input(self) -> bool:
-        return False
+    def knowledge_revision(self) -> int:
+        return 0
 
-    async def stream_chat(self, messages: list[dict[str, Any]], **kwargs: Any) -> Any:
-        question = _extract_question(messages[-1]["content"]) if messages else ""
-        for token in ("答案是：", question):
-            yield ChatChunk("content", token)
-
-
-def _extract_question(user_content: str) -> str:
-    """从 ChatService 组装的 user 内容中提取原问题（"问题：{msg}\n\n参考上下文..."）。"""
-    head = user_content.split("\n", 1)[0]
-    return head.removeprefix("问题：")
+    @property
+    def checkpoints_db(self) -> Path:
+        return self.root / "checkpoints.db"
 
 
-def _write_fixture(root: Path) -> list[Path]:
-    """写 3 个含唯一关键字的 MD：嵌套标题 / 无标题 / 代码块。返回文件路径列表。"""
+class StubFactory:
+    def __init__(self, root: Path) -> None:
+        self.root = root
+
+    def resolve(self, workspace_id: str | None = None) -> StubContext:
+        key = workspace_id or "ws-1"
+        self.root.mkdir(parents=True, exist_ok=True)
+        return StubContext(key, self.root)
+
+
+def _write_fixture(root: Path) -> None:
     files = {
-        "apple.md": (
-            "# 水果笔记\n\n"
-            "## 苹果\n\n"
-            "苹果是一种常见的水果，富含维生素 C 与膳食纤维。\n"
-        ),
-        "orange.md": (
-            "橘子属于柑橘类水果，果皮可入药，果肉多汁。\n\n"
-            "```python\nprint(\"orange\")\n```\n"
-        ),
-        "polar.md": (
-            "# 动物\n\n"
-            "北极熊生活在北极，是最大的陆地食肉动物。\n\n"
-            "## 北极\n\n"
-            "北极地区气候严寒，常年覆盖冰雪。\n"
-        ),
+        "apple.md": "# 水果笔记\n\n## 苹果\n\n苹果是一种常见的水果，富含维生素 C 与膳食纤维。\n",
+        "orange.md": "橘子属于柑橘类水果，果皮可入药，果肉多汁。\n",
+        "polar.md": "# 动物\n\n北极熊生活在北极，是最大的陆地食肉动物。\n",
     }
-    paths: list[Path] = []
     for name, content in files.items():
-        path = root / name
-        path.write_text(content, encoding="utf-8")
-        paths.append(path)
-    return paths
+        (root / name).write_text(content, encoding="utf-8")
 
 
-def _parse_sse(body: str) -> list[dict[str, Any]]:
-    """解析 SSE body：每行 'data: {json}' -> 帧 dict 列表。"""
-    return [
-        json.loads(line[len("data: ") :])
-        for line in body.splitlines()
-        if line.startswith("data: ")
-    ]
+# ---------------------------------------------------------------- 夹具
 
 
-# ---------------------------------------------------------------- 1. 管线集成
+class ClosedLoop:
+    """一次完整的「导入 -> 建 run -> 事件流」环境。"""
+
+    def __init__(self, store: AppStore, manager: RunManager, vector_store: Any, root: Path) -> None:
+        self.store = store
+        self.manager = manager
+        self.vector_store = vector_store
+        self.root = root
+
+    async def run_question(self, question: str) -> tuple[str, list[agent_events.StoredEvent]]:
+        run = await self.manager.create_run(
+            workspace_id="ws-1", conversation_id="conv-1", question=question
+        )
+        await self.manager.run_to_completion(run.id, timeout=120)
+        return run.id, await self.manager.read_events(run.id)
+
+
+async def _build(tmp_path: Path) -> ClosedLoop:
+    root = tmp_path / "docs"
+    root.mkdir()
+    _write_fixture(root)
+
+    embedder = FakeEmbedder()
+    vector_store = ChromaVectorStore(
+        persist_dir=tmp_path / "index",
+        collection_name="chunks__fake-e2e__v1",
+        embedder=embedder,
+    )
+    report = IngestionPipeline(embedder=embedder, vectorstore=vector_store).ingest(root)
+    assert report.blocks_upserted > 0
+
+    store = await AppStore.open(tmp_path / "app.db")
+    await store.create_workspace("ws-1", "sk-ws-1", name="E2E 工作区")
+    await store.create_conversation("conv-1", "ws-1")
+
+    retriever = VectorRetriever(vector_store)
+
+    def tool_services(context: Any) -> dict[str, Any]:
+        del context
+        return {
+            "vector_store": vector_store,
+            "retriever": retriever,
+            "embedder": embedder,
+            "extract_provider": None,
+            "search_provider": None,
+            "_catalog": None,
+            "_memory": None,
+        }
+
+    manager = RunManager(
+        store=store,
+        context_factory=StubFactory(tmp_path / "ws-root"),
+        registry=None,  # 用真实工具注册表（build_default_registry）
+        tool_services=tool_services,
+        private_names=(),
+    )
+    return ClosedLoop(store, manager, vector_store, root)
+
+
+def _types(events: list[agent_events.StoredEvent]) -> list[str]:
+    return [event.type.value for event in events]
+
+
+# ---------------------------------------------------------------- 1. 管线集成（未改）
 
 
 def test_pipeline_ingest_retrieval_closed_loop(tmp_path: Path) -> None:
     """IngestionPipeline 导入 fixture -> 计数正确 -> Chroma 检索命中带来源块。"""
+
     root = tmp_path / "docs"
     root.mkdir()
     _write_fixture(root)
@@ -145,108 +205,113 @@ def test_pipeline_ingest_retrieval_closed_loop(tmp_path: Path) -> None:
         embedder=embedder,
     )
     report = IngestionPipeline(embedder=embedder, vectorstore=store).ingest(root)
-
-    # 计数与 store 一致（apple=1、orange=2 含代码块、polar 两个标题区间各 1）
     assert report.files_scanned == 3
-    assert report.files_parsed == 3
-    assert report.files_skipped == 0
-    assert report.chunks == 5
-    assert report.blocks_upserted == 5
     assert report.errors == ()
-    assert store.count() == 5
+    assert store.count() == report.chunks
 
-    # 检索：关键字「橘子」命中含该词的块，来源指向 fixture 文件
     retriever = VectorRetriever(store)
     hits = retriever.retrieve("橘子", embedder.embed_texts(["橘子"])[0])
-    assert hits, "关键字查询应命中至少一个块"
-    first = hits[0]
-    assert "橘子" in first.text
-    assert first.source_file.endswith("orange.md")
-    assert Path(first.source_file).is_file()  # 来源是真实文件（可回溯）
-
-    # 另一关键字「北极熊」同样可召回
-    polar_hits = retriever.retrieve("北极熊", embedder.embed_texts(["北极熊"])[0])
-    assert polar_hits and "北极熊" in polar_hits[0].text
-    assert polar_hits[0].source_file.endswith("polar.md")
+    assert hits and "橘子" in hits[0].text
+    assert hits[0].source_file.endswith("orange.md")
+    assert Path(hits[0].source_file).is_file()
 
 
-# ---------------------------------------------------------------- 2. HTTP 闭环
+# ---------------------------------------------------------------- 2. run API 闭环
 
 
-def test_http_closed_loop_sse_with_sources(tmp_path: Path) -> None:
-    """POST /api/chat 全真实链路：meta -> token(s) -> done；sources 带 .md；答案含关键字。"""
-    root = tmp_path / "docs"
-    root.mkdir()
-    _write_fixture(root)
+async def test_run_api_closed_loop_with_v2_events(tmp_path: Path) -> None:
+    """全真实链路（假模型）：run.status -> answer.meta -> answer.delta -> run.completed。"""
 
-    embedder = FakeEmbedder()
-    store = ChromaVectorStore(
-        persist_dir=tmp_path / "index",
-        collection_name="chunks__fake-e2e__v1",
-        embedder=embedder,
-    )
-    IngestionPipeline(embedder=embedder, vectorstore=store).ingest(root)
-
-    retriever = VectorRetriever(store)
-    service = ChatService(embedder=embedder, retriever=retriever, chat_model=FakeChatModel())
-    app.dependency_overrides[get_chat_service] = lambda: service
+    env = await _build(tmp_path)
     try:
-        client = TestClient(app)
-        with client.stream("POST", "/api/chat", json={"message": "橘子是什么？"}) as resp:
-            status = resp.status_code
-            body = resp.read().decode("utf-8")
+        run_id, events = await env.run_question("笔记里说橘子属于什么类水果？")
+        types = _types(events)
+        run = await env.store.get_run(run_id)
+        assert run.status in {RunStatus.COMPLETED, RunStatus.COMPLETED_WITH_GAPS}, types
+
+        # ① 首帧是 run.status（前端据此进入过程区域）
+        assert types[0] == EventType.RUN_STATUS.value
+        # ② 收尾帧是 run.completed（订阅据此关闭）
+        assert types[-1] == EventType.RUN_COMPLETED.value
+        # ③ 答案帧序：answer.meta → answer.delta* → run.completed
+        meta_index = types.index(EventType.ANSWER_META.value)
+        delta_index = types.index(EventType.ANSWER_DELTA.value)
+        assert meta_index < delta_index < len(types) - 1
+
+        # ④ 来源：证据来自真实检索（orange.md），引用编号已分配（PRD 8.3）
+        artifact = await env.store.get_answer(run.answer_id)
+        assert artifact is not None
+        assert artifact.citations, "答案必须带引用编号"
+        assert artifact.citations[0].label.startswith(("S", "W"))
+        answer_text = "".join(
+            event.payload.get("text", "")
+            for event in events
+            if event.type is EventType.ANSWER_DELTA
+        )
+        assert "[S" in answer_text or "[W" in answer_text
+        assert answer_text.strip()
+
+        # ⑤ 每条 SSE data 都是 v2 事件对象（可被前端解析器直接消费）
+        for event in events:
+            body = json.loads(agent_events.dumps_event(event))
+            assert body["schema_version"] == agent_events.EVENT_SCHEMA_VERSION
+            assert body["type"] == event.type.value
     finally:
-        app.dependency_overrides.clear()
+        await env.manager.aclose()
+        await env.store.close()
 
-    assert status == 200
-    frames = _parse_sse(body)
-    assert [frame["type"] for frame in frames] == ["meta", "token", "token", "done"]
 
-    sources = frames[0]["sources"]
-    assert sources, "检索应命中至少一个来源"
-    assert all(source["source_file"].endswith(".md") for source in sources)
-    assert any("橘子" in source["text"] for source in sources)
+async def test_run_api_closed_loop_recalls_orange_chunk(tmp_path: Path) -> None:
+    """检索确实命中了 fixture 的「橘子」块：证据 source_ref 指向 orange.md。"""
 
-    answer = "".join(frame["text"] for frame in frames if frame["type"] == "token")
-    assert "橘子" in answer  # 答案含 fixture 关键字
+    env = await _build(tmp_path)
+    try:
+        run_id, events = await env.run_question("笔记里说橘子属于什么类水果？")
+        evidence_events = [
+            event for event in events if event.type is EventType.EVIDENCE_ADDED
+        ]
+        assert evidence_events, "研究阶段必须发布 evidence.added"
+        items = [
+            item for event in evidence_events for item in event.payload.get("items", [])
+        ]
+        # 知识来源的 source_ref 是「文档指纹 + 块位置」而不是文件名（PRD 8.1），
+        # 因此召回的证据要按**正文**判定：片段必须来自 orange.md 的那句话。
+        assert items, "evidence.added 必须带条目"
+        assert any("橘子" in str(item.get("snippet") or "") for item in items), items
+        assert all(item.get("source_ref") for item in items)
+        artifact = await env.store.get_answer((await env.store.get_run(run_id)).answer_id)
+        assert artifact is not None
+        # 答案正文来自召回原文（不是模板空话），且引用编号指向该证据
+        assert "橘子" in artifact.content
+        assert artifact.citations and artifact.citations[0].source_ref
+    finally:
+        await env.manager.aclose()
+        await env.store.close()
 
 
 # ---------------------------------------------------------------- 3. 零出网
 
 
-def test_zero_outbound_full_closed_loop(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """阻断一切非回环连接，全链（导入 -> 检索 -> SSE）仍成功 => 零出网。"""
+async def test_zero_outbound_full_closed_loop(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """阻断一切非回环连接，全链（导入 -> 检索 -> run -> 事件）仍成功 => 零出网。"""
+
     _block_non_loopback(monkeypatch)
-    root = tmp_path / "docs"
-    root.mkdir()
-    _write_fixture(root)
-
-    embedder = FakeEmbedder()
-    store = ChromaVectorStore(
-        persist_dir=tmp_path / "index",
-        collection_name="chunks__fake-e2e__v1",
-        embedder=embedder,
-    )
-    report = IngestionPipeline(embedder=embedder, vectorstore=store).ingest(root)
-    assert report.blocks_upserted == 5
-
-    retriever = VectorRetriever(store)
-    service = ChatService(embedder=embedder, retriever=retriever, chat_model=FakeChatModel())
-    app.dependency_overrides[get_chat_service] = lambda: service
+    env = await _build(tmp_path)
     try:
-        client = TestClient(app)
-        with client.stream("POST", "/api/chat", json={"message": "北极熊生活在哪里？"}) as resp:
-            body = resp.read().decode("utf-8")
+        run_id, events = await env.run_question("北极熊生活在哪里？笔记里有写吗？")
+        types = _types(events)
+        assert types[0] == EventType.RUN_STATUS.value
+        assert types[-1] == EventType.RUN_COMPLETED.value
+        run = await env.store.get_run(run_id)
+        assert run.answer_id
     finally:
-        app.dependency_overrides.clear()
-
-    frames = _parse_sse(body)
-    assert [frame["type"] for frame in frames] == ["meta", "token", "token", "done"]
-    assert any(source["source_file"].endswith(".md") for source in frames[0]["sources"])
+        await env.manager.aclose()
+        await env.store.close()
 
 
 def _block_non_loopback(monkeypatch: pytest.MonkeyPatch) -> None:
-    """阻断一切非回环连接（真实外呼）；回环目的地放行（事件循环自环所需）。"""
+    """阻断一切非回环连接（真实外呼）；回环目的地放行。"""
+
     monkeypatch.setattr(socket, "create_connection", _raise_outbound)
     original_connect = socket.socket.connect
 

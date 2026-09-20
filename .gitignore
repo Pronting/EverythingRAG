@@ -17,6 +17,10 @@ frontend/dist/
 
 # ---- 运行时数据（本地知识库/向量库，绝不上传） ----
 data/
+# 例外：V1.2.0 路由评测集是**交付物**（PRD 16.3 要求 ≥120 题数据集），
+# 不能被上面那条宽泛的 `data/` 规则静默排除在提交之外。
+!backend/tests/data/
+!backend/tests/data/**
 .everything-rag/
 *.gguf
 models/
@@ -28,6 +32,10 @@ models/
 .spec-workflow/
 docs/loop/
 docs/superpowers/
+# AgentTeams 运行时状态（任务台账/邮箱/计划，~1MB；不是交付物）
+.agent-teams/
+# 临时测试输出（成员调试时落在仓库根的 pytest 输出）
+baseline_pytest*.txt
 
 # ---- 敏感信息（环境变量/凭据/密钥，禁止入库）----
 .env

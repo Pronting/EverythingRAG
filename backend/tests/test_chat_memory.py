@@ -19,7 +19,6 @@ from app.memory.models import MemoryCategory
 from app.memory.retriever import MemoryRetriever
 from app.memory.store import MemoryStore
 from app.retrieval.vector_retriever import RetrievedChunk
-
 from tests.test_memory_index import RecordingMemoryVectorStore, _entry, _hit
 
 
@@ -161,7 +160,7 @@ async def test_memory_citation_survives_output_guard(tmp_path) -> None:  # type:
     而白名单源自本轮 meta.sources，段位与正则两处都必须认识 M。
     """
 
-    service, model, _store = _memory_service(
+    service, _model, _store = _memory_service(
         tmp_path, ["用户偏好 SQLite"], tokens=["你之前说过偏好 ", "[M1]", "。"]
     )
     frames = await _collect(service)

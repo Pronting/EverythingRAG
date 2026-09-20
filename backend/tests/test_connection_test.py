@@ -89,3 +89,42 @@ async def test_probe_masks_provider_error(monkeypatch):
     assert not result["success"]
     assert "secret" not in str(result)
     assert "API Key" in result["message"]
+
+
+# ---------------------------------------------------------------- 能力探测（T03 新增）
+
+
+def test_capability_probe_reports_declared_bits():
+    """官方模型 -> 能力位全 7 个，零联网（纯本地解析）。"""
+    result = module.probe_capabilities("deepseek-flash", "https://api.deepseek.com")
+    assert result["success"] is True
+    assert set(result["capabilities"]) == {
+        "supports_tools",
+        "supports_thinking_toggle",
+        "reasoning_levels",
+        "supports_image_input",
+        "context_limit",
+        "max_output_tokens",
+        "history_protocol",
+    }
+    assert result["capabilities"]["reasoning_levels"] == ["off", "low", "high", "max"]
+
+
+def test_capability_probe_unknown_model_gives_actionable_error():
+    """未知模型 -> 明确配置错误（不崩溃），并提示环境变量。"""
+    result = module.probe_capabilities("mystery-llm", "http://localhost:11434/v1")
+    assert result["success"] is False
+    assert result["capabilities"] is None
+    assert "EVERYTHING_RAG_CHAT_CAPABILITIES" in result["message"]
+    assert "mystery-llm" in result["message"]
+
+
+def test_capability_probe_uses_env_declaration(monkeypatch):
+    """自定义端点可用环境变量声明能力（无需改代码）。"""
+    monkeypatch.setenv(
+        "EVERYTHING_RAG_CHAT_CAPABILITIES",
+        '{"supports_tools": true, "context_limit": 32768, "max_output_tokens": 4096}',
+    )
+    result = module.probe_capabilities("my-model", "https://compat.test/v1")
+    assert result["success"] is True
+    assert result["capabilities"]["context_limit"] == 32768
