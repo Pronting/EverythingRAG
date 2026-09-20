@@ -220,10 +220,17 @@ class TruncateRequest(BaseModel):
 
 
 class MoveRequest(BaseModel):
-    """侧边栏拖拽落点：目标工作区（可选）+ 目标位置（该区第几条）。"""
+    """侧边栏拖拽落点：目标工作区（可选）+ 目标位置（该区第几条）。
+
+    **跨区**拖拽与 ``POST /{id}/workspace`` 是同一条状态机（PRD 5.4），因此同样接受
+    ``confirm`` 与 ``expected_context_epoch``（PRD 13.2 末段）。仅``target_index`` 的
+    同区排序不涉及归属，不需要确认。
+    """
 
     workspace_id: str | None = Field(default=None, max_length=40)
     target_index: int | None = Field(default=None, ge=0)
+    confirm: bool = False
+    expected_context_epoch: int | None = Field(default=None, ge=1)
 
 
 class WorkspaceDefaultsRequest(BaseModel):
@@ -594,34 +601,91 @@ async def truncate_conversation(
 async def move_conversation_in_sidebar(
     conversation_id: str,
     request: MoveRequest,
-    store: ConversationStore = Depends(get_conversation_store),  # noqa: B008
-    workspaces: WorkspaceStore = Depends(get_workspace_store),  # noqa: B008
-) -> dict[str, Any]:
-    """侧边栏拖拽：把会话移到目标工作区并放到指定位置（同区即为手动排序）。"""
-    if request.workspace_id is not None and _view_of(workspaces, request.workspace_id) is None:
-        raise HTTPException(status_code=404, detail="工作区不存在")
-    conv = store.move_in_sidebar(
-        conversation_id,
-        workspace_id=request.workspace_id,
-        target_index=request.target_index,
-    )
-    if conv is None:
-        raise HTTPException(status_code=404, detail="会话不存在")
-    return _summary(conv)
-
-
-@router.post("/api/conversations/{conversation_id}/workspace")
-async def move_conversation_workspace(
-    conversation_id: str,
-    request: MoveWorkspaceRequest,
     http_request: Request,
     store: ConversationStore = Depends(get_conversation_store),  # noqa: B008
     workspaces: WorkspaceStore = Depends(get_workspace_store),  # noqa: B008
 ) -> dict[str, Any]:
-    """把会话移动到另一个工作区（PRD 5.4 / 13.2；A27 / A28）。
+    """侧边栏拖拽落点：**同区排序** 或 **跨区移动**（PRD 5.4 / 13.2）。
 
-    顺序：停止主任务及子任务 → 等待活动请求退出 → 改归属（app.db 权威，``context_epoch``
-    +1）→ 侧边栏 → 目标区记忆快照。原 run 的工作区归属不变，仅历史可读且不可恢复。
+    ⚠️ **跨区必须与 ``POST /api/conversations/{id}/workspace`` 走同一条状态机**
+    （``_move_via_state_machine``）。早先这里直接 ``store.move_in_sidebar`` 改存档归属：
+    不停止 run、不递增 ``context_epoch``、不 supersede 批准/澄清、不写 app.db ⇒
+    **侧边栏与 app.db 权威行分叉**，A27 在**最常用的拖拽路径**上被整条绕过（t35 修正）。
+    仅同区 ``target_index`` 排序不含归属变更，因此不触发状态机（也不会碰权威行）。
+    """
+
+    current = store.get(conversation_id)
+    target = request.workspace_id
+    # 归属的**权威来源**必须与状态机同一口径：app.db 行优先，未迁移（未注册）时退回存档
+    # （D19 / D25）。若这里读存档而状态机读 app.db，分叉状态下的「同区判断」会不一致：
+    # 存档已被旧旁路改成目标区时，跨区移动会被误判成同区排序而**整条跳过状态机**。
+    source = await _authoritative_workspace_id(current, conversation_id)
+    if source is None:
+        raise HTTPException(status_code=404, detail="会话不存在")
+    if target is None or target == source:
+        # 同区：只改侧边栏顺序（PRD 5.4 的「移动」语义不成立）。
+        conv = store.move_in_sidebar(
+            conversation_id, workspace_id=source, target_index=request.target_index
+        )
+        if conv is None:
+            raise HTTPException(status_code=404, detail="会话不存在")
+        return _summary(conv)
+
+    payload = await _move_via_state_machine(
+        conversation_id=conversation_id,
+        request=http_request,
+        target_workspace_id=str(target),
+        confirm=request.confirm,
+        expected_context_epoch=request.expected_context_epoch,
+        store=store,
+        workspaces=workspaces,
+    )
+    if request.target_index is not None:
+        # 落点位置在同区生效（归属已由状态机在 app.db 权威 + 存档镜像改完）。
+        placed = store.move_in_sidebar(
+            conversation_id, workspace_id=str(target), target_index=request.target_index
+        )
+        if placed is not None:
+            summary = _summary(placed)
+            summary.update({key: value for key, value in payload.items() if key not in summary})
+            return summary
+    return payload
+
+
+async def _authoritative_workspace_id(
+    sidebar: Any, conversation_id: str
+) -> str | None:
+    """会话当前归属：**app.db 权威行优先**，未迁移（未注册 app.db）时退回存档（D19 / D25）。
+
+    与 ``conversation_move.move_conversation`` 的 ``source_workspace_id`` 同一口径 ——
+    两个入口对「是否同区」的判断必须一致，否则分叉状态下会跳过状态机（t35）。
+    """
+
+    app_store = _registered_app_store()
+    if app_store is not None:
+        record = await app_store.get_conversation(conversation_id)
+        if record is not None:
+            return str(record.workspace_id)
+    if sidebar is not None:
+        return str(sidebar.workspace_id)
+    return None
+
+
+async def _move_via_state_machine(
+    *,
+    conversation_id: str,
+    request: Request,
+    target_workspace_id: str,
+    confirm: bool,
+    expected_context_epoch: int | None,
+    store: ConversationStore,
+    workspaces: WorkspaceStore,
+) -> dict[str, Any]:
+    """**跨区移动的唯一实现路径**：``/move`` 与 ``/workspace`` 共用（不得再有第二条旁路）。
+
+    顺序（PRD 5.4）：停止主任务及子任务 → 等待活动请求退出 → 改归属（app.db 权威，
+    ``context_epoch`` +1）→ 侧边栏镜像 → 目标区记忆快照。原 run 的工作区归属不变，
+    仅历史可读且不可恢复。
     """
 
     from app.api.conversation_move import (
@@ -632,17 +696,16 @@ async def move_conversation_workspace(
         move_conversation,
     )
 
-    outcome = None
     try:
         outcome = await move_conversation(
             conversation_id=conversation_id,
-            target_workspace_id=request.workspace_id,
+            target_workspace_id=target_workspace_id,
             store=store,
             workspaces=workspaces,
-            manager=_optional_run_manager(http_request),
+            manager=_optional_run_manager(request),
             app_store=_registered_app_store(),
-            confirm=request.confirm,
-            expected_context_epoch=request.expected_context_epoch,
+            confirm=confirm,
+            expected_context_epoch=expected_context_epoch,
             target_memory=_target_memory_factory(workspaces),
         )
     except ConversationMoveNotFound as exc:
@@ -671,6 +734,27 @@ async def move_conversation_workspace(
         }
     )
     return payload
+
+
+@router.post("/api/conversations/{conversation_id}/workspace")
+async def move_conversation_workspace(
+    conversation_id: str,
+    request: MoveWorkspaceRequest,
+    http_request: Request,
+    store: ConversationStore = Depends(get_conversation_store),  # noqa: B008
+    workspaces: WorkspaceStore = Depends(get_workspace_store),  # noqa: B008
+) -> dict[str, Any]:
+    """把会话移动到另一个工作区（PRD 5.4 / 13.2；A27 / A28）。"""
+
+    return await _move_via_state_machine(
+        conversation_id=conversation_id,
+        request=http_request,
+        target_workspace_id=request.workspace_id,
+        confirm=request.confirm,
+        expected_context_epoch=request.expected_context_epoch,
+        store=store,
+        workspaces=workspaces,
+    )
 
 
 def _optional_run_manager(http_request: Request) -> Any:
