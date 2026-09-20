@@ -187,11 +187,260 @@ def test_a01_freshness_question_takes_web_path_and_never_touches_local_knowledge
     assert calls == [], "越权被拦截时检索器一次都不能被调用"
 
 
-@live_only
-async def test_a01_live_real_news_uses_web_path_without_knowledge_retrieval() -> None:
-    """A01（live）：真实 Tavily 搜索 + 真实当前日期。"""
+def _live_workspace(tmp_path: Path, *, artifacts: Path | None = None) -> SimpleNamespace:
+    """live 用例的工作区替身：只暴露 ToolContext 需要的只读属性（artifacts 落在 tmp）。"""
 
-    raise AssertionError("live 用例骨架：需用户在真实环境执行（见验收报告 A01）")
+    directory = artifacts if artifacts is not None else tmp_path / "live-artifacts"
+    (directory / "web").mkdir(parents=True, exist_ok=True)
+    return SimpleNamespace(
+        workspace_id="ws-live",
+        artifacts_dir=directory,
+        knowledge_revision=0,
+        default_permission_mode=str(PermissionMode.FULL),
+    )
+
+
+def _parse_published_at(value: str) -> Any:
+    """尽力解析发布时间（ISO8601 / RFC2822）；解析不出返回 None。"""
+
+    from datetime import datetime
+    from email.utils import parsedate_to_datetime
+
+    text = str(value or "").strip()
+    if not text:
+        return None
+    try:
+        return datetime.fromisoformat(text)
+    except ValueError:
+        pass
+    try:
+        return parsedate_to_datetime(text)
+    except (TypeError, ValueError):
+        return None
+
+
+def _live_settings() -> Any:
+    """live 用例的设置来源：**只读**真实 ``~/.everything-rag/config.json``。
+
+    conftest 会把 ``settings.data_dir`` 隔离到 tmp（保护真实数据），因此 live 用例**不能**
+    走 ``get_settings_store()``：那会读到 tmp 里不存在的 ``config.json`` 并回退到
+    ``backend/.env`` 的另一套端点/模型，等于「跑的不是真实配置」。这里显式只读真实配置文件
+    （``SettingsStore`` 构造只算路径、``load()`` 只读，不写盘、不建目录），其余一切
+    （app.db / artifacts / 向量库 / 会话）仍全部落在 tmp。
+    """
+
+    from app.core.settings_store import SettingsStore
+
+    real_dir = Path.home() / ".everything-rag"
+    if not (real_dir / "config.json").is_file():
+        pytest.skip(f"真实 config.json 不存在（{real_dir}），无法执行 live 用例")
+    return SettingsStore(real_dir).load()
+
+
+@live_only
+async def test_a01_live_real_news_uses_web_path_without_knowledge_retrieval(
+    tmp_path: Path,
+) -> None:
+    """A01（live / D1 A 档）：真实 Tavily 搜索 + 真实当前日期核对；本地知识正文检索 0 次。
+
+    授权范围：真实外呼（用户 D1 裁定 A 档）。数据目录由 ``EVERYTHING_RAG_DATA_DIR`` 隔离到
+    tmp；工作区 artifacts 也落在 tmp —— **不触碰真实 ``~/.everything-rag``**。
+    """
+
+    from datetime import UTC, datetime
+
+    from app.agent.tools import ToolStatus
+    from app.search.factory import create_search_provider_from_config
+
+    settings = _live_settings()
+    assert settings.search.enabled, "A01 live 需要设置里已启用的联网搜索"
+    provider = create_search_provider_from_config(settings.search)
+    assert type(provider).__name__ == "TavilySearchProvider", type(provider).__name__
+
+    decision = _route("今天 AI 圈有哪些重大新闻？")
+    assert decision.needs_web is True and decision.needs_knowledge is False, decision
+
+    knowledge_calls: list[str] = []
+
+    class SpyRetriever:
+        async def retrieve(self, *args: object, **kwargs: object) -> list[object]:
+            knowledge_calls.append("retrieve")
+            return []
+
+    registry = build_default_registry()
+    context = ToolContext(
+        workspace=_live_workspace(tmp_path),
+        agent_kind=AgentKind.WEB,
+        search_provider=provider,
+        extract_provider=provider,
+        retriever=SpyRetriever(),
+        run_id="run-live-a01",
+        task_id="t-live-a01",
+    )
+
+    result = await registry.execute(
+        str(ToolName.WEB_SEARCH),
+        {"query": "AI 重大新闻", "max_results": 5, "topic": "news"},
+        context,
+    )
+    assert result.status is ToolStatus.OK, f"{result.status}: {result.message}"
+    data = result.data or {}
+    hits = list(data.get("results") or [])
+    assert hits, "真实 Tavily 必须返回结果"
+    assert data.get("request_id"), "必须保留提供商请求 ID（PRD 7.3）"
+    assert all(str(hit.get("url", "")).startswith("http") for hit in hits), hits[:1]
+    assert knowledge_calls == [], "本地知识正文检索必须为 0 次（A01 硬要求）"
+
+    dated = [str(hit.get("published_at") or "") for hit in hits if hit.get("published_at")]
+    assert dated, "必须至少一条带发布时间（时效问题要能核对真实日期）"
+    parsed = [item for item in (_parse_published_at(value) for value in dated) if item is not None]
+    assert parsed, f"发布时间必须可解析：{dated[:3]}"
+    assert min(parsed) <= datetime.now(UTC), "发布时间不得晚于当前时间（真实日期核对）"
+
+    page = await registry.execute(
+        str(ToolName.READ_WEB_PAGE), {"urls": [hits[0]["url"]], "limit": 2000}, context
+    )
+    assert page.status in {ToolStatus.OK, ToolStatus.PARTIAL}, f"{page.status}: {page.message}"
+    pages = list((page.data or {}).get("pages") or [])
+    assert pages and str(pages[0].get("content") or "").strip(), "必须读到真实网页正文"
+
+    print(
+        "[live A01] results="
+        f"{len(hits)} dated={len(dated)} parsed={len(parsed)} "
+        f"knowledge_calls={len(knowledge_calls)} "
+        f"page_chars={len(str(pages[0].get('content') or ''))} "
+        f"page_published={'yes' if pages[0].get('published_at') else 'no'}"
+    )
+
+
+@live_only
+@pytest.mark.parametrize("level", ("off", "low", "high", "max"))
+async def test_a18_live_four_reasoning_levels_reach_the_real_endpoint(level: str) -> None:
+    """A18（live / D1 A 档）：四档思考各 1 次真实问答，核对**实际请求参数**（PRD 9.1 表）。"""
+
+    import time
+
+    from app.generation.providers import create_chat_model_from_config
+
+    settings = _live_settings()
+    model = create_chat_model_from_config(settings.chat)
+    question = "用一句话解释什么是向量检索。"
+    messages = [{"role": "user", "content": question}]
+
+    request = model.build_request(messages, stream=True, reasoning_level=level)
+    thinking = (request.get("extra_body") or {}).get("thinking") or {}
+    if level == "off":
+        assert thinking.get("type") == "disabled", request
+        assert "reasoning_effort" not in request, "off 档必须省略 reasoning_effort（PRD 9.1 表）"
+    else:
+        assert thinking.get("type") == "enabled", request
+        assert request.get("reasoning_effort") == level, request
+
+    content: list[str] = []
+    reasoning: list[str] = []
+    result: Any = None
+    started = time.perf_counter()
+    async for chunk in model.stream_result(messages, reasoning_level=level):
+        kind = getattr(chunk, "kind", None)
+        if kind == "content":
+            content.append(str(chunk.text))
+        elif kind == "reasoning":
+            reasoning.append(str(chunk.text))
+        else:
+            result = chunk
+    elapsed = time.perf_counter() - started
+
+    answer = "".join(content).strip()
+    assert answer, f"{level} 档必须返回真实正文"
+    assert result is not None and result.content_complete, f"{level} 档内容不完整：{result}"
+    assert result.response.usage.total_tokens > 0, "必须上报真实用量"
+    if level == "off":
+        assert "".join(reasoning) == "", "关闭思考时不得产生思维链（PRD 9.1）"
+
+    print(
+        f"[live A18 level={level}] chars={len(answer)} "
+        f"reasoning_chars={len(''.join(reasoning))} tokens={result.response.usage.total_tokens} "
+        f"reason_tokens={result.response.usage.reasoning_tokens} elapsed_s={elapsed:.2f} "
+        f"model={result.response.model}"
+    )
+
+
+@live_only
+async def test_a19_live_multi_turn_deepseek_tool_calls() -> None:
+    """A19（live / D1 A 档）：真实多轮工具调用，**完整回传协议历史**（PRD 9.2 末段）。"""
+
+    from app.generation.providers import create_chat_model_from_config
+
+    settings = _live_settings()
+    model = create_chat_model_from_config(settings.chat)
+    tools = [
+        {
+            "type": "function",
+            "function": {
+                "name": "get_current_time",
+                "description": "返回当前 UTC 时间",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"timezone": {"type": "string"}},
+                    "required": [],
+                },
+            },
+        }
+    ]
+    messages = [
+        {
+            "role": "user",
+            "content": "请调用 get_current_time 工具获取当前时间，然后告诉我现在几点。",
+        }
+    ]
+
+    first = await model.complete(messages, tools=tools)
+    assert first.tool_calls, f"真实端点必须返回 tool_calls（status={first.status}）"
+    call = first.tool_calls[0]
+    assert call.name == "get_current_time", call
+    assert call.complete, "工具参数必须完整到达（否则不得执行）"
+
+    assistant_message = {
+        "role": "assistant",
+        "content": first.content or "",
+        "reasoning_content": first.reasoning_content or "",
+        "tool_calls": [
+            {
+                "id": item.call_id,
+                "type": "function",
+                "function": {"name": item.name, "arguments": json.dumps(item.arguments)},
+            }
+            for item in first.tool_calls
+        ],
+    }
+    tool_message = {
+        "role": "tool",
+        "tool_call_id": call.call_id,
+        "content": json.dumps({"utc": "2026-09-20T03:00:00Z"}),
+    }
+    history = [*messages, assistant_message, tool_message]
+
+    # 第二轮**实际发出的**请求必须完整回传协议历史（tool_calls + reasoning_content）
+    sent = model.build_request(history, stream=False, tools=tools)["messages"]
+    sent_assistant = [item for item in sent if item.get("role") == "assistant"][-1]
+    assert sent_assistant.get("tool_calls"), "必须回传此前 assistant 的 tool_calls"
+    assert "reasoning_content" in sent_assistant, "带 tools 的会话必须保留 reasoning_content"
+    assert sent_assistant["reasoning_content"] == (first.reasoning_content or "")
+    sent_tool = [item for item in sent if item.get("role") == "tool"][-1]
+    assert sent_tool.get("tool_call_id") == call.call_id, "工具结果必须带对应调用的 id"
+
+    second = await model.complete(history, tools=tools)
+    assert str(second.content or "").strip(), f"第二轮必须给出最终答复（status={second.status}）"
+    assert not second.tool_calls, "工具结果已给出后不应再次要求调用同一工具"
+
+    print(
+        f"[live A19] turn1 tool_calls={len(first.tool_calls)} args_complete={call.complete} "
+        f"turn1_reasoning_chars={len(first.reasoning_content or '')} "
+        f"replayed_tool_calls={len(sent_assistant.get('tool_calls') or [])} "
+        f"replayed_reasoning_chars={len(str(sent_assistant.get('reasoning_content') or ''))} "
+        f"turn1_tokens={first.usage.total_tokens} turn2_chars={len(second.content)} "
+        f"turn2_tokens={second.usage.total_tokens} turn2_finish={second.finish_reason}"
+    )
 
 
 def test_a02_internal_question_stays_on_knowledge_path_with_source_grounding() -> None:
@@ -776,20 +1025,6 @@ async def test_a17_private_names_are_redacted_before_the_actual_outbound_payload
         assert "张三" not in payload, payload
     finally:
         await manager.aclose()
-
-
-@live_only
-async def test_a18_live_four_reasoning_levels_reach_the_real_endpoint() -> None:
-    """A18（live）：四档思考各跑一次真实问答，核对实际请求参数。"""
-
-    raise AssertionError("live 用例骨架：需用户在真实环境执行（见验收报告 A18）")
-
-
-@live_only
-async def test_a19_live_multi_turn_deepseek_tool_calls() -> None:
-    """A19（live）：真实多轮工具调用，完整回传协议历史。"""
-
-    raise AssertionError("live 用例骨架：需用户在真实环境执行（见验收报告 A19）")
 
 
 # =====================================================================
