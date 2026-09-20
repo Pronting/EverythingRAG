@@ -27,6 +27,27 @@ RERANK_MODEL = "Qwen/Qwen3-Reranker-8B"
 RERANK_ENDPOINT = "https://api.siliconflow.cn/v1/rerank"
 RERANK_KEY = "sk-rerank-secret-key"
 
+#: 「当前语料身份」（PRD §6.5）。真实值由 ``deps.current_corpus_identity()`` 现算：它读向量库
+#: 块清单 + 嵌入 fingerprint，在测试进程里既有**跨用例**的进程内缓存、又会受本机 ``.env``
+#: 影响，不能作为断言依据。这里用 autouse 夹具把它钉成确定值，并让档案的
+#: ``corpus_manifest_hash`` 显式与它比对 —— 「匹配 ⇒ ready」「不匹配 ⇒ needs_validation」
+#: 「档案未登记 ⇒ 无从证明 ⇒ needs_validation」三条分支因此都可达、可断言。
+CORPUS_IDENTITY = "b" * 64
+MISMATCHED_CORPUS_IDENTITY = "c" * 64
+
+
+@pytest.fixture(autouse=True)
+def _pin_corpus_identity(monkeypatch: pytest.MonkeyPatch) -> None:
+    """钉住 ``current_corpus_identity``（设置页状态是唯一使用点，见 ``_rerank_status``）。
+
+    ``_rerank_status`` 在函数内部 ``from app.api.deps import current_corpus_identity``，
+    因此替换 ``app.api.deps`` 模块属性即可生效。
+    """
+
+    from app.api import deps
+
+    monkeypatch.setattr(deps, "current_corpus_identity", lambda: CORPUS_IDENTITY)
+
 
 def _client() -> TestClient:
     return TestClient(app)
@@ -53,6 +74,10 @@ def _write_profile(**overrides: Any) -> None:
         "max_candidates": 50,
         "min_candidate_count": 20,
         "instruction_text": "判断内容是否提供回答原问题所需的事实",
+        # PRD §6.5：档案登记「它是在哪一版语料上验收的」。写成本测试钉住的当前语料身份，
+        # 使「有效档案 + 匹配 identity ⇒ ready」这条真实口径可达（此前缺该字段，
+        # 状态必然被标 needs_validation，于是用例的 ready 断言在 main 上不可达）。
+        "corpus_manifest_hash": CORPUS_IDENTITY,
         "generated_at": "2026-09-19T12:00:00+00:00",
         "validated_at": "2026-09-19T13:00:00+00:00",
     }
@@ -183,7 +208,10 @@ def test_put_saves_structured_answer_preferences() -> None:
 
 
 def test_custom_instructions_persist_preserve_clear_and_validate() -> None:
-    from app.core.settings_store import SettingsStore, get_settings_store
+    # 注意：``get_settings_store`` 在默认测试运行里已被 conftest 的隔离层替换
+    # （见 tests/netguard.py），**晚导入**拿到的会是替换体、不能当
+    # ``dependency_overrides`` 的键。这里统一走 ``_store_dir()``（同一目录）。
+    from app.core.settings_store import SettingsStore
 
     client = _client()
     custom = "请以产品设计师的视角回答。\n先给结论，再给案例。"
@@ -191,15 +219,15 @@ def test_custom_instructions_persist_preserve_clear_and_validate() -> None:
         "/api/settings", json={"answer_preferences": {"custom_instructions": custom}}
     )
     assert response.status_code == 200
-    store = app.dependency_overrides[get_settings_store]()
-    assert SettingsStore(store.path.parent).load().answer_preferences.custom_instructions == custom
+    store_dir = _store_dir()
+    assert SettingsStore(store_dir).load().answer_preferences.custom_instructions == custom
     client.put("/api/settings", json={"answer_preferences": {"tone": "professional"}})
     assert client.get("/api/settings").json()["answer_preferences"]["custom_instructions"] == custom
     assert client.put(
         "/api/settings", json={"answer_preferences": {"custom_instructions": "a" * 4001}}
     ).status_code == 422
     client.put("/api/settings", json={"answer_preferences": {"custom_instructions": ""}})
-    assert SettingsStore(store.path.parent).load().answer_preferences.custom_instructions == ""
+    assert SettingsStore(store_dir).load().answer_preferences.custom_instructions == ""
 
 
 def test_put_rejects_freeform_or_unknown_preference() -> None:
@@ -284,13 +312,20 @@ def test_get_settings_rerank_defaults_disabled_and_masked() -> None:
 
 
 def test_put_rerank_enable_saves_and_masks_key() -> None:
-    """启用成功：落盘并回显档案状态与验证日期；响应不含明文密钥。"""
+    """启用成功：落盘并回显档案状态与验证日期；响应不含明文密钥。
+
+    PRD §6.5：档案登记了语料身份且与**当前**语料一致 ⇒ 状态如实为 ``ready``（不再被无条件
+    标 ``needs_validation``）。这里同时断言「未标记」这一面，避免只看 status 字符串。
+    """
     _write_profile()
     client = _client()
     resp = client.put("/api/settings", json=_enable_payload())
     assert resp.status_code == 200, resp.text
     rerank = resp.json()["rerank"]
     assert rerank["enabled"] is True and rerank["status"] == "ready"
+    assert rerank["profile"]["needs_validation"] is False, (
+        "档案语料身份与当前语料一致时不得标 needs_validation（PRD §6.5）"
+    )
     assert rerank["api_key_set"] is True and rerank["api_key_hint"] == "...-key"
     assert RERANK_KEY not in resp.text
     assert rerank["profile"]["status"] == "validated"
@@ -299,6 +334,7 @@ def test_put_rerank_enable_saves_and_masks_key() -> None:
 
     reloaded = client.get("/api/settings").json()["rerank"]
     assert reloaded["enabled"] is True and reloaded["model"] == RERANK_MODEL
+    assert reloaded["status"] == "ready", "GET 快照必须与 PUT 结果一致（同一判定口径）"
     assert RERANK_KEY not in client.get("/api/settings").text
     # 落盘文件保留明文（本地 gitignored），但 API 不投影
     raw = json.loads((_store_dir() / "config.json").read_text(encoding="utf-8"))
@@ -386,10 +422,37 @@ def test_put_rerank_enable_with_unvalidated_profile_requires_acceptance_env(
 
 
 def test_put_rerank_needs_validation_is_reported_but_not_blocking() -> None:
-    _write_profile(needs_validation=True)
+    """PRD §6.5：档案登记的语料身份与当前语料**不一致** ⇒ 如实标 needs_validation，但不阻止。
+
+    此前该用例靠「档案根本没登记 corpus_manifest_hash」顺带通过；现在两条分支都被显式钉住：
+    默认档案登记匹配身份 ⇒ ready，本用例登记不匹配身份 ⇒ needs_validation。
+    """
+
+    _write_profile(corpus_manifest_hash=MISMATCHED_CORPUS_IDENTITY)
     resp = _client().put("/api/settings", json=_enable_payload())
     assert resp.status_code == 200, resp.text
-    assert resp.json()["rerank"]["status"] == "needs_validation"
+    rerank = resp.json()["rerank"]
+    assert rerank["status"] == "needs_validation"
+    assert rerank["profile"]["needs_validation"] is True
+    # 「只标记，不阻止」：启用仍然成功、密钥仍然在
+    assert rerank["enabled"] is True and rerank["api_key_set"] is True
+    # GET 快照保持同一判定（不是只在 PUT 响应里标一次）
+    assert _client().get("/api/settings").json()["rerank"]["status"] == "needs_validation"
+
+
+def test_put_rerank_without_registered_corpus_identity_is_flagged_but_not_blocking() -> None:
+    """PRD §6.5 第三条分支：档案**未登记**语料身份（无从证明一致）⇒ 保守标 needs_validation。
+
+    与上一条的区别是「无从证明」而不是「已证明不一致」；两者都只标记、都不阻止启用。
+    """
+
+    _write_profile(corpus_manifest_hash=None)
+    resp = _client().put("/api/settings", json=_enable_payload())
+    assert resp.status_code == 200, resp.text
+    rerank = resp.json()["rerank"]
+    assert rerank["status"] == "needs_validation"
+    assert rerank["profile"]["needs_validation"] is True
+    assert rerank["enabled"] is True and rerank["api_key_set"] is True
 
 
 def test_put_rerank_rejects_insecure_or_invalid_endpoint() -> None:

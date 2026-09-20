@@ -1,19 +1,36 @@
-"""pytest 全局夹具：隔离真实数据目录（~/.everything-rag）。
+"""pytest 全局夹具：隔离真实数据目录（~/.everything-rag）+ 隔离真实凭证与出网。
 
 /api/status 现在依赖向量库（get_vector_store）。默认给所有在进程内测试注入
 空 FakeVectorStore + 清空的导入任务存储，避免测试触碰用户真实 Chroma（且与
 运行中的服务抢同一 sqlite 锁）。需要真实行为或自定义计数的用例再自行 override。
+
+另一条**默认全局**隔离见 :func:`_no_real_credentials_or_outbound`：``backend/.env`` 存有
+真实明文 provider 凭证，``SettingsStore.load()`` 在 ``config.json`` 缺失时会回退 ``.env``，
+未隔离的模型装配点因此会构造真实 provider 并**真的出网**（本会话实测两次）。详见
+:mod:`tests.netguard`。
 """
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
 
 from app.api import deps
 from app.main import app
+from tests import netguard
 from tests.fakes import FakeEmbedder, FakeVectorStore
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    """注册守卫自证用例专用标记（改 pytest 配置要动 pyproject，这里就地注册）。"""
+
+    config.addinivalue_line(
+        "markers",
+        f"{netguard.ALLOW_OUTBOUND_MARKER}: 允许该用例故意触发一次被阻断的非回环连接"
+        "（仅 tests/test_network_guard.py 的守卫自证使用）",
+    )
 
 
 @pytest.fixture(autouse=True)
@@ -65,6 +82,45 @@ def _isolate_local_deps(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
     commit_storage_version(tmp_path / "erag-data")
     yield
     app.dependency_overrides.clear()
+
+
+@pytest.fixture(autouse=True)
+def _no_real_credentials_or_outbound(
+    monkeypatch: pytest.MonkeyPatch,
+    request: pytest.FixtureRequest,
+    _isolate_local_deps: None,
+) -> Iterator[None]:
+    """默认把每个用例放进「零真实凭证 + 零真实出网」环境（CLAUDE.md §11）。
+
+    三层隔离（设置存储 / 模型装配输入 / 非回环连接守卫）见 :mod:`tests.netguard`。
+    刻意依赖 ``_isolate_local_deps``：那个夹具用 ``settings_store.get_settings_store``
+    **函数对象**当 ``dependency_overrides`` 的键，必须先由它取到原函数，本夹具再去替换
+    模块属性，否则 override 会挂到一个已经没人用的对象上。
+
+    **live 豁免**：设 ``EVERYTHING_RAG_LIVE_EVAL=1``（或
+    ``EVERYTHING_RAG_RUN_LIVE_EVAL=1``）时三层隔离**全部不装** —— live 用例是用户显式
+    授权的真实配置 / 真实外呼路径。`tests/test_netguard_scope.py` 用同一个判据自证
+    「隔离状态与 live 开关严格互补」，并在显式开关下实跑一次。
+    """
+
+    if not netguard.isolation_enabled():
+        yield
+        return
+
+    netguard.install_isolation(monkeypatch)
+    allows_outbound = (
+        request.node.get_closest_marker(netguard.ALLOW_OUTBOUND_MARKER) is not None
+    )
+    yield
+    attempts = netguard.blocked_attempts()
+    netguard.reset_isolation()
+    if attempts and not allows_outbound:
+        detail = "\n".join(
+            f"- {item['host']}:{item['port']} ← {item['where']}" for item in attempts
+        )
+        pytest.fail(
+            f"本轮存在 {len(attempts)} 次非回环连接尝试（默认测试运行禁止真实外呼）：\n{detail}"
+        )
 
 
 def _stop_chroma_systems() -> None:
