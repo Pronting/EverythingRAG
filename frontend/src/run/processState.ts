@@ -154,6 +154,31 @@ export function withRunSettings(state: ProcessState, text: string): ProcessState
   return { ...state, entries };
 }
 
+/**
+ * 记下本轮**承接自哪一次执行**（PRD 5.4 末句）。
+ *
+ * 会话被移动到别的工作区后，原区的执行已停止、历史只读；新执行必须让用户看见承接
+ * 关系，否则会以为历史凭空消失。后端接受 `origin_run_id` 但**不回显**，所以这个值
+ * 只能由前端带过来。不推进 `lastSeq`（不是事件）。
+ */
+export function withOriginRun(state: ProcessState, originRunId: string): ProcessState {
+  const entry: ProcessEntry = {
+    id: "origin-run",
+    kind: "status",
+    text: `本次执行承接自原工作区的执行 ${originRunId}`,
+    seq: 0,
+    at: "",
+    status: "done",
+    taskId: null,
+    tag: "origin_run",
+  };
+  const index = state.entries.findIndex((item) => item.id === "origin-run");
+  if (index < 0) return { ...state, entries: [...state.entries, entry] };
+  const entries = state.entries.slice();
+  entries[index] = entry;
+  return { ...state, entries };
+}
+
 /** 按序归约一批事件（首屏 `event-log` 快照用它）。 */
 export function reduceRunEvents(
   events: RunEventTyped[],

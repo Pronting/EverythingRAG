@@ -9,6 +9,7 @@ import type {
   RunEventTyped,
   RunImageRef,
   RunStreamFrame,
+  RunSummary,
   SourceType,
 } from "../types";
 import {
@@ -275,6 +276,13 @@ export interface CreateRunInput {
   reasoningLevel?: ReasoningLevel;
   /** 本次 run 附带的图片引用（`data:image/...` 内联或 http(s)），最多 4 张。 */
   images?: string[];
+  /**
+   * 来源 run（PRD 5.4 末句）：会话移到别的执行上下文后，新执行承接自哪一次 run。
+   *
+   * 后端的 `POST /runs` 接受该字段但**不在 `RunDetail` 里回显** —— 前端必须自己记住
+   * 并展示，否则用户会以为历史凭空消失。
+   */
+  originRunId?: string | null;
 }
 
 /** 一次 run 允许附带的图片张数（与后端 `MAX_RUN_IMAGES` 一致，超出 422）。 */
@@ -308,10 +316,31 @@ export async function createRun(
         reasoning_level: input.reasoningLevel ?? null,
         // 图片引用（data URI 或 http(s)），后端上限 4 张（超出 422）；结果见 RunDetail.image_refs。
         images: input.images ?? [],
+        // 来源 run（PRD 5.4）：只在确有承接关系时带上。
+        origin_run_id: input.originRunId ?? null,
       }),
     },
     signal,
   );
+}
+
+/**
+ * 某会话的 run 列表（按创建时间）。
+ *
+ * 用途：会话**静态移动**（无活动 run、`stopped_run_ids` 为空）时，仍要按 PRD 5.4 末句
+ * 记录「新的执行承接自哪一次 run」——取列表里最后一次执行。
+ */
+export async function listConversationRuns(
+  workspaceId: string,
+  conversationId: string,
+  limit?: number,
+  signal?: AbortSignal,
+): Promise<RunSummary[]> {
+  const params = new URLSearchParams({ conversation_id: conversationId });
+  if (limit !== undefined) params.set("limit", String(limit));
+  const url = `${runsPath(workspaceId)}?${params.toString()}`;
+  const payload = await requestJson<{ runs?: RunSummary[] }>(url, undefined, signal);
+  return Array.isArray(payload.runs) ? payload.runs : [];
 }
 
 /** run 快照：刷新页面后恢复状态、子任务、待处理卡片与末事件位置（PRD 14.3）。 */

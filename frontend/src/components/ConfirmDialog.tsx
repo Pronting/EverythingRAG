@@ -9,6 +9,8 @@ interface ConfirmDialogProps {
   /** 危险操作：确认按钮用警示色。 */
   danger?: boolean;
   busy?: boolean;
+  /** 稳定测试钩子（E2E 按 testid 定位具体弹窗）。 */
+  testId?: string;
   onConfirm: () => void;
   onCancel: () => void;
 }
@@ -25,6 +27,7 @@ export default function ConfirmDialog({
   confirmLabel,
   danger = false,
   busy = false,
+  testId,
   onConfirm,
   onCancel,
 }: ConfirmDialogProps) {
@@ -49,6 +52,7 @@ export default function ConfirmDialog({
         role="alertdialog"
         aria-modal="true"
         aria-label={title}
+        data-testid={testId}
         onPointerDown={(event) => event.stopPropagation()}
       >
         <h3 className="confirm-dialog-title">{title}</h3>

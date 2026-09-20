@@ -13,6 +13,7 @@ import {
   summarizeRunImages,
 } from "../api/runApi";
 import type { RunSubscription } from "../api/runApi";
+import { rememberConversationEpoch } from "../api/conversationApi";
 import type {
   AnswerBasis,
   ApprovalDecisionKind,
@@ -30,7 +31,7 @@ import type {
 } from "../types";
 import { applyAnswerEvent, answerText, citationsToSources, emptyAnswerState } from "../run/answerState";
 import type { AnswerState } from "../run/answerState";
-import { applyRunEvent, emptyProcessState, terminalStatusText, withRunSettings } from "../run/processState";
+import { applyRunEvent, emptyProcessState, terminalStatusText, withOriginRun, withRunSettings } from "../run/processState";
 import { MarkdownContent } from "./MarkdownContent";
 import { CitationTooltip } from "./CitationTooltip";
 import { SourceFooter } from "./SourceFooter";
@@ -115,6 +116,13 @@ interface ChatProps {
   onReasoningLevelChange?: (level: ReasoningLevel) => void;
   /** 提示回调（父级轻提示），用于「还有活动任务」等提示。 */
   onNotify?: (type: "success" | "error", message: string) => void;
+  /**
+   * 本会话「承接自哪一次 run」（PRD 5.4 末句）。
+   *
+   * 会话被移动到别的工作区后，原区的执行已停止、历史只读；带上它让新执行记录来源，
+   * 并在过程区域展示承接关系（后端接受 `origin_run_id` 但**不回显**）。
+   */
+  originRunId?: string | null;
 }
 
 const THINKING_TEXT = "思考中…";
@@ -214,6 +222,7 @@ export default function Chat({
   onPermissionModeChange,
   onReasoningLevelChange,
   onNotify,
+  originRunId = null,
 }: ChatProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
@@ -607,7 +616,7 @@ export default function Chat({
       return;
     }
 
-    // 2) 创建并启动 run（202 Accepted）；图片引用随请求一起提交。
+    // 2) 创建并启动 run（202 Accepted）；图片引用与来源 run 随请求一起提交。
     let detail: RunDetail;
     try {
       detail = await createRun(workspaceId, {
@@ -617,6 +626,8 @@ export default function Chat({
         permissionMode,
         reasoningLevel,
         images: sentImages,
+        // PRD 5.4 末句：会话移动后在目标区继续提问，新执行记录承接来源。
+        originRunId,
       });
     } catch (error) {
       failSend(assistantId, describeRunError(error));
@@ -626,9 +637,15 @@ export default function Chat({
     const current = runRef.current;
     if (current === null || current.assistantId !== assistantId) return;
     current.runId = detail.run_id;
+    // 记下后端交给我们的会话 context_epoch：移动时作为乐观并发预期（后端不回读该字段）。
+    rememberConversationEpoch(targetConversation, detail.context_epoch);
     // 记录本轮实际附带的图片张数：即使后端漏返回 image_refs，界面也不静默。
     if (attachedImages > 0) {
       updateMessage(assistantId, (m) => ({ ...m, attachedImages }));
+    }
+    // 承接关系（PRD 5.4）：后端不回显，前端自己展示，避免用户以为历史消失。
+    if (originRunId !== null && originRunId !== "") {
+      current.process = withOriginRun(current.process, originRunId);
     }
     // 过程区域记录**实际发给本轮的**设置（后端详情回读，而非菜单草稿）。
     current.process = withRunSettings(
