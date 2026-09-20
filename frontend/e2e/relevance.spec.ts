@@ -23,14 +23,12 @@ import {
  *   设置页用例不发起任务，改用本地 `expectNoLegacyChatTraffic`（只守 0 次 `/api/chat`）——
  *   两者都不让 stub 拦住一个再也没人调用的旧端点。
  *
- * 契约现状（集成 t5 后）：后端把**真实**的每来源筛选字段（`relevance_checked` /
- * `rerank_score` / `score_type` / `profile_id` / `evidence_hash` / `member_refs`）
- * 随 `answer.meta.citations` 下发，并在 rerank 的 `tool.completed` 上给真实
- * `result_count`（入选数）/ `source_count`（候选数）——本文件据此断言「真实值真的被
- * 渲染出来」（排序分数 / 组合成员 range / chip 与徽标），同时保留「字段缺失时**不显示**、
- * 不伪造」与「绝不出现正确率 / 概率 / 0%」的用例。
- * 引用契约仍不带**向量**相似度 ⇒ 已筛选来源的向量分数行如实显示「未记录向量相似度」，
- * 而不是编一个百分比。
+ * 契约现状（集成 t5/t7 后）：后端把**真实**的每来源字段随 `answer.meta.citations` 下发 ——
+ * 重排专属的 `relevance_checked` / `rerank_score` / `score_type` / `profile_id` /
+ * `evidence_hash` / `member_refs`，以及**与重排无关**的原始向量分数 `similarity`；
+ * rerank 的 `tool.completed` 另给真实 `result_count`（入选数）/ `source_count`（候选数）。
+ * 本文件据此断言「真实值真的被渲染出来」（排序分数 / 向量相似度 ×100 / 组合成员 range /
+ * chip 与徽标），同时保留「缺字段时**不显示**、不伪造 0% 或正确率/概率」的用例。
  */
 
 const STATUS_BODY = {
@@ -225,8 +223,9 @@ test("问答显示「正在筛选资料」进度，停止后进度关闭", async
 });
 
 test("已筛选来源渲染真实排序分数、组合成员与证据哈希", async ({ page }) => {
-  // 后端 t5 起：每来源筛选字段随 `answer.meta.citations` 到达（纯追加、带默认值）。
+  // 后端 t5/t7 起：每来源筛选字段随 `answer.meta.citations` 到达（纯追加、带默认值）。
   // 本用例给**真实值**，断言界面真的把它们渲染出来（t2 时期这些字段到不了来源层）。
+  // 0.379238 是 PRD §56 记录的**真实**向量相似度（词法保留入选的那条来源）。
   await stubBlocks(page);
   const stub = await stubRunBackend(page, {
     frames: [
@@ -245,6 +244,7 @@ test("已筛选来源渲染真实排序分数、组合成员与证据哈希", as
             score_type: "rerank",
             profile_id: "profile-live",
             evidence_hash: "deadbeef",
+            similarity: 0.379238,
             member_refs: [
               {
                 block_id: "chunk-a",
@@ -284,19 +284,43 @@ test("已筛选来源渲染真实排序分数、组合成员与证据哈希", as
   await page.getByTestId("process-toggle").click();
   await expect(page.getByTestId("process-entries")).toContainText("筛选资料：入选 1 条资料（候选 30 条）");
 
-  // 详细面板：排序分数、组合成员 range、原文；档案 id 与证据哈希进诊断属性（不占可见文案）
+  // 悬停预览：两个口径并存（PRD §306：原始数值明确叫「向量相似度」）。
+  // 放在打开右侧面板之前，避免两个浮层互相遮挡。
+  await page.locator(".markdown-body .citation").hover();
+  const tooltip = page.locator(".citation-tooltip");
+  await expect(tooltip).toBeVisible();
+  await expect(tooltip).toContainText("已筛选资料 · 排序分数 0.812");
+  await expect(tooltip).toContainText("向量相似度 38%");
+  await page.mouse.move(0, 0);
+
+  // 详细面板：排序分数、向量相似度、组合成员 range、原文；
+  // 档案 id 与证据哈希进诊断属性（不占可见文案）
   await page.getByRole("button", { name: /notes\.md/ }).click();
   const panel = page.getByRole("complementary", { name: "来源详情" });
   await expect(panel.locator(".citation-panel-badge")).toHaveText("已筛选资料");
   await expect(panel.locator(".citation-panel-score")).toHaveText("排序分数 0.812");
   await expect(panel.locator(".citation-panel-score")).not.toContainText("%");
+  // 原始向量分数 ×100 后显示，且**明确叫「向量相似度」**（PRD §52/§306）。
+  // 精度沿用既有 `util/source.ts`（`Math.round(sim*100)` ⇒ 整数百分比）：
+  // 0.379238（PRD §56 的真实值）⇒ 38%，**不是** 0.379 也不是 37.9。
+  await expect(panel.locator(".citation-panel-meta")).toHaveText("向量相似度 38%");
+  // 两条数值互不混淆：排序分数行不是百分比，向量相似度行不是排序分数
+  await expect(panel.locator(".citation-panel-score")).not.toContainText("向量相似度");
+  await expect(panel.locator(".citation-panel-meta")).not.toContainText("排序分数");
+  await expect(panel.locator(".citation-panel-meta")).not.toContainText("0.812");
   await expect(panel).not.toContainText("正确率");
   await expect(panel).not.toContainText("概率");
+  await expect(panel).not.toContainText("未记录向量相似度");
   await expect(panel).toHaveAttribute("data-profile-id", "profile-live");
   await expect(panel).toHaveAttribute("data-evidence-hash", "deadbeef");
-  // 引用契约仍不带**向量**相似度：不得因此编一个百分比，如实显示「未记录向量相似度」
-  await expect(panel.locator(".citation-panel-meta")).toHaveText("未记录向量相似度");
   await expect(panel.locator(".citation-panel-text")).toHaveText("本轮实际采用的证据片段。");
+
+  // 全页不得出现伪造的百分比分数（既无 0%，也没有正确率/概率的说法）
+  const bodyText = await page.locator("body").innerText();
+  expect(bodyText).not.toContain("0%");
+  expect(bodyText).not.toContain("正确率");
+  expect(bodyText).not.toContain("概率");
+  expect(bodyText).not.toContain("未记录向量相似度");
 
   // 组合成员可追溯：主证据 + 补充原文各带范围
   const members = panel.locator(".citation-panel-member");
@@ -388,9 +412,11 @@ test("筛选完成但引用缺字段：只显示事件级结论，不伪造每�
   expectRunOnlyTraffic(stub);
 });
 
-test("未启用筛选的来源保留匹配方式标签与「向量相似度」命名口径", async ({ page }) => {
-  // 未启用相关性筛选：运行层不发布任何 rerank 事件 ⇒ 脚注回到「来源」，
-  // 引用不带向量分数 ⇒ 显示「词法命中」而不是伪造 0%/百分比。
+test("未启用筛选的来源照常显示「向量相似度」，纯词法命中才显示「词法命中」", async ({ page }) => {
+  // 未启用相关性筛选：运行层不发布任何 rerank 事件 ⇒ 脚注回到「来源」。
+  // 但**向量相似度与 rerank 开关正交**（PRD §304）：S1 带原始向量分数 ⇒ 必须显示
+  // 「向量相似度 92%」；S2 真的没有向量分数（纯词法命中）⇒ 显示「词法命中」，
+  // 既不是 0% 也不是「未记录向量相似度」。
   const stub = await stubRunBackend(page, {
     frames: [
       runStatus("running", "research", "正在检索知识库"),
@@ -398,7 +424,7 @@ test("未启用筛选的来源保留匹配方式标签与「向量相似度」�
       toolCompleted("search_knowledge", { operationId: "op-search", resultCount: 2, sourceCount: 2 }),
       answerMeta(
         [
-          { label: "S1", source_ref: "legacy.md", snippet: "旧记录的命中片段。" },
+          { label: "S1", source_ref: "legacy.md", snippet: "旧记录的命中片段。", similarity: 0.92 },
           { label: "S2", source_ref: "legacy.md", snippet: "纯词法命中的旧片段。" },
         ],
         { basis: "knowledge" },
@@ -416,21 +442,26 @@ test("未启用筛选的来源保留匹配方式标签与「向量相似度」�
   await expect(page.locator(".chat-searching")).not.toBeVisible();
   const chips = page.locator(".source-chip-sim");
   await expect(chips).toHaveCount(2);
-  await expect(chips.nth(0)).toHaveText("词法命中");
+  // 有向量分数 ⇒ ×100 显示（92%）；无向量分数 ⇒ 词法命中（绝不 0%）
+  await expect(chips.nth(0)).toHaveText("92%");
   await expect(chips.nth(1)).toHaveText("词法命中");
-  await expect(chips.nth(0)).not.toContainText("%");
 
-  // 旧记录面板：只有向量相似度的命名口径（此处引用不带分数）与原文，不出现「排序分数」
+  // S1（未启用筛选 + 有向量分数）：面板明确叫「向量相似度」，且不出现「排序分数」
   await page.getByRole("button", { name: /legacy\.md/ }).first().click();
   const panel = page.getByRole("complementary", { name: "来源详情" });
-  await expect(panel.locator(".citation-panel-meta")).toContainText("词法命中");
+  await expect(panel.locator(".citation-panel-meta")).toHaveText("向量相似度 92%");
+  await expect(panel.locator(".citation-panel-badge")).toHaveCount(0);
   await expect(panel).not.toContainText("排序分数");
   await expect(panel).not.toContainText("0%");
+  // 未启用筛选 ⇒ 没有「已筛选资料」的措辞，也没有档案/哈希可显示
+  await expect(panel).toHaveAttribute("data-profile-id", "");
+  await expect(panel).toHaveAttribute("data-evidence-hash", "");
 
-  // 下一个来源同样不伪造分数
+  // S2（真的没有向量分数）：如实显示「词法命中」，不伪造 0%
   await panel.getByRole("button", { name: "下一个来源" }).click();
-  await expect(panel.locator(".citation-panel-meta")).toContainText("词法命中");
+  await expect(panel.locator(".citation-panel-meta")).toHaveText("词法命中");
   await expect(panel).not.toContainText("0%");
+  await expect(panel).not.toContainText("未记录向量相似度");
   expectRunOnlyTraffic(stub);
 });
 

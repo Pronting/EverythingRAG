@@ -544,7 +544,7 @@ export const CLOSING_EVENT_TYPES: EventType[] = [
 /**
  * 引用条目（PRD 8.3）：稳定编号 + 来源身份 + 保存片段 + 来源状态。
  *
- * 后 6 个字段是后端**纯追加**（集成 t5，captain 已批准）：run 架构没有旧
+ * 后 7 个字段是后端**纯追加**（集成 t5/t7，captain 已批准）：run 架构没有旧
  * `/api/chat` 的 `meta.sources`，main 展示过的「已筛选资料」信息只能经
  * `answer.meta.citations` 到达界面。**全部可选**：旧记录/旧后端不带这些键，
  * 缺省时界面**不显示**该信息（不填 0、不编造分数，PRD §8.3）。
@@ -570,6 +570,13 @@ export interface CitationEntry {
   evidence_hash?: string;
   /** 组合成员引用（与 `MemberRef` 同形，后端 `MemberRef.to_dict()` 原样投影）。 */
   member_refs?: MemberRef[];
+  /**
+   * **原始向量分数**（检索阶段的相似度；PRD §304：不得存入重排分数）。
+   *
+   * 纯词法命中、未启用筛选或旧记录缺该键时为 `null` ⇒ 界面按 §52 显示「词法命中」，
+   * **绝不**编造 0%，也绝不把 `rerank_score` 写进这个字段。
+   */
+  similarity?: number | null;
 }
 
 export interface WebReadRange {

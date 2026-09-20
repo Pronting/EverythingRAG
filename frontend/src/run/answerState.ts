@@ -125,25 +125,30 @@ const IMAGE_REF = /^(?:\/api\/knowledge\/images\/[a-f0-9]{16,64}|https?:\/\/\S+\
 /**
  * 引用条目 → 正文/脚注用的来源条目。
  *
- * `similarity` 恒为 `null`：`CitationEntry` 仍不携带向量分数，界面必须显示
- * 「词法命中」而不是伪造 0%（PRD 8.3：来源位置可核）。
+ * **两条数据通路，闸门不同**（集成 t7/t8）：
  *
- * 「已筛选资料」字段（集成 t5）**按原值搬运**：后端把本轮真实筛选结果
- * （`relevance_checked` / `rerank_score` / `score_type` / `profile_id` /
- * `evidence_hash` / `member_refs`）写在引用上，这里只拷贝 —— 记录缺失时保持缺省
- * （`false` / `null` / `""` / `[]`），**绝不补造分数或成员**。
+ * * `similarity`（**原始向量分数**，PRD RAG-relevance §52/§304）**无条件搬运**：它是向量
+ *   检索命中的原始分数，与「是否启用重排」**语义正交** —— 未启用筛选的来源照样有向量
+ *   分数，必须显示「向量相似度 N%」；真的没有（纯词法命中）才由 `util/source.ts` 显示
+ *   「词法命中」，不显示 0%。
+ * * 「已筛选资料」字段（集成 t5）**按原值搬运且受 `filtered` 闸门约束**：后端把本轮真实
+ *   筛选结果（`relevance_checked` / `rerank_score` / `score_type` / `profile_id` /
+ *   `evidence_hash` / `member_refs`）写在引用上，这里只拷贝 —— 记录缺失时保持缺省
+ *   （`false` / `null` / `""` / `[]`），**绝不补造分数或成员**。
  */
 export function citationToSource(citation: CitationEntry): Source {
   const isWeb = citation.source_type === "web";
   const isImage = IMAGE_REF.test(citation.source_ref);
-  // 只有后端明确标了「经筛选」才搬分数与成员：旧记录/半截 payload 不得被当成已筛选。
+  // 闸门只约束**重排专属**字段：旧记录/半截 payload 不得被当成「已筛选」。
   const filtered = citation.relevance_checked === true;
   return {
     source_id: citation.label,
     block_id: citation.evidence_id,
     text: citation.snippet,
     source_file: citation.source_ref,
-    similarity: null,
+    // 原始**向量**分数：与 rerank 开关无关，有值就搬运（有值 ⇒「向量相似度 N%」）。
+    // 它与 `rerank_score`（排序分数）是两条独立数值，缺省不填 0、不互相顶替。
+    similarity: citation.similarity ?? null,
     heading_path: null,
     anchor: null,
     // 图片证据：面板要走 Markdown 渲染（表格/描述），并给出「查看原图」入口。

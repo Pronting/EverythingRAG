@@ -311,6 +311,8 @@ export interface CitationSeed {
   profile_id?: string;
   evidence_hash?: string;
   member_refs?: Record<string, unknown>[];
+  /** 原始**向量**分数（后端 t7 纯追加）：纯词法命中时不带该键，界面须显示「词法命中」。 */
+  similarity?: number | null;
 }
 
 // ------------------------------------------------------------ 图片引用（t25）
@@ -369,7 +371,7 @@ export function citationPayload(seed: CitationSeed): Record<string, unknown> {
     snippet: seed.snippet ?? "",
     source_status: seed.source_status ?? "active",
   };
-  // 追加字段按「给了才带」语义注入：缺省时帧里没有这些键（= 旧记录/未启用筛选的真实形态）。
+  // 追加字段按「给了才带」语义注入：缺省时帧里没有这些键（= 旧记录/未启用筛选/纯词法命中的真实形态）。
   const relevance: (keyof CitationSeed)[] = [
     "relevance_checked",
     "rerank_score",
@@ -377,6 +379,7 @@ export function citationPayload(seed: CitationSeed): Record<string, unknown> {
     "profile_id",
     "evidence_hash",
     "member_refs",
+    "similarity",
   ];
   for (const key of relevance) {
     if (seed[key] !== undefined) payload[key] = seed[key];
