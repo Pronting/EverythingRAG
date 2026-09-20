@@ -208,6 +208,21 @@ class ProgressRecorder:
         self.events.append((state, error_code))
 
 
+@dataclass
+class OutcomeRecorder:
+    """记录工具层上报的筛选**结果**（``result_count`` / ``source_count`` / ``sources``）。"""
+
+    payloads: list[dict[str, Any]] = field(default_factory=list)
+
+    async def __call__(self, payload: Any) -> None:
+        self.payloads.append({**dict(payload), "sources": [dict(i) for i in payload.get("sources") or []]})
+
+    @property
+    def last(self) -> dict[str, Any]:
+        assert self.payloads, "工具没有上报筛选结果"
+        return self.payloads[-1]
+
+
 @dataclass(frozen=True)
 class StubWorkspace:
     """工具绑定的工作区（只含工具层读取的只读属性）。"""
@@ -276,6 +291,7 @@ def make_context(
     runtime: Any = None,
     blocks: list[tuple[str, str, dict[str, Any]]] | None = None,
     progress: ProgressRecorder | None = None,
+    outcome: OutcomeRecorder | None = None,
     agent_kind: AgentKind = AgentKind.RAG,
 ) -> ToolContext:
     """组装一次检索调用的上下文（rerank 运行态按需注入）。"""
@@ -291,6 +307,7 @@ def make_context(
         rerank=resolved,
         rerank_scope=SCOPE,
         rerank_progress=progress,
+        rerank_outcome=outcome,
         agent_kind=agent_kind,
     )
 
@@ -423,6 +440,68 @@ async def test_empty_when_all_candidates_below_threshold() -> None:
     assert result.data["candidate_count"] == 2
     assert result.data["retrieval"]["status"] == rerank_pipeline.STATUS_EMPTY
     assert result.data["retrieval"]["selected_count"] == 0
+    assert progress.events == [("running", ""), ("done", "")]
+
+
+async def test_empty_reports_real_counts_so_the_ui_can_say_empty() -> None:
+    """筛选后 0 条：必须上报**真实计数**（``result_count == 0`` + ``source_count > 0``）。
+
+    这是前端区分「筛选后 0 条（empty）」与「未统计（把默认 0 当成没有入选）」的唯一依据：
+    旧接线在 ``done`` 时只发 ``tool_name``/``status``，两个计数都取默认 0，前端无法区分。
+    """
+
+    provider = StubProvider(default_score=0.01)  # 全部低于阈值 0.35
+    outcome = OutcomeRecorder()
+
+    result = await search(
+        make_context(
+            [make_chunk("b1"), make_chunk("b2")],
+            provider=provider,
+            outcome=outcome,
+        )
+    )
+
+    assert result.status is ToolStatus.IRRELEVANT
+    payload = outcome.last
+    assert payload["result_count"] == 0, "0 条入选"
+    assert payload["source_count"] == 2, "2 条候选（>0 ⇒ 不是「没有候选」也不是「未统计」）"
+    assert payload["status"] == rerank_pipeline.STATUS_EMPTY
+    assert payload["sources"] == []
+    # 前端判据：成功 + result_count == 0 ⇒ empty（不是 filtered、也不是 disabled）
+    assert payload["result_count"] == 0 and payload["source_count"] > 0
+
+
+async def test_filtered_reports_real_counts_and_per_source_records() -> None:
+    """筛选出资料：``result_count`` = 入选数，``sources`` 带每来源的真实相关性记录。"""
+
+    chunks = [make_chunk("b1"), make_chunk("b2")]
+    outcome = OutcomeRecorder()
+
+    result = await search(make_context(chunks, provider=StubProvider(), outcome=outcome))
+
+    assert result.status is ToolStatus.OK
+    payload = outcome.last
+    assert payload["result_count"] == 2 and payload["source_count"] == 2
+    assert payload["status"] == rerank_pipeline.STATUS_FILTERED
+    assert [item["source_ref"] for item in payload["sources"]] == ["b1#b1", "b2#b2"]
+    for item in payload["sources"]:
+        assert item["relevance_checked"] is True
+        assert item["score_type"] == "rerank"
+        assert item["profile_id"] == PROFILE_ID
+        assert item["rerank_score"] == pytest.approx(0.9)
+        assert item["evidence_hash"]
+        assert isinstance(item["member_refs"], list) and item["member_refs"]
+
+
+async def test_outcome_sink_absent_falls_back_to_the_legacy_done_progress() -> None:
+    """未注入 ``rerank_outcome`` 的旧装配：仍只发 ``rerank_progress("done")``（行为不变）。"""
+
+    progress = ProgressRecorder()
+    result = await search(
+        make_context([make_chunk("b1")], provider=StubProvider(), progress=progress)
+    )
+
+    assert result.status is ToolStatus.OK
     assert progress.events == [("running", ""), ("done", "")]
 
 
@@ -781,6 +860,132 @@ async def test_run_api_without_rerank_emits_no_rerank_progress(tmp_path: Path) -
         # 旧路径：两条候选都在
         texts = _evidence_texts(events)
         assert "橘子" in texts
+    finally:
+        await env.close()
+
+
+async def test_run_api_answer_meta_citations_carry_relevance_fields(tmp_path: Path) -> None:
+    """筛选出的来源必须把「已筛选资料」字段带进 ``answer.meta.citations``（集成 t5）。
+
+    值来自**本次真实筛选产物**（视图元数据 → 工具结果 → 运行层登记 → 引用），不是补造：
+    ``rerank_score`` 就是本次 provider 给出的分数，``evidence_hash`` 是视图载荷哈希。
+    同时证明它经 ``commit_answer`` 落库后可原样读回（旧记录缺这些键时回落默认值）。
+    """
+
+    provider = StubProvider(drop_marker="北极熊")  # 橘子 0.9 入选；北极熊 0.01 被拒
+    env = await _build_run_env(
+        tmp_path, runtime=Runtime(provider=provider, profile=make_profile())
+    )
+    try:
+        run_id, events = await _run(env)
+        run = await env.store.get_run(run_id)
+        assert run.status in {RunStatus.COMPLETED, RunStatus.COMPLETED_WITH_GAPS}
+
+        # ① 工具事件的真实计数：筛选出 1 条（>0 ⇒ filtered；0 ⇒ empty）
+        started = _events_of(events, EventType.TOOL_STARTED)
+        completed = [
+            item
+            for item in _events_of(events, EventType.TOOL_COMPLETED)
+            if item.payload.get("status") == "succeeded"
+        ]
+        assert completed and completed[-1].payload["result_count"] == 1
+        assert completed[-1].payload["source_count"] == 2
+        # 每个 ``tool.started`` 恰好对应一次 ``tool.completed``：进度接缝与结果接缝
+        # 不会为同一次筛选各发一遍（前端不会看到重复的完成事件）。
+        assert len(completed) == len(started) >= 1
+
+        # ② answer.meta 的引用带真实字段
+        meta = _events_of(events, EventType.ANSWER_META)
+        assert meta, [event.type.value for event in events]
+        citations = meta[-1].payload["citations"]
+        assert len(citations) == 1, citations
+        citation = citations[0]
+        assert citation["label"] == "S1"
+        assert citation["relevance_checked"] is True
+        assert citation["rerank_score"] == pytest.approx(0.9)
+        assert citation["score_type"] == "rerank"
+        assert citation["profile_id"] == PROFILE_ID
+        assert len(citation["evidence_hash"]) == 64  # 视图载荷哈希（sha256）
+        # ③ 组合成员引用形状 == main 的 MemberRef.to_dict()
+        assert citation["member_refs"], citation
+        for member in citation["member_refs"]:
+            assert set(member) == {
+                "block_id",
+                "content_hash",
+                "relation",
+                "start",
+                "end",
+                "block_char_offset",
+            }
+            assert member["relation"] in {"primary", "supplement", "image_text"}
+        # 被筛掉的极地熊不得出现在引用里
+        assert "北极熊" not in str(citation)
+
+        # ④ 落库后读回仍然带着这些字段（app_store 往返）
+        artifact = await env.store.get_answer(run.answer_id)
+        assert artifact is not None and artifact.citations
+        stored = artifact.citations[0]
+        assert stored.relevance_checked is True
+        assert stored.rerank_score == pytest.approx(0.9)
+        assert stored.profile_id == PROFILE_ID
+        assert stored.evidence_hash == citation["evidence_hash"]
+        assert stored.member_refs == citation["member_refs"]
+    finally:
+        await env.close()
+
+
+async def test_run_api_answer_meta_citations_default_without_rerank(tmp_path: Path) -> None:
+    """未启用筛选：引用上的追加字段保持默认值（**不伪造**排序分数）。"""
+
+    env = await _build_run_env(tmp_path, runtime=None)
+    try:
+        run_id, events = await _run(env)
+        run = await env.store.get_run(run_id)
+        assert run.status in {RunStatus.COMPLETED, RunStatus.COMPLETED_WITH_GAPS}
+
+        citations = _events_of(events, EventType.ANSWER_META)[-1].payload["citations"]
+        assert citations, "未筛选时来源仍应来自旧检索路径"
+        for citation in citations:
+            assert citation["relevance_checked"] is False
+            assert citation["rerank_score"] is None
+            assert citation["score_type"] == ""
+            assert citation["profile_id"] == ""
+            assert citation["evidence_hash"] == ""
+            assert citation["member_refs"] == []
+    finally:
+        await env.close()
+
+
+async def test_run_api_emits_empty_counts_when_nothing_passes_the_filter(tmp_path: Path) -> None:
+    """筛选后 0 条：run 链路上发布的 ``tool.completed`` 必须让前端判为 ``empty``。
+
+    与「未统计」的区别就在这里：``result_count == 0`` **且** ``source_count > 0``
+    （有候选、全被筛掉），而不是两个默认 0。
+
+    注：本轮没有知识来源，后续合成/核对阶段可能如实判为失败 —— 本用例只断言**筛选事件的
+    计数**（那是前端判据的来源），不把「run 一定成功」当作前提。
+    """
+
+    provider = StubProvider(default_score=0.01)  # 两条候选都低于阈值 0.35
+    env = await _build_run_env(
+        tmp_path, runtime=Runtime(provider=provider, profile=make_profile())
+    )
+    try:
+        _run_id, events = await _run(env)
+        completed = [
+            item
+            for item in _events_of(events, EventType.TOOL_COMPLETED)
+            if item.payload.get("status") == "succeeded"
+        ]
+        assert completed, [event.type.value for event in events]
+        assert completed[-1].payload["result_count"] == 0
+        assert completed[-1].payload["source_count"] == 2
+        # 前端判据：成功 + result_count == 0 ⇒ empty（而不是「未统计」，也不是 filtered）
+        # 没有入选来源 ⇒ 引用里不得出现任何「已筛选资料」标记。
+        for event in _events_of(events, EventType.ANSWER_META):
+            for citation in event.payload["citations"]:
+                assert citation["relevance_checked"] is False
+                assert citation["rerank_score"] is None
     finally:
         await env.close()
 

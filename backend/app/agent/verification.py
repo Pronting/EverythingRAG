@@ -27,7 +27,7 @@ import hashlib
 import inspect
 import re
 from collections.abc import Awaitable, Callable, Mapping, Sequence
-from typing import Final, Protocol
+from typing import Any, Final, Protocol
 
 from pydantic import Field
 
@@ -435,15 +435,23 @@ def assign_citation_ids(
     *,
     existing: Sequence[CitationEntry] = (),
     workspace_names: Mapping[str, str] | None = None,
+    relevance_by_source: Mapping[str, Mapping[str, Any]] | None = None,
 ) -> CitationAssignment:
     """把 ``{{ev-…}}`` 占位符替换为稳定编号并生成来源映射（PRD 8.3）。
 
     规则：编号按**首次出现顺序**、按前缀分别编号（``S`` / ``W`` / ``M`` / ``H``）；
     同一来源复用同一编号（含 ``existing`` 里已分配的编号，不重新编号）；
     非文档来源（``general_knowledge`` / ``proposal``）不得生成编号，直接报错。
+
+    ``relevance_by_source``（纯追加的可选入参，集成 t5）：``{source_ref: 相关性筛选记录}``，
+    值来自**本次真实筛选结果**（``app.retrieval.rerank_pipeline`` 的选择产物，由运行层从
+    检索工具的入选来源收集）。命中时把 ``relevance_checked`` / ``rerank_score`` /
+    ``score_type`` / ``profile_id`` / ``evidence_hash`` / ``member_refs`` 原样写到该引用的
+    追加字段上；**未命中或未提供时保持默认值**（不伪造分数/概率/正确率，PRD §8.3）。
     """
 
     index = evidence_index(evidence)
+    relevance = relevance_by_source or {}
     citations: dict[str, CitationEntry] = {item.label: item for item in existing}
     # 已有编号先登记进 evidence → label 映射，重复调用时不会重新编号（PRD 8.3）。
     labels: dict[str, str] = {
@@ -487,6 +495,7 @@ def assign_citation_ids(
             source_ref=item.source_ref,
             snippet=_first_sentence(item.content, 200),
             source_status=CitationSourceStatus.ACTIVE,
+            **_relevance_citation_fields(relevance.get(str(item.source_ref))),
         )
         return label
 
@@ -510,6 +519,30 @@ def assign_citation_ids(
         reused_labels=list(dict.fromkeys(reused)),
         unused_evidence_ids=unused,
     )
+
+
+#: 引用条目上「已筛选资料」的追加字段（集成 t5，全部带默认值，纯追加）。
+_RELEVANCE_CITATION_KEYS = (
+    "relevance_checked",
+    "rerank_score",
+    "score_type",
+    "profile_id",
+    "evidence_hash",
+    "member_refs",
+)
+
+
+def _relevance_citation_fields(record: Mapping[str, Any] | None) -> dict[str, Any]:
+    """筛选记录 → 引用条目的追加字段（**只透传，不补造**）。
+
+    * 没有记录（未启用筛选 / 该来源未被筛选选中）→ 返回空 dict ⇒ 契约默认值生效；
+    * 有记录 → 只取 :data:`_RELEVANCE_CITATION_KEYS` 里**确实存在**的键，其余留默认。
+      这样记录里多出的诊断字段不会被误当成契约字段，也不会因为缺键而填 0。
+    """
+
+    if not record:
+        return {}
+    return {key: record[key] for key in _RELEVANCE_CITATION_KEYS if key in record}
 
 
 # =====================================================================

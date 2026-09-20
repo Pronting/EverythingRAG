@@ -734,6 +734,11 @@ class RunManager:
         #: 本轮已生效的「允许本轮同类操作」授权（按 run 记）——批准可能发生在
         #: 节点之外（如恢复后工具直接经权限门执行），因此授权不能只存 state。
         self._grants: dict[str, list[dict[str, Any]]] = {}
+        #: 本 run 的「已筛选来源」相关性记录（按 ``source_ref`` 索引）。由检索工具经
+        #: :func:`_rerank_outcome_sink` 写入，合成阶段交给 ``assign_citation_ids``，
+        #: 成为 ``answer.meta.citations`` 的追加字段（集成 t5）。只在内存里按 run 存活，
+        #: 与 ``_states`` / ``_grants`` 同一生命周期。
+        self._rerank_sources: dict[str, dict[str, dict[str, Any]]] = {}
         #: app.db 只有一个 aiosqlite 连接：后台驱动与请求处理并发时，两个
         #: ``BEGIN IMMEDIATE`` 会互相踩（实测 ``cannot start a transaction within a
         #: transaction``）。因此**每一次** store 调用都经这把锁串行化，粒度是单次调用
@@ -811,7 +816,7 @@ class RunManager:
                 content=text,
                 source_snapshot={"images": image_refs} if image_refs else None,
             )
-            return await self.store.create_run(
+            created = await self.store.create_run(
                 conversation_id=conversation_id,
                 workspace_id=workspace_id,
                 client_request_id=client_request_id,
@@ -820,6 +825,9 @@ class RunManager:
                 reasoning_level=reasoning_level,
                 origin_run_id=origin_run_id,
             )
+        # 新 run 从零开始：清掉可能残留的筛选来源记录（run id 唯一，这里只是防御）。
+        self._rerank_sources.pop(str(getattr(created, "id", "") or ""), None)
+        return created
 
     async def _resolve_images(
         self, workspace_id: str, images: Sequence[str]
@@ -958,6 +966,30 @@ class RunManager:
 
     def grants_for_state(self, run_id: str) -> list[dict[str, Any]]:
         return [dict(item) for item in self._grants.get(run_id, [])]
+
+    # =================================================================
+    # 已筛选来源（集成 t5：引用卡片的「已筛选资料」数据通路）
+    # =================================================================
+
+    def register_rerank_sources(self, run_id: str, records: Sequence[Mapping[str, Any]]) -> None:
+        """登记本 run 入选来源的相关性记录（按 ``source_ref`` 去重，**先到先得**）。
+
+        同一个 source_ref 可能被多轮检索各自评分（分数会随查询变），引用卡片只能展示一个；
+        这里保留**首次入选**的记录：它对应「第一条把它带进本轮证据的检索」，可复现且不随
+        后续轮次抖动。空记录（``source_ref`` 为空）直接忽略，绝不写入没有身份的条目。
+        """
+
+        bucket = self._rerank_sources.setdefault(run_id, {})
+        for item in records:
+            source_ref = str((item or {}).get("source_ref") or "")
+            if not source_ref or source_ref in bucket:
+                continue
+            bucket[source_ref] = dict(item)
+
+    def rerank_sources(self, run_id: str) -> dict[str, dict[str, Any]]:
+        """本 run 已登记的相关性记录（``{source_ref: 记录}``；未登记时为空 dict）。"""
+
+        return {key: dict(value) for key, value in self._rerank_sources.get(run_id, {}).items()}
 
     # =================================================================
     # 驱动
@@ -1559,6 +1591,8 @@ class RunManager:
             with contextlib.suppress(Exception):
                 await self._checkpoint_stack.aclose()
             self._checkpoint_stack = None
+        # 已筛选来源记录只服务于当前进程内的 run；关闭时不留下任何残留。
+        self._rerank_sources.clear()
 
 
 @dataclass(frozen=True)
@@ -1723,7 +1757,13 @@ def default_services(manager: RunManager, run: Any, state: AgentState) -> GraphS
             if citation_prefix(item.source_type) is None:
                 content = content.replace(f"{{{{{item.evidence_id}}}}}", "")
         assignment = agent_verification.assign_citation_ids(
-            content, candidate.evidence, existing=candidate.citations
+            content,
+            candidate.evidence,
+            existing=candidate.citations,
+            # 集成 t5：本 run 入选来源的相关性记录（检索工具经 rerank_outcome 接缝登记），
+            # 按 evidence.source_ref 透传到引用条目的追加字段 —— 无记录时保持默认值，
+            # 绝不补造排序分数（PRD §8.3）。
+            relevance_by_source=manager.rerank_sources(run.id),
         )
         if assignment.citations or assignment.content != candidate.content:
             candidate = candidate.model_copy(
@@ -1853,8 +1893,47 @@ async def tool_context_for(
         # 契约里这两个类型本就存在（PRD 13.3 的 20 类），此前无人发布；这里按事件对象的
         # 既有字段发布，不新增事件类型、不改 payload 模型（冻结契约只读）。
         rerank_progress=_rerank_progress_sink(manager, run),
+        # 筛选**结果**（纯追加接缝）：真实计数进同一个 `tool.completed`，入选来源的相关性
+        # 记录留给 `answer.meta.citations`（运行层按 source_ref 转交引用编号处）。
+        rerank_outcome=_rerank_outcome_sink(manager, run),
         **extras,
     )
+
+
+def _rerank_outcome_sink(
+    manager: RunManager, run: Any
+) -> Callable[[Mapping[str, Any]], Awaitable[None]]:
+    """把工具层上报的筛选**结果**转成 v2 事件 + 记下入选来源的相关性记录。
+
+    * ``tool.completed`` 填**真实** ``result_count``（入选来源数，0 ⇒ 筛选后 0 条）与
+      ``source_count``（候选数）—— 前端据此区分 ``filtered`` / ``empty``，不再把 0 当成
+      「未统计」；
+    * 入选来源按 ``source_ref`` 记到本 run（:meth:`RunManager.register_rerank_sources`），
+      在合成阶段交给 :func:`app.agent.verification.assign_citation_ids`，成为
+      ``answer.meta.citations`` 上「已筛选资料」的追加字段（PRD §8.3）。
+
+    只用**已声明事件的现有字段**：不新增事件类型、不改 payload 模型。
+    """
+
+    from app.retrieval.rerank_pipeline import RERANK_PROGRESS_TOOL_NAME
+
+    run_id = str(run.id)
+
+    async def report(payload: Mapping[str, Any]) -> None:
+        sources = [dict(item) for item in (payload.get("sources") or []) if isinstance(item, Mapping)]
+        manager.register_rerank_sources(run_id, sources)
+        await manager.publish_event(
+            run_id,
+            EventType.TOOL_COMPLETED,
+            {
+                "tool_name": RERANK_PROGRESS_TOOL_NAME,
+                "status": "succeeded",
+                "result_count": max(0, int(payload.get("result_count") or 0)),
+                "source_count": max(0, int(payload.get("source_count") or 0)),
+            },
+        )
+
+    return report
 
 
 def _rerank_progress_sink(

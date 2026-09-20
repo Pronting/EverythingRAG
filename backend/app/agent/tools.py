@@ -644,7 +644,19 @@ class ToolContext:
     #: 筛选进度上报：``await rerank_progress(state, error_code)``，
     #: ``state`` ∈ ``{"running", "done", "error"}``。``None`` = 不上报（单测直连路径）。
     #: 运行层把它接成 v2 的 ``tool.started`` / ``tool.completed``（``tool_name=rerank``）。
+    #:
+    #: ⚠️ 装配约束：只注入本接缝（不注入 :attr:`rerank_outcome`）时，``done`` 事件的两个
+    #: 计数取 payload 默认 0，界面会把「已筛选出资料」误读成 ``empty``。生产装配在
+    #: ``app.agent.runtime.tool_context_for`` 里**同时**注入两个接缝，因此不会出现该状态。
     rerank_progress: Callable[[str, str], Awaitable[None]] | None = None
+    #: 筛选**结果**上报（纯追加，集成 t5）：``await rerank_outcome(payload)``，
+    #: ``payload`` = ``{"status", "result_count", "source_count", "sources"}`` ——
+    #: ``result_count`` 是入选来源数（0 ⇒ 筛选后 0 条）、``source_count`` 是候选数、
+    #: ``sources`` 是入选来源的相关性记录（键为 ``source_ref``）。运行层用它把**真实计数**
+    #: 填进 ``tool.completed``（前端据此区分 ``filtered`` / ``empty``），并把 ``sources``
+    #: 记下来供 ``answer.meta.citations`` 的「已筛选资料」字段使用。
+    #: ``None`` = 未注入 ⇒ 退回 ``rerank_progress("done")``（接线前行为不变）。
+    rerank_outcome: Callable[[Mapping[str, Any]], Awaitable[None]] | None = None
 
     # ---- 身份 ----
 
@@ -1318,7 +1330,11 @@ async def _search_knowledge(params: SearchKnowledgeParams, context: ToolContext)
     * 已启用但配置不可用 / 评分失败 → 抛工具错误终止本轮并指向设置，绝不静默返回未筛选内容。
 
     进度走运行层注入的 ``context.rerank_progress``（v2 ``tool.started`` /
-    ``tool.completed``，``tool_name=rerank``）；未注入时（单测直连）静默跳过。
+    ``tool.completed``，``tool_name=rerank``）；筛选**结束后**若注入了
+    ``context.rerank_outcome``，则改由它上报**真实计数与入选来源**
+    （``result_count`` = 入选数、``source_count`` = 候选数 ⇒ 前端得以区分
+    ``filtered`` 与 ``empty``；同批记录供 ``answer.meta.citations`` 的「已筛选资料」
+    字段使用）。两个接缝都未注入时（单测直连）静默跳过。
     """
 
     tool = str(ToolName.SEARCH_KNOWLEDGE)
@@ -1369,11 +1385,12 @@ async def _search_knowledge(params: SearchKnowledgeParams, context: ToolContext)
         if outcome.failed:
             await _report_rerank_progress(context, "error", outcome.error_code)
             raise _rerank_failure(outcome)
-        await _report_rerank_progress(context, "done")
         chunks = list(outcome.chunks)
 
     if not chunks:
         if outcome is not None:
+            # 真实计数必须先上报：``result_count == 0`` 正是前端判「筛选后 0 条」的依据。
+            await _report_rerank_outcome(context, outcome)
             if not outcome.candidate_count:
                 return ToolResult(
                     tool=tool,
@@ -1430,6 +1447,8 @@ async def _search_knowledge(params: SearchKnowledgeParams, context: ToolContext)
     }
     if outcome is not None:
         data["retrieval"] = outcome.to_dict()
+        # 入选数 > 0 ⇒ 前端可判 ``filtered``；同批记录供引用卡片使用。
+        await _report_rerank_outcome(context, outcome)
     return ToolResult(
         tool=tool,
         status=ToolStatus.OK,
@@ -1449,6 +1468,63 @@ async def _report_rerank_progress(context: ToolContext, state: str, error_code: 
     if sink is None:
         return
     await sink(state, error_code)
+
+
+async def _report_rerank_outcome(
+    context: ToolContext, outcome: rerank_pipeline.RerankOutcome
+) -> None:
+    """上报一次筛选**结果**：真实计数（可判 filtered / empty）+ 入选来源的相关性记录。
+
+    * 注入了 ``context.rerank_outcome``（运行层装配）→ 走它：运行层把 ``result_count`` /
+      ``source_count`` 填进**同一个已声明事件** ``tool.completed``（不新增事件类型），
+      并把 ``sources`` 记下来，供 ``answer.meta.citations`` 的「已筛选资料」字段使用；
+    * 未注入（单测直连 / 旧装配）→ 退回 ``rerank_progress("done")``，行为与接线前一致。
+    """
+
+    sink = context.rerank_outcome
+    if sink is None:
+        await _report_rerank_progress(context, "done")
+        return
+    await sink(
+        {
+            "status": outcome.status,
+            "result_count": int(outcome.selected_count),
+            "source_count": int(outcome.candidate_count),
+            "sources": _rerank_source_records(outcome.chunks),
+        }
+    )
+
+
+def _rerank_source_records(chunks: Sequence[Any]) -> list[dict[str, Any]]:
+    """入选来源 → 相关性记录（键为 ``source_ref``，与 ``Evidence.source_ref`` 同一口径）。
+
+    ``source_ref`` 必须是 ``f"{document_id}#{block_id}"``：``RagResearcher._collect_retrieval``
+    构造证据时用的就是这个口径，运行层因此能按 ``evidence.source_ref`` 把记录接到引用上
+    （PRD §8.3）。值全部取自**本次真实的筛选产物**（视图元数据），不做任何补造。
+    """
+
+    records: list[dict[str, Any]] = []
+    for chunk in chunks:
+        block_id = str(getattr(chunk, "block_id", "") or "")
+        if not block_id:
+            continue
+        metadata = dict(getattr(chunk, "metadata", None) or {})
+        records.append(
+            {
+                "source_ref": f"{document_id_of_block(block_id)}#{block_id}",
+                "relevance_checked": bool(metadata.get("relevance_checked")),
+                "rerank_score": _optional_float(metadata.get("rerank_score")),
+                "score_type": str(metadata.get("score_type") or ""),
+                "profile_id": str(metadata.get("profile_id") or ""),
+                "evidence_hash": str(metadata.get("evidence_hash") or ""),
+                "member_refs": [
+                    dict(item)
+                    for item in (metadata.get("member_refs") or [])
+                    if isinstance(item, Mapping)
+                ],
+            }
+        )
+    return records
 
 
 def _rerank_failure(outcome: rerank_pipeline.RerankOutcome) -> ToolError:

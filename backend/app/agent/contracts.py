@@ -829,7 +829,22 @@ class Evidence(ContractModel):
 
 
 class CitationEntry(ContractModel):
-    """答案正文里的一条引用（PRD 8.3 编号 + 14.4 引用卡片）。"""
+    """答案正文里的一条引用（PRD 8.3 编号 + 14.4 引用卡片）。
+
+    后 6 个字段是**纯追加**（集成 t5，captain 已批准的一次契约追加；全部带默认值 ⇒
+    既有构造与序列化行为不变）。它们承载 main 在旧 ``/api/chat`` 的 ``meta.sources`` 上
+    已经展示过的「已筛选资料」信息：V1.2.0 的 run 架构没有 ``meta.sources``，来源只能经
+    ``answer.meta.citations`` 到达界面（PRD §8.3「排序分数 / 成员 range / 证据哈希」）。
+
+    语义约束（与 main 的来源字段逐字一致，**不得伪造**）：
+
+    * 未启用相关性筛选的来源保持默认值（``relevance_checked=False``、``rerank_score=None``、
+      ``score_type=""``、``profile_id=""``、``evidence_hash=""``、``member_refs=[]``）；
+    * ``rerank_score`` 是筛选服务的**排序分数**（例如 0.812），不是正确率 / 概率 / 0%；
+    * ``member_refs`` 是视图成员引用 ``MemberRef.to_dict()`` 的原样投影
+      （``block_id`` / ``content_hash`` / ``relation`` / ``start`` / ``end`` /
+      ``block_char_offset``），保持与 main 相同的字典形状，不做二次解释。
+    """
 
     label: str  # 形如 "S1" / "W2" / "M1" / "H1"
     source_type: SourceType
@@ -839,6 +854,18 @@ class CitationEntry(ContractModel):
     source_ref: str = ""
     snippet: str = ""
     source_status: CitationSourceStatus = CitationSourceStatus.ACTIVE
+    #: 本条来源是否经过相关性筛选（PRD §8.3「已筛选资料」；未启用筛选保持 ``False``）。
+    relevance_checked: bool = False
+    #: 筛选服务的排序分数；未启用筛选或服务未给出时为 ``None``（不填 0）。
+    rerank_score: float | None = None
+    #: 分数类型：``"rerank"`` = 相关性筛选排序分数；其余情况为空串。
+    score_type: str = ""
+    #: 产生该排序分数的校准档案 id；未筛选时为空串。
+    profile_id: str = ""
+    #: 证据视图载荷哈希（成员集合与评分正文的稳定指纹）；未筛选时为空串。
+    evidence_hash: str = ""
+    #: 组合成员引用（``MemberRef.to_dict()`` 原样投影）；未筛选或无补充成员时为空列表。
+    member_refs: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class WebReadRange(ContractModel):
