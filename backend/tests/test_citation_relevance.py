@@ -65,6 +65,8 @@ def _record(source_ref: str, **overrides: Any) -> dict[str, Any]:
     record: dict[str, Any] = {
         "source_ref": source_ref,
         "relevance_checked": True,
+        # 两个分数字段刻意用**不同值**：similarity = 原始向量分数，rerank_score = 重排分数。
+        "similarity": 0.42,
         "rerank_score": 0.812,
         "score_type": "rerank",
         "profile_id": "profile-cal-1",
@@ -98,6 +100,8 @@ def test_citation_entry_construction_and_defaults_are_backward_compatible() -> N
     assert citation.profile_id == ""
     assert citation.evidence_hash == ""
     assert citation.member_refs == []
+    # 原始向量相似度同样是「没有就是 None」，不是 0（PRD RAG-relevance :52 词法命中口径）
+    assert citation.similarity is None
 
 
 def test_citation_entry_round_trips_old_payload_without_new_keys() -> None:
@@ -199,7 +203,7 @@ def test_assign_citation_ids_without_record_keeps_defaults() -> None:
 
 
 def test_assign_citation_ids_ignores_unknown_record_keys() -> None:
-    """记录里多出的诊断键不进契约（只取已声明的 6 个键）。"""
+    """记录里多出的诊断键不进契约（只取已声明的 7 个键）。"""
 
     evidence = _evidence()
     assignment = assign_citation_ids(
@@ -214,6 +218,98 @@ def test_assign_citation_ids_ignores_unknown_record_keys() -> None:
     assert citation.relevance_checked is True
     assert "scope_id" not in citation.model_dump()
     assert "candidate_count" not in citation.model_dump()
+
+
+# ------------------------------------------------------------------ ②b 原始向量相似度（t7）
+
+
+def test_assign_citation_ids_carries_the_original_vector_similarity() -> None:
+    """① 经筛选的引用带**真实** ``similarity``（原始向量分数），且与 ``rerank_score`` 互不混淆。"""
+
+    evidence = _evidence()
+    assignment = assign_citation_ids(
+        "正文 " + _placeholder(evidence),
+        [evidence],
+        relevance_by_source={evidence.source_ref: _record(evidence.source_ref)},
+    )
+
+    citation = assignment.citations[0]
+    assert citation.similarity == pytest.approx(0.42)  # 检索阶段的向量分数
+    assert citation.rerank_score == pytest.approx(0.812)  # 筛选服务的重排分数
+    assert citation.similarity != citation.rerank_score  # 用不同值断言：两条通路不得互相代入
+    assert citation.score_type == "rerank"  # 分数类型只描述 rerank_score
+
+
+def test_similarity_is_never_taken_from_the_rerank_score() -> None:
+    """④ 记录只有 ``rerank_score``、没有 ``similarity`` ⇒ ``similarity`` 保持 ``None``。"""
+
+    evidence = _evidence()
+    record = _record(evidence.source_ref)
+    record.pop("similarity")
+    citation = assign_citation_ids(
+        "正文 " + _placeholder(evidence),
+        [evidence],
+        relevance_by_source={evidence.source_ref: record},
+    ).citations[0]
+
+    assert citation.rerank_score == pytest.approx(0.812)
+    assert citation.similarity is None, "不得把重排分数当成向量相似度（PRD :304）"
+
+
+def test_missing_similarity_is_none_not_zero() -> None:
+    """② 无向量分数 ⇒ ``None``：显式 ``None`` 与「记录里根本没有该键」两种形态都不编造 0。"""
+
+    evidence = _evidence()
+    explicit_none = _record(evidence.source_ref, similarity=None)
+    missing_key = _record(evidence.source_ref)
+    missing_key.pop("similarity")
+
+    for index, record in enumerate((explicit_none, missing_key)):
+        citation = assign_citation_ids(
+            "正文 " + _placeholder(evidence),
+            [evidence],
+            relevance_by_source={evidence.source_ref: record},
+        ).citations[0]
+        assert citation.similarity is None, (index, record)
+        assert citation.rerank_score == pytest.approx(0.812), index
+
+
+def test_a_real_zero_similarity_is_preserved_not_treated_as_missing() -> None:
+    """真实的 0 向量分数如实保留：``None`` 只表示「没有这个分数」，不是「分数为 0」。"""
+
+    evidence = _evidence()
+    citation = assign_citation_ids(
+        "正文 " + _placeholder(evidence),
+        [evidence],
+        relevance_by_source={evidence.source_ref: _record(evidence.source_ref, similarity=0.0)},
+    ).citations[0]
+
+    assert citation.similarity == 0.0
+    assert citation.similarity is not None
+
+
+def test_similarity_round_trips_with_extra_forbid_intact() -> None:
+    """③ ``extra="forbid"`` 下 ``similarity`` 可正常声明、投影与往返。"""
+
+    citation = CitationEntry(
+        label="S1",
+        source_type=SourceType.KNOWLEDGE,
+        evidence_id="ev-1",
+        workspace_id="ws-1",
+        similarity=0.379238,  # PRD 复现案例里那个真实值
+    )
+    dumped = citation.model_dump(mode="json")
+    assert dumped["similarity"] == pytest.approx(0.379238)
+    assert CitationEntry.model_validate(dumped) == citation
+
+    with pytest.raises(ValidationError):
+        CitationEntry(
+            label="S1",
+            source_type=SourceType.KNOWLEDGE,
+            evidence_id="ev-1",
+            workspace_id="ws-1",
+            similarity_score=0.5,
+        )
 
 
 def test_assign_citation_ids_partial_record_keeps_other_defaults() -> None:

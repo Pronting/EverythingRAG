@@ -493,6 +493,39 @@ async def test_filtered_reports_real_counts_and_per_source_records() -> None:
         assert isinstance(item["member_refs"], list) and item["member_refs"]
 
 
+async def test_source_records_carry_the_original_vector_similarity() -> None:
+    """每来源记录带**原始向量相似度**，与重排分数用不同值区分（PRD RAG-relevance :304）。"""
+
+    chunks = [
+        make_chunk("b1", similarity=0.42),
+        make_chunk("b2", similarity=0.55),
+    ]
+    outcome = OutcomeRecorder()
+
+    await search(make_context(chunks, provider=StubProvider(), outcome=outcome))
+
+    by_ref = {item["source_ref"]: item for item in outcome.last["sources"]}
+    assert by_ref["b1#b1"]["similarity"] == pytest.approx(0.42)
+    assert by_ref["b2#b2"]["similarity"] == pytest.approx(0.55)
+    for item in outcome.last["sources"]:
+        # 重排分数是另一条通路（StubProvider 默认 0.9），不得被写进 similarity
+        assert item["rerank_score"] == pytest.approx(0.9)
+        assert item["similarity"] != item["rerank_score"]
+
+
+async def test_source_record_without_vector_similarity_stays_none() -> None:
+    """纯词法/章节补充命中没有向量分数 ⇒ ``None``（不编造 0），重排分数照常。"""
+
+    chunk = make_chunk("b1", similarity=None)
+    outcome = OutcomeRecorder()
+
+    await search(make_context([chunk], provider=StubProvider(), outcome=outcome))
+
+    record = outcome.last["sources"][0]
+    assert record["similarity"] is None
+    assert record["rerank_score"] == pytest.approx(0.9)
+
+
 async def test_outcome_sink_absent_falls_back_to_the_legacy_done_progress() -> None:
     """未注入 ``rerank_outcome`` 的旧装配：仍只发 ``rerank_progress("done")``（行为不变）。"""
 
@@ -752,7 +785,9 @@ async def _build_run_env(tmp_path: Path, *, runtime: Any) -> RunEnv:
     """真实 RunManager（真实工具注册表 + 真实研究/合成/核对）+ 筛选接线。"""
 
     chunks = [
-        make_chunk("b-orange", text=ORANGE_TEXT, heading_path="水果 > 柑橘类"),
+        # 向量相似度刻意与筛选分数（StubProvider 默认 0.9）取**不同值**：
+        # 引用上的 similarity 必须是这个 0.42，而不是重排分数 0.9（PRD RAG-relevance :304）。
+        make_chunk("b-orange", text=ORANGE_TEXT, heading_path="水果 > 柑橘类", similarity=0.42),
         make_chunk("b-polar", text=POLAR_TEXT, heading_path="动物 > 北极熊"),
     ]
     blocks = _blocks_of(chunks)
@@ -906,6 +941,10 @@ async def test_run_api_answer_meta_citations_carry_relevance_fields(tmp_path: Pa
         assert citation["score_type"] == "rerank"
         assert citation["profile_id"] == PROFILE_ID
         assert len(citation["evidence_hash"]) == 64  # 视图载荷哈希（sha256）
+        # 原始向量相似度（PRD RAG-relevance :304）：必须是该 chunk 的向量分数 0.42，
+        # **不是**筛选分数 0.9 —— 两条通路用不同值断言区分。
+        assert citation["similarity"] == pytest.approx(0.42)
+        assert citation["similarity"] != citation["rerank_score"]
         # ③ 组合成员引用形状 == main 的 MemberRef.to_dict()
         assert citation["member_refs"], citation
         for member in citation["member_refs"]:
@@ -930,6 +969,7 @@ async def test_run_api_answer_meta_citations_carry_relevance_fields(tmp_path: Pa
         assert stored.profile_id == PROFILE_ID
         assert stored.evidence_hash == citation["evidence_hash"]
         assert stored.member_refs == citation["member_refs"]
+        assert stored.similarity == pytest.approx(0.42)  # 原始向量分数同样经落库往返
     finally:
         await env.close()
 

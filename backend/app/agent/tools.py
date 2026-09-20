@@ -1500,7 +1500,11 @@ def _rerank_source_records(chunks: Sequence[Any]) -> list[dict[str, Any]]:
 
     ``source_ref`` 必须是 ``f"{document_id}#{block_id}"``：``RagResearcher._collect_retrieval``
     构造证据时用的就是这个口径，运行层因此能按 ``evidence.source_ref`` 把记录接到引用上
-    （PRD §8.3）。值全部取自**本次真实的筛选产物**（视图元数据），不做任何补造。
+    （PRD §8.3）。值全部取自**本次真实的筛选产物**（视图元数据 + 命中自带的向量分数），
+    不做任何补造：分数字段拿不到就留 ``None``，绝不填 0。
+
+    记录里的两个分数字段是**两条独立通路**（PRD RAG-relevance §7 `:304`）：
+    ``rerank_score`` = 筛选服务的重排分数；``similarity`` = 检索阶段的**原始向量相似度**。
     """
 
     records: list[dict[str, Any]] = []
@@ -1522,6 +1526,10 @@ def _rerank_source_records(chunks: Sequence[Any]) -> list[dict[str, Any]]:
                     for item in (metadata.get("member_refs") or [])
                     if isinstance(item, Mapping)
                 ],
+                # **原始向量相似度**（PRD RAG-relevance §7 `:304`）：取自检索命中自带的
+                # ``chunk.similarity``，**不是**重排分数（重排分数在上面的 rerank_score）。
+                # 纯词法/章节补充命中为 ``None`` ⇒ 原样保持 None（不填 0）。
+                "similarity": _optional_float(getattr(chunk, "similarity", None)),
             }
         )
     return records

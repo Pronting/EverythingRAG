@@ -866,6 +866,11 @@ class CitationEntry(ContractModel):
     evidence_hash: str = ""
     #: 组合成员引用（``MemberRef.to_dict()`` 原样投影）；未筛选或无补充成员时为空列表。
     member_refs: list[dict[str, Any]] = Field(default_factory=list)
+    #: **原始向量相似度**（PRD RAG-relevance §7 `:304`、`:52`）：纯词法/章节补充命中和旧记录
+    #: 没有向量分数时为 ``None``（不填 0，界面按「词法命中」如实显示）。
+    #: **语义约束**：``similarity`` 只能是检索阶段的向量分数，**不得**存入重排分数
+    #: （重排分数只进 :attr:`rerank_score`）；两者必须互不混淆。
+    similarity: float | None = None
 
 
 class WebReadRange(ContractModel):

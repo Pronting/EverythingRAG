@@ -521,7 +521,7 @@ def assign_citation_ids(
     )
 
 
-#: 引用条目上「已筛选资料」的追加字段（集成 t5，全部带默认值，纯追加）。
+#: 引用条目上「已筛选资料」的追加字段（集成 t5 的六个 + t7 的 ``similarity``；全部带默认值，纯追加）。
 _RELEVANCE_CITATION_KEYS = (
     "relevance_checked",
     "rerank_score",
@@ -529,6 +529,7 @@ _RELEVANCE_CITATION_KEYS = (
     "profile_id",
     "evidence_hash",
     "member_refs",
+    "similarity",
 )
 
 
@@ -538,6 +539,8 @@ def _relevance_citation_fields(record: Mapping[str, Any] | None) -> dict[str, An
     * 没有记录（未启用筛选 / 该来源未被筛选选中）→ 返回空 dict ⇒ 契约默认值生效；
     * 有记录 → 只取 :data:`_RELEVANCE_CITATION_KEYS` 里**确实存在**的键，其余留默认。
       这样记录里多出的诊断字段不会被误当成契约字段，也不会因为缺键而填 0。
+    * ``similarity`` 是**原始向量分数**（PRD RAG-relevance §7 `:304`），与 ``rerank_score``
+      是两条独立通路：本函数按记录里各自的键原值搬运，绝不互相代入。
     """
 
     if not record:
