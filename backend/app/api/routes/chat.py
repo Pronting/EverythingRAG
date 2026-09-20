@@ -1,128 +1,42 @@
-"""SSE 问答端点：POST /api/chat（帧契约 meta/reasoning/token/tool/done/error）。
+"""旧问答入口 ``POST /api/chat`` 已下线：返回 **410 Gone**（PRD 13.2）。Owner: T09。
 
-路由薄：请求校验 + 组装 StreamingResponse；业务在 ChatService。
-依赖注入用 Depends(get_chat_service)；测试中用 app.dependency_overrides 替换为 fake。
-provider 未配置时 get_chat_service 返回占位模型，错误延迟到 stream 阶段上报 error 帧。
+V1.1.0 的 ``/api/chat``（帧契约 ``meta/reasoning/token/tool/done/error``）是单轮 SSE
+问答入口。V1.2.0 起问答统一走**持久任务**：
+
+- 建 run：``POST /api/workspaces/{workspace_id}/runs``
+- 订阅事件：``GET  /api/workspaces/{workspace_id}/runs/{run_id}/events``（v2 事件，``id`` + JSON ``data``）
+- 批准 / 澄清 / 停止 / 继续：``/api/workspaces/{workspace_id}/...`` 下的对应端点
+
+为什么保留本文件而不是删掉：410 是**产品语义**的一部分 —— 老前端拿到 410 就知道必须迁移，
+拿到 404 会误判为「服务没起来」。``Allow`` / ``Link`` 头给出新入口，便于日志与排障。
+本路由不再注册任何 ``Depends``：旧链路（全局向量库 / 全局图片库 / ChatService）因此
+**结构性不可达**，不会再有「按区隔离漏改」的隐患。
 """
 
 from __future__ import annotations
 
-import json
-from collections.abc import AsyncIterator
-from typing import Literal
-
-from fastapi import APIRouter, Depends, Request
-from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, Field
-
-from app.api.deps import get_embedder, get_image_state_store, get_vector_store
-from app.core.outbound import outbound_client
-from app.core.settings_store import (
-    SettingsStore,
-    get_settings_store,
-    is_search_configured,
-    is_vision_configured,
-)
-from app.generation.chat_service import ChatService
-from app.generation.image_reader import KnowledgeImageReader
-from app.generation.knowledge_catalog import build_knowledge_overview
-from app.generation.providers import (
-    ChatProviderError,
-    UnconfiguredChatModel,
-    create_chat_model_from_config,
-)
-from app.generation.vision import VisionProviderError, create_vision_model_from_config
-from app.retrieval.hybrid_retriever import HybridRetriever
-from app.retrieval.vector_retriever import DEFAULT_MIN_SIMILARITY
-from app.search.base import SearchError
-from app.search.factory import create_search_provider_from_config
-from app.vectorstore.base import VectorStore
+from fastapi import APIRouter
+from fastapi.responses import JSONResponse
 
 router = APIRouter()
 
+#: 旧入口的下线原因（不泄露内部结构，只说明迁移目标）。
+_GONE_DETAIL = "POST /api/chat 已在 V1.2.0 下线，请改用 run API 建任务并订阅事件"
 
-class ChatMessage(BaseModel):
-    """多轮对话历史中的一条（role + content）。"""
-
-    role: Literal["user", "assistant"]
-    content: str = Field(min_length=1)
-
-
-class ChatRequest(BaseModel):
-    message: str = Field(min_length=1, max_length=4000)
-    history: list[ChatMessage] = Field(default_factory=list, max_length=20)
-    web_search: bool = False  # 「联网搜索」开关（每条消息独立 opt-in）
-    #: 用户贴图：data URI（base64 内联）或 http(s) 图床 URL；纯文本模型走识图代理。
-    images: list[str] = Field(default_factory=list, max_length=4)
-
-
-def get_chat_service(
-    store: SettingsStore = Depends(get_settings_store),  # noqa: B008
-    vectorstore: VectorStore = Depends(get_vector_store),  # noqa: B008
-) -> ChatService:
-    """构建真实问答链路（嵌入 + 混合召回 + 不可变 Agent 策略 + 对话模型）。
-
-    chat 配置来自设置（config.json 优先，env 兜底）；provider 未配置时返回占位模型，
-    ChatProviderError 延迟到请求的 stream 阶段以 error 帧上报，不崩不 500。
-    """
-    app_settings = store.load()
-    embedder = get_embedder()
-    # 混合检索（dense + BM25 标题注入 + RRF）+ 相关度门控。
-    # 注：cross-encoder 重排曾试（bge-reranker-base），实测 hit@5 84.6% -> 76.9%
-    # 排序不准，已弃用；当前混合检索为实测最优。
-    retriever = HybridRetriever(vectorstore, min_similarity=DEFAULT_MIN_SIMILARITY)
-    try:
-        chat_model = create_chat_model_from_config(app_settings.chat)
-    except ChatProviderError as exc:
-        chat_model = UnconfiguredChatModel(exc)
-    # 联网搜索：启用且凭证齐备才构建 provider；否则 None（web_search 请求时上报友好错误）
-    search_provider = None
-    if is_search_configured(app_settings.search):
-        try:
-            search_provider = create_search_provider_from_config(app_settings.search)
-        except SearchError:
-            search_provider = None
-    # 识图模型（可选）：纯文本对话模型 + 用户贴图时，识图代理复用它转文字。
-    vision = None
-    if is_vision_configured(app_settings.vision):
-        try:
-            vision = create_vision_model_from_config(app_settings.vision, outbound=outbound_client)
-        except VisionProviderError:
-            vision = None
-    return ChatService(
-        embedder=embedder,
-        retriever=retriever,
-        chat_model=chat_model,
-        search_provider=search_provider,
-        search_max_results=app_settings.search.max_results,
-        vision=vision,
-        image_reader=KnowledgeImageReader(vision, get_image_state_store()) if vision else None,
-        preferences=app_settings.answer_preferences,
-        # 仅知识概览问题才枚举全库元数据，普通问答不额外扫描 collection。
-        knowledge_overview=lambda: build_knowledge_overview(vectorstore),
-    )
+#: 新入口模板（前端据此迁移，见回报里给 t17 的 7 处耦合点）。
+_REPLACEMENT = "/api/workspaces/{workspace_id}/runs"
 
 
 @router.post("/api/chat")
-async def chat(
-    request: ChatRequest,
-    raw_request: Request,
-    service: ChatService = Depends(get_chat_service),  # noqa: B008
-) -> StreamingResponse:
-    """流式问答：SSE 帧 meta -> reasoning/token(s) -> done / error（ensure_ascii=False）。
+async def chat_gone() -> JSONResponse:
+    """旧入口：410 Gone + 新入口提示（不解析请求体，避免把旧格式当合法输入）。"""
 
-    客户端中断（前端「停止生成」按钮 abort fetch / 关闭页面）时，本生成器会被
-    Starlette 取消；这里每帧额外检查 is_disconnected，主动结束上游读取，
-    避免断开后仍继续消耗模型算力。
-    """
-
-    async def event_stream() -> AsyncIterator[str]:
-        history = [{"role": m.role, "content": m.content} for m in request.history]
-        async for frame in service.stream_answer(
-            request.message, history, web_search=request.web_search, images=request.images
-        ):
-            yield f"data: {json.dumps(frame, ensure_ascii=False)}\n\n"
-            if await raw_request.is_disconnected():
-                return
-
-    return StreamingResponse(event_stream(), media_type="text/event-stream")
+    return JSONResponse(
+        status_code=410,
+        content={
+            "error_code": "chat_endpoint_removed",
+            "detail": _GONE_DETAIL,
+            "replacement": _REPLACEMENT,
+        },
+        headers={"Link": f'<{_REPLACEMENT}>; rel="successor-version"'},
+    )

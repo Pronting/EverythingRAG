@@ -18,15 +18,34 @@
 from __future__ import annotations
 
 from typing import Any
+from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
+from app.agent.contracts import (
+    ConversationStatus,
+    PermissionMode,
+    ReasoningLevel,
+    WorkspaceStatus,
+)
+from app.api.settings_scope import resolve_conversation_settings
+from app.api.workspace_bridge import WorkspaceRowMissingError, ensure_workspace_row
+from app.core.config import settings
 from app.core.conversation_store import ConversationMessage, ConversationStore
 from app.core.settings_store import get_settings_store
+from app.core.workspace_context import (
+    WorkspaceContextFactory,
+    WorkspaceNotFoundError,
+    committed_storage_version,
+)
 from app.core.workspace_store import (
+    DEFAULT_STORAGE_KEY,
     DEFAULT_WORKSPACE_ID,
+    DEFAULT_WORKSPACE_NAME,
     MAX_WORKSPACE_NAME_CHARS,
+    WORKSPACE_LAYOUT_VERSION,
+    Workspace,
     WorkspaceStore,
 )
 from app.generation.providers import create_chat_model_from_config
@@ -44,6 +63,111 @@ def get_workspace_store() -> WorkspaceStore:
     from app.api.deps import workspace_store
 
     return workspace_store
+
+
+# =====================================================================
+# D25 / D29：工作区写路径的权威源（过渡期双源 → app.db 唯一权威）
+# =====================================================================
+#
+# 判定唯一依据是 ``data_dir/storage.json`` 的 ``storage_schema_version``（D25）：
+#   <2  迁移前：``workspaces.json`` 是**活数据源**，本模块保持既有 JSON 语义；
+#   >=2 迁移后：``app.db`` 是唯一权威，工作区写路径改为 ``await AppStore.*``，
+#        写完后把权威行**单向**镜像回 JSON 存档（D19/A3：方向恒为 app.db → 存档），
+#        这样 D25 的唯一读取入口（``WorkspaceContextFactory`` → ``WorkspaceStore``）
+#        在迁移前后返回一致结果，调用方不需要分支判断。
+
+
+def _app_db_authority() -> Any | None:
+    """返回 app.db 写权威源；迁移未提交或 app.db 未注册时返回 None（走 JSON）。
+
+    ``app.db`` 未注册（进程启动早期、测试未注入单例）时**不翻转**写路径：此时降级为
+    过渡态写存档，而不是把写入变成失败。生产路径由 lifespan 注册单例（D28/D31）。
+    """
+
+    if committed_storage_version(settings.data_dir) < WORKSPACE_LAYOUT_VERSION:
+        return None
+    from app.api.deps import get_app_store
+
+    return get_app_store()
+
+
+def _context_factory(store: WorkspaceStore) -> WorkspaceContextFactory:
+    """以**本路由注入的存档实例**构造上下文工厂（D25 的唯一读取入口）。
+
+    刻意不复用 ``deps.get_workspace_context_factory()``：那个函数绑定
+    ``deps.workspace_store`` 模块单例，而本模块的 ``get_workspace_store`` 可被
+    ``dependency_overrides`` 换成另一个指向同一目录的实例；混用两个实例会读到彼此
+    陈旧的内存副本（写进去的新工作区在另一个实例里看不到）。
+
+    ``app_db_reader`` 由 deps 提供：迁移后工厂会先用 app.db 权威行按需刷新存档
+    （存档是**可再生**的物化视图，被删/损坏/过期都能自愈，读入口因此不依赖它）。
+    """
+
+    from app.api.deps import get_app_store, read_app_db_workspaces
+
+    return WorkspaceContextFactory(
+        settings.data_dir,
+        store,
+        app_store=get_app_store(),
+        app_db_reader=read_app_db_workspaces,
+    )
+
+
+def _view_of(store: WorkspaceStore, workspace_id: str) -> Any | None:
+    """经工厂解析工作区视图；不存在返回 None（绝不静默回落到默认区）。"""
+
+    try:
+        return _context_factory(store).view_for(workspace_id)
+    except WorkspaceNotFoundError:
+        return None
+
+
+def _normalize_workspace_name(name: str) -> str:
+    """名称规范化：去空白、截断到上限、空名回退占位（与存档层同规则）。"""
+
+    return name.strip()[:MAX_WORKSPACE_NAME_CHARS] or "新工作区"
+
+
+async def _unique_workspace_id(app_store: Any, base: str) -> str:
+    """在 app.db 里生成唯一工作区 id（``base`` / ``base-2`` / ``base-3``…）。"""
+
+    candidate = base
+    index = 2
+    while await app_store.get_workspace(candidate) is not None:
+        candidate = f"{base}-{index}"
+        index += 1
+    return candidate
+
+
+async def _ensure_default_workspace(app_store: Any, store: WorkspaceStore) -> None:
+    """迁移后确保 app.db 里有默认工作区行（PRD 15.2 第 2 步保证；缺失时自愈）。
+
+    默认区若不在 app.db 里，它就无法参与 app.db 权威排序/置顶（会退回存档的初始位次），
+    权威源与读入口的侧边栏顺序就会不一致。生产路径上迁移已建好该行，这里是**幂等**兜底。
+
+    自愈实现统一在 :mod:`app.api.workspace_bridge`（run API 与工作区端点共用一处），
+    并且会把存档里的**默认权限/强度、知识版本**一并带进新行 —— 否则自愈本身会把用户在
+    设置页写下的默认值重置回 PRD 18.1 兜底。
+    """
+
+    await ensure_workspace_row(
+        app_store,
+        store,
+        DEFAULT_WORKSPACE_ID,
+        allow_archive_missing=True,
+        storage_key_fallback=DEFAULT_STORAGE_KEY,
+        name_fallback=DEFAULT_WORKSPACE_NAME,
+    )
+
+
+def _mirror_from_app_db(store: WorkspaceStore, record: Any) -> Workspace:
+    """把 app.db 权威行**单向**镜像进 JSON 存档（D19/A3）。
+
+    转换规则由 :func:`app.core.workspace_store.workspace_from_record` **唯一定义**
+    （``pinned`` / ``order_index`` 自 schema v2 起是 app.db 权威列）。
+    """
+
+    return store.adopt_record(record)
 
 
 class MessageIn(BaseModel):
@@ -65,7 +189,18 @@ class SetTitleRequest(BaseModel):
 
 
 class MoveWorkspaceRequest(BaseModel):
+    """把会话移动到目标工作区（PRD 5.4 / 13.2）。
+
+    PRD 13.2 末段要求移动接口带**确认标识**与**预期 ``context_epoch``**：
+
+    - ``confirm``：会话携带历史或存在活动任务时必须为 ``true``（前端先展示"会携带历史内容"
+      的说明，用户确认后再发）。空会话（无消息、无活动任务）无需确认，保持既有交互。
+    - ``expected_context_epoch``：乐观并发校验，不一致返回 409 而不是静默覆盖。
+    """
+
     workspace_id: str = Field(min_length=1)
+    confirm: bool = False
+    expected_context_epoch: int | None = Field(default=None, ge=1)
 
 
 class WorkspacePinRequest(BaseModel):
@@ -91,6 +226,16 @@ class MoveRequest(BaseModel):
     target_index: int | None = Field(default=None, ge=0)
 
 
+class WorkspaceDefaultsRequest(BaseModel):
+    """工作区默认权限与思考强度（PRD 1.3 / 14.1）。
+
+    两者都可选：只改其中一个时另一个保持现值（不传 = 不改，而不是重置为默认）。
+    """
+
+    permission_mode: PermissionMode | None = None
+    reasoning_level: ReasoningLevel | None = None
+
+
 class WorkspaceRequest(BaseModel):
     name: str = Field(min_length=1, max_length=MAX_WORKSPACE_NAME_CHARS)
     #: 可选自定义 id（缺省由名称推导）；前端一般只传 name。
@@ -102,9 +247,24 @@ async def list_workspaces(
     store: WorkspaceStore = Depends(get_workspace_store),  # noqa: B008
     conversations: ConversationStore = Depends(get_conversation_store),  # noqa: B008
 ) -> list[dict[str, Any]]:
-    """返回全部工作区（置顶在前 → 手工位次 → 创建时间），带各分区活跃会话数。"""
+    """返回全部**有效**工作区（置顶在前 → 手工位次 → 创建时间），带各分区活跃会话数。
+
+    D25 唯一读取入口：身份字段（``id`` / ``name`` / ``status``）取自
+    ``WorkspaceContextFactory.view_for(id)``；排序与创建时间等 UI 元数据仍取存档行。
+    PRD 5.4 的「删除」是可恢复归档，归档工作区不再出现在侧边栏列表里。
+    """
     counts = conversations.count_by_workspace()
-    return [_workspace_payload(workspace, counts.get(workspace.id, 0)) for workspace in store.list()]
+    factory = _context_factory(store)
+    listed: list[dict[str, Any]] = []
+    for workspace in store.list():
+        if workspace.status is WorkspaceStatus.ARCHIVED:
+            continue
+        try:
+            view = factory.view_for(workspace.id)
+        except WorkspaceNotFoundError:
+            continue
+        listed.append(_workspace_payload(workspace, counts.get(workspace.id, 0), view=view))
+    return listed
 
 
 @router.put("/api/workspaces/order")
@@ -116,10 +276,25 @@ async def reorder_workspaces(
     """按给定顺序重写工作区位次（侧边栏拖拽排序），返回新的完整顺序。
 
     必须注册在 ``/api/workspaces/{workspace_id}`` 之前，否则会被当成工作区 id。
+
+    迁移后（D29）：``await AppStore.reorder_workspaces`` 落 app.db 的 ``order_index``
+    权威列再单向镜像存档；过渡期保持既有 JSON 语义。**排序规则一字未改**：
+    只写 ``order_index``，置顶由 ``pinned`` 单独表达（唯一排序定义见
+    ``core.workspace_store.workspace_order_key``）。
     """
     counts = conversations.count_by_workspace()
-    ordered = store.reorder(request.ids)
-    return [_workspace_payload(workspace, counts.get(workspace.id, 0)) for workspace in ordered]
+    app_store = _app_db_authority()
+    if app_store is None:
+        store.reorder(request.ids)
+    else:
+        await _ensure_default_workspace(app_store, store)
+        for record in await app_store.reorder_workspaces(request.ids):
+            _mirror_from_app_db(store, record)
+    return [
+        _workspace_payload(workspace, counts.get(workspace.id, 0), view=_view_of(store, workspace.id))
+        for workspace in store.list()
+        if workspace.status is not WorkspaceStatus.ARCHIVED
+    ]
 
 
 @router.post("/api/workspaces", status_code=201)
@@ -127,9 +302,25 @@ async def create_workspace(
     request: WorkspaceRequest,
     store: WorkspaceStore = Depends(get_workspace_store),  # noqa: B008
 ) -> dict[str, Any]:
-    """新建工作区（名称为空/重复由存储层兜底，id 冲突自动追加序号）。"""
-    workspace = store.create(request.name, request.id)
-    return _workspace_payload(workspace, 0)
+    """新建工作区（名称为空/重复由存储层兜底，id 冲突自动追加序号）。
+
+    迁移后（D29）：``await AppStore.create_workspace`` 落 app.db，再单向镜像存档；
+    过渡期（``storage_schema_version<2``）保持既有 JSON 语义。
+    """
+    app_store = _app_db_authority()
+    if app_store is None:
+        workspace = store.create(request.name, request.id)
+        return _workspace_payload(workspace, 0)
+
+    base = (request.id or "").strip() or uuid4().hex
+    await _ensure_default_workspace(app_store, store)
+    workspace_id = await _unique_workspace_id(app_store, base)
+    record = await app_store.create_workspace(
+        workspace_id,
+        uuid4().hex,
+        name=_normalize_workspace_name(request.name),
+    )
+    return _workspace_payload(_mirror_from_app_db(store, record), 0)
 
 
 @router.put("/api/workspaces/{workspace_id}/pin")
@@ -138,11 +329,23 @@ async def pin_workspace(
     request: WorkspacePinRequest,
     store: WorkspaceStore = Depends(get_workspace_store),  # noqa: B008
 ) -> dict[str, Any]:
-    """置顶 / 取消置顶工作区（别针图标）。"""
-    workspace = store.set_pinned(workspace_id, request.pinned)
-    if workspace is None:
+    """置顶 / 取消置顶工作区（别针图标）。
+
+    迁移后（D29）：``await AppStore.update_workspace(pinned=…)`` 落 app.db 权威列再
+    单向镜像存档（排序规则不变：置顶在前 → 手工位次 → 创建时间）；过渡期保持既有语义。
+    """
+    app_store = _app_db_authority()
+    if app_store is None:
+        workspace = store.set_pinned(workspace_id, request.pinned)
+        if workspace is None:
+            raise HTTPException(status_code=404, detail="工作区不存在")
+        return _workspace_payload(workspace, 0, view=_view_of(store, workspace_id))
+
+    await _ensure_default_workspace(app_store, store)
+    if await app_store.get_workspace(workspace_id) is None:
         raise HTTPException(status_code=404, detail="工作区不存在")
-    return _workspace_payload(workspace, 0)
+    record = await app_store.update_workspace(workspace_id, pinned=request.pinned)
+    return _workspace_payload(_mirror_from_app_db(store, record), 0)
 
 
 @router.put("/api/workspaces/{workspace_id}")
@@ -151,11 +354,70 @@ async def rename_workspace(
     request: WorkspaceRequest,
     store: WorkspaceStore = Depends(get_workspace_store),  # noqa: B008
 ) -> dict[str, Any]:
-    """重命名工作区（默认工作区也可改名，但仍不可删除）。"""
-    workspace = store.rename(workspace_id, request.name)
-    if workspace is None:
+    """重命名工作区（默认工作区也可改名，但仍不可删除）。
+
+    迁移后（D29）：``await AppStore.update_workspace(name=…)`` 落 app.db，再单向镜像存档。
+    """
+    app_store = _app_db_authority()
+    if app_store is None:
+        workspace = store.rename(workspace_id, request.name)
+        if workspace is None:
+            raise HTTPException(status_code=404, detail="工作区不存在或名称为空")
+        return _workspace_payload(workspace, 0)
+
+    cleaned = request.name.strip()[:MAX_WORKSPACE_NAME_CHARS]
+    await _ensure_default_workspace(app_store, store)
+    if not cleaned or await app_store.get_workspace(workspace_id) is None:
         raise HTTPException(status_code=404, detail="工作区不存在或名称为空")
-    return _workspace_payload(workspace, 0)
+    record = await app_store.update_workspace(workspace_id, name=cleaned)
+    return _workspace_payload(_mirror_from_app_db(store, record), 0)
+
+
+@router.put("/api/workspaces/{workspace_id}/defaults")
+async def update_workspace_defaults(
+    workspace_id: str,
+    request: WorkspaceDefaultsRequest,
+    store: WorkspaceStore = Depends(get_workspace_store),  # noqa: B008
+) -> dict[str, Any]:
+    """写工作区默认权限模式 / 思考强度（PRD 1.3「工作区默认值」+ 14.1「设置页」）。
+
+    权限与思考强度占位层次（PRD 1.3）：请求显式值 > 会话保存值 > **工作区默认值**。
+    本端点负责第三层的写；取值为 contracts 的 ``PermissionMode`` / ``ReasoningLevel``，
+    非法值由请求模型直接 422（不在运行期兜底，PRD 12.5）。
+
+    写路径与 D25/D29 一致：迁移后（``storage_schema_version >= 2``）由 ``app.db`` 权威，
+    ``await AppStore.update_workspace`` 落库后单向镜像回 JSON 存档；迁移前保持既有
+    JSON 语义（存档本身是权威源）。两者都返回同一投影，调用方无需分支。
+    """
+    if request.permission_mode is None and request.reasoning_level is None:
+        raise HTTPException(status_code=400, detail="至少给出一个默认值")
+
+    app_store = _app_db_authority()
+    if app_store is None:
+        # 迁移前 / app.db 未注册：存档是活数据源，直接更新它（adopt 会落盘）
+        workspace = store.get(workspace_id)
+        if workspace is None:
+            raise HTTPException(status_code=404, detail="工作区不存在")
+        updated = workspace.model_copy(
+            update={
+                "default_permission_mode": request.permission_mode
+                or workspace.default_permission_mode,
+                "default_reasoning_level": request.reasoning_level
+                or workspace.default_reasoning_level,
+            }
+        )
+        mirrored = store.adopt(updated)
+        return _workspace_payload(mirrored, 0, view=_view_of(store, workspace_id))
+
+    await _ensure_default_workspace(app_store, store)
+    if await app_store.get_workspace(workspace_id) is None:
+        raise HTTPException(status_code=404, detail="工作区不存在")
+    record = await app_store.update_workspace(
+        workspace_id,
+        default_permission_mode=request.permission_mode,
+        default_reasoning_level=request.reasoning_level,
+    )
+    return _workspace_payload(_mirror_from_app_db(store, record), 0)
 
 
 @router.delete("/api/workspaces/{workspace_id}")
@@ -164,11 +426,37 @@ async def delete_workspace(
     store: WorkspaceStore = Depends(get_workspace_store),  # noqa: B008
     conversations: ConversationStore = Depends(get_conversation_store),  # noqa: B008
 ) -> dict[str, Any]:
-    """删除工作区：其中对话全部归档（可在设置页「归档对话」找回）；默认工作区不可删。"""
-    if store.get(workspace_id) is None:
-        raise HTTPException(status_code=404, detail="工作区不存在")
-    if not store.delete(workspace_id):
+    """删除工作区：其中对话全部归档（可在设置页「归档对话」找回）；默认工作区不可删。
+
+    迁移后（D29）按 PRD 5.4 走**可恢复归档**：``AppStore.update_workspace(status=archived)``
+    保留工作区行归属，其 app.db 会话一并归档，再由存档单向镜像；过渡期保持既有语义。
+    """
+    app_store = _app_db_authority()
+    if app_store is None:
+        if store.get(workspace_id) is None:
+            raise HTTPException(status_code=404, detail="工作区不存在")
+        if not store.delete(workspace_id):
+            raise HTTPException(status_code=400, detail="默认工作区不可删除")
+        archived = conversations.archive_workspace(workspace_id)
+        return {"archived": archived}
+
+    record = await app_store.get_workspace(workspace_id)
+    if workspace_id == DEFAULT_WORKSPACE_ID:
         raise HTTPException(status_code=400, detail="默认工作区不可删除")
+    if record is None:
+        raise HTTPException(status_code=404, detail="工作区不存在")
+
+    await _ensure_default_workspace(app_store, store)
+    archived_record = await app_store.update_workspace(
+        workspace_id, status=WorkspaceStatus.ARCHIVED
+    )
+    _mirror_from_app_db(store, archived_record)
+    # 归档本区 app.db 会话（保留归属、可恢复）＋ 侧边栏存档里的会话（用户可见的归档列表）
+    for conversation in await app_store.list_conversations(workspace_id):
+        if conversation.status is ConversationStatus.ACTIVE:
+            await app_store.update_conversation(
+                conversation.id, status=ConversationStatus.ARCHIVED
+            )
     archived = conversations.archive_workspace(workspace_id)
     return {"archived": archived}
 
@@ -203,9 +491,40 @@ async def list_archived_conversations(
 async def create_conversation(
     workspace: str = Query(default=DEFAULT_WORKSPACE_ID, max_length=40),
     store: ConversationStore = Depends(get_conversation_store),  # noqa: B008
+    workspace_store: WorkspaceStore = Depends(get_workspace_store),  # noqa: B008
 ) -> dict[str, Any]:
-    """在指定工作区（缺省默认工作区）新建空会话，返回其摘要。"""
-    conv = store.create(workspace)
+    """在指定工作区（缺省默认工作区）新建空会话，返回其摘要。
+
+    **工作区默认值在此生效**（PRD 1.3 / 14.1 / 18.1）：迁移后（app.db 权威）新会话的
+    权限与思考强度按 ``工作区默认值 → PRD 18.1 兜底`` 解析，并随 app.db 行一起落库 ——
+    这正是「工作区设置页提供默认值」的落点（此前只写默认值却不被应用 ⇒ 设置形同装饰）。
+
+    过渡期（``storage_schema_version < 2`` / app.db 未注册）保持既有 JSON 语义：会话
+    只进存档；工作区默认值不在此处落库（存档行没有这两个字段，且 app.db 当时非权威）。
+
+    双写顺序：先建存档行（拿到 id，侧边栏立即可见），再用**同一个 id** 写 app.db 行
+    （带解析后的默认值）。id 一致是硬要求 —— run API 按 app.db 的会话 id 工作。
+    """
+    settings = resolve_conversation_settings(_view_of(workspace_store, workspace))
+    app_store = _app_db_authority()
+
+    if app_store is None:
+        conv = store.create(workspace)
+        return _summary(conv)
+
+    await _ensure_default_workspace(app_store, workspace_store)
+    try:
+        await ensure_workspace_row(app_store, workspace_store, workspace)
+    except WorkspaceRowMissingError as exc:
+        raise HTTPException(status_code=404, detail="工作区不存在") from exc
+    conversation_id = uuid4().hex
+    conv = store.create(workspace, conversation_id=conversation_id)
+    await app_store.create_conversation(
+        conversation_id,
+        workspace,
+        permission_mode=settings.permission_mode,
+        reasoning_level=settings.reasoning_level,
+    )
     return _summary(conv)
 
 
@@ -279,7 +598,7 @@ async def move_conversation_in_sidebar(
     workspaces: WorkspaceStore = Depends(get_workspace_store),  # noqa: B008
 ) -> dict[str, Any]:
     """侧边栏拖拽：把会话移到目标工作区并放到指定位置（同区即为手动排序）。"""
-    if request.workspace_id is not None and workspaces.get(request.workspace_id) is None:
+    if request.workspace_id is not None and _view_of(workspaces, request.workspace_id) is None:
         raise HTTPException(status_code=404, detail="工作区不存在")
     conv = store.move_in_sidebar(
         conversation_id,
@@ -295,16 +614,99 @@ async def move_conversation_in_sidebar(
 async def move_conversation_workspace(
     conversation_id: str,
     request: MoveWorkspaceRequest,
+    http_request: Request,
     store: ConversationStore = Depends(get_conversation_store),  # noqa: B008
     workspaces: WorkspaceStore = Depends(get_workspace_store),  # noqa: B008
 ) -> dict[str, Any]:
-    """把会话移动到另一个工作区（分区归类）。"""
-    if workspaces.get(request.workspace_id) is None:
-        raise HTTPException(status_code=404, detail="工作区不存在")
-    conv = store.set_workspace(conversation_id, request.workspace_id)
-    if conv is None:
+    """把会话移动到另一个工作区（PRD 5.4 / 13.2；A27 / A28）。
+
+    顺序：停止主任务及子任务 → 等待活动请求退出 → 改归属（app.db 权威，``context_epoch``
+    +1）→ 侧边栏 → 目标区记忆快照。原 run 的工作区归属不变，仅历史可读且不可恢复。
+    """
+
+    from app.api.conversation_move import (
+        ConversationMoveConflict,
+        ConversationMoveError,
+        ConversationMoveNotFound,
+        MoveConfirmationRequired,
+        move_conversation,
+    )
+
+    outcome = None
+    try:
+        outcome = await move_conversation(
+            conversation_id=conversation_id,
+            target_workspace_id=request.workspace_id,
+            store=store,
+            workspaces=workspaces,
+            manager=_optional_run_manager(http_request),
+            app_store=_registered_app_store(),
+            confirm=request.confirm,
+            expected_context_epoch=request.expected_context_epoch,
+            target_memory=_target_memory_factory(workspaces),
+        )
+    except ConversationMoveNotFound as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except (MoveConfirmationRequired, ConversationMoveConflict) as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except ConversationMoveError as exc:  # pragma: no cover - 兜底 409 家族
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    conversation = outcome.conversation
+    if conversation is None:
         raise HTTPException(status_code=404, detail="会话不存在")
-    return _summary(conv)
+    payload = _summary(conversation)
+    payload.update(
+        {
+            "from_workspace_id": outcome.from_workspace_id,
+            "workspace_id": outcome.to_workspace_id,
+            "context_epoch": outcome.context_epoch,
+            "previous_context_epoch": outcome.previous_context_epoch,
+            "stopped_run_ids": list(outcome.stopped_run_ids),
+            "superseded_approvals": outcome.superseded_approvals,
+            "superseded_inputs": outcome.superseded_inputs,
+            "memory_snapshot_rebound": outcome.memory_snapshot_rebound,
+            "permission_rebound": outcome.permission_rebound,
+            "steps": list(outcome.steps),
+        }
+    )
+    return payload
+
+
+def _optional_run_manager(http_request: Request) -> Any:
+    """取 RunManager；未注册（裸路由测试/未启动 lifespan）返回 None（不做假装停止）。"""
+
+    manager = getattr(http_request.app.state, "run_manager", None)
+    if manager is not None:
+        return manager
+    from app.agent.runtime import get_run_manager
+
+    return get_run_manager()
+
+
+def _registered_app_store() -> Any:
+    """当前 app.db 访问层单例；未注册返回 None（D25 过渡态：JSON 仍是活源）。"""
+
+    from app.api.deps import get_app_store
+
+    return get_app_store()
+
+
+def _target_memory_factory(store: WorkspaceStore) -> Any:
+    """目标区 ``memory.json`` 句柄工厂（按 ``workspace_id`` 解析，PRD 5.4）。
+
+    刻意用**本路由注入的**存档实例构造上下文工厂（与 ``_context_factory`` 同一理由）：
+    ``deps.workspace_store`` 是模块单例，可能已被 ``dependency_overrides`` 换成另一个
+    指向同目录的实例；混用会解析不到刚创建的工作区。
+    """
+
+    def factory(workspace_id: str) -> Any:
+        from app.api import deps as deps_mod
+
+        context = deps_mod.get_workspace_context_factory(store).resolve(workspace_id)
+        return deps_mod.workspace_memory(context)
+
+    return factory
 
 
 @router.post("/api/conversations/{conversation_id}/archive")
@@ -406,14 +808,23 @@ def _summary(conv: Any) -> dict[str, Any]:
     }
 
 
-def _workspace_payload(workspace: Any, conversation_count: int) -> dict[str, Any]:
+def _workspace_payload(
+    workspace: Any, conversation_count: int, *, view: Any | None = None
+) -> dict[str, Any]:
+    """工作区响应投影。
+
+    身份字段（``id`` / ``name`` / ``status``）优先取 D25 唯一读取入口
+    （``WorkspaceContextFactory`` 的视图）；排序与时间戳等 UI 元数据取存档行。
+    """
+
     return {
-        "id": workspace.id,
-        "name": workspace.name,
+        "id": workspace.id if view is None else view.workspace_id,
+        "name": workspace.name if view is None else view.name,
         "created_at": workspace.created_at,
         "updated_at": workspace.updated_at,
         "is_default": workspace.is_default,
         "pinned": workspace.pinned,
         "order_index": workspace.order_index,
+        "status": str(workspace.status if view is None else view.status),
         "conversation_count": conversation_count,
     }
