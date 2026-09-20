@@ -35,6 +35,10 @@ def stores(tmp_path: Path):
     app.dependency_overrides[deps.get_vector_store] = lambda: vector
     app.dependency_overrides[deps.get_state_store] = lambda: state
     app.dependency_overrides[deps.get_image_state_store] = lambda: images
+    # T01（V1.2.0）：清空知识按工作区作用，端点走按区 provider，override 需同步覆盖。
+    app.dependency_overrides[deps.get_workspace_vector_store] = lambda: vector
+    app.dependency_overrides[deps.get_workspace_state_store] = lambda: state
+    app.dependency_overrides[deps.get_workspace_image_state_store] = lambda: images
     yield vector, state, images, source
     state.close()
     images.close()
@@ -80,6 +84,8 @@ def test_delete_real_chroma_index_through_api(stores, tmp_path):
     report = IngestionPipeline(embedder, vector, document_state_store=state).ingest(corpus)
     assert report.blocks_upserted > 0
     app.dependency_overrides[deps.get_vector_store] = lambda: vector
+    # T01（V1.2.0）：按区 provider 同样指向这个真实 Chroma 目录。
+    app.dependency_overrides[deps.get_workspace_vector_store] = lambda: vector
     assert TestClient(app).delete("/api/knowledge").status_code == 200
     assert vector.count() == 0
     assert state.load_all() == {}

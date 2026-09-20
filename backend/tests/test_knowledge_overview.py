@@ -65,6 +65,8 @@ def test_catalog_counts_topics_and_representative_documents() -> None:
 
 def test_overview_api_never_exposes_absolute_paths() -> None:
     app.dependency_overrides[deps.get_vector_store] = lambda: CatalogStore()
+    # T01（V1.2.0）：概览端点现在按工作区解析向量库，override 需同时覆盖按区 provider。
+    app.dependency_overrides[deps.get_workspace_vector_store] = lambda: CatalogStore()
     response = TestClient(app).get("/api/knowledge/overview")
     assert response.status_code == 200
     data = response.json()

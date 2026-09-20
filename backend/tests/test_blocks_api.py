@@ -70,7 +70,8 @@ def test_list_blocks_returns_blocks_with_metadata() -> None:
             ),
         ]
     )
-    app.dependency_overrides[deps.get_vector_store] = lambda: store
+    # V1.2.0：/api/blocks 走**按区** provider（PRD 5.3），覆盖点随之改为 get_workspace_vector_store
+    app.dependency_overrides[deps.get_workspace_vector_store] = lambda: store
     try:
         client = TestClient(app)
         resp = client.get("/api/blocks")

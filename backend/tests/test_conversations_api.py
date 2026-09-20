@@ -424,11 +424,31 @@ def test_move_conversation_between_workspaces() -> None:
     conv_id = _conversation_with_messages(client, "待归类")
     default_scope = {"workspace": "default"}
 
-    assert client.post(f"/api/conversations/{conv_id}/workspace", json={"workspace_id": workspace_id}).status_code == 200
+    # PRD 5.4：会话携带历史 → 未确认必须拒绝（不再"静默搬走历史"）
+    unconfirmed = client.post(
+        f"/api/conversations/{conv_id}/workspace", json={"workspace_id": workspace_id}
+    )
+    assert unconfirmed.status_code == 409
+    assert "确认" in unconfirmed.json()["detail"]
+    assert [item["id"] for item in client.get("/api/conversations", params=default_scope).json()] == [conv_id]
+
+    moved = client.post(
+        f"/api/conversations/{conv_id}/workspace",
+        json={"workspace_id": workspace_id, "confirm": True},
+    )
+    assert moved.status_code == 200, moved.text
+    assert moved.json()["workspace_id"] == workspace_id
+    assert moved.json()["from_workspace_id"] == "default"
     assert client.get("/api/conversations", params=default_scope).json() == []
     assert [item["id"] for item in client.get("/api/conversations", params={"workspace": workspace_id}).json()] == [conv_id]
+    # 历史消息仍在（移动只改归属，PRD 5.4「保留历史消息」）
+    assert client.get(f"/api/conversations/{conv_id}").json()["messages"]
     # 移回默认分区
-    client.post(f"/api/conversations/{conv_id}/workspace", json={"workspace_id": "default"})
+    back = client.post(
+        f"/api/conversations/{conv_id}/workspace",
+        json={"workspace_id": "default", "confirm": True},
+    )
+    assert back.status_code == 200, back.text
     assert [item["id"] for item in client.get("/api/conversations", params=default_scope).json()] == [conv_id]
 
 

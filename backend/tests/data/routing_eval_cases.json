@@ -1,0 +1,5521 @@
+{
+ "schema_version": 1,
+ "case_version": "routing-eval-v1",
+ "created_by": "t6 (routing)",
+ "label_origin": "authored_by_t6_from_PRD_6.3_and_16.3",
+ "field_guide": {
+  "category": "PRD 16.3 的六类配额：internal / general / freshness / product / multi_source / multi_turn",
+  "source": "real = 问题文本逐字取自 benchmark/cases.json；constructed = 问题文本由 t6 编写",
+  "constructed_reason": "构造理由：为什么必须有这条样例（PRD 16.1 允许构造但必须可核对）",
+  "constructed_parts": "构造条目里由 t6 编写的部分（question / context_turns / labels）",
+  "reused_case_id": "real 条目对应的 benchmark/cases.json 用例 id，可逐条比对",
+  "split": "dev / holdout；同一 family（gold 组或构造族）必落同一集合；保留集在规则冻结后执行",
+  "required_sources": "必需的来源集合，取值 knowledge / web / general / product / catalog / history",
+  "acceptable_intents": "可接受的 RouteDecision.intent 取值",
+  "forbidden_misstatements": "禁止误述项：命中即该条判失败（PRD 16.1 禁止伪造内部事实）",
+  "catalog_hints": "离线规则层评测用的目录线索代理；真实条目取自真实语料的 evidence 串，构造条目为空",
+  "catalog_hints_note": "线索代理只用于隔离规则层评测，端到端目录由 T_verify 在真实工作区导出",
+  "freshness_required": "none / current / date_range：时效问题必须对齐的 RouteDecision.freshness",
+  "catalog_hint_origin": "cases_evidence = 取自真实语料证据串；none = 无线索",
+  "turns": "多轮条目的历史（assistant 内容为占位摘要，只用于指代补全，不是评测目标）"
+ },
+ "label_disclaimer": "真实条目的 gold / evidence 来自真实语料，但 required_sources 等标注由 t6 按 PRD 6.3 / 16.3 编写，未经用户逐条确认；离线评测只覆盖规则层，端到端指标需 T_verify 在真实工作区执行。",
+ "counts": {
+  "total": 155,
+  "real": 87,
+  "constructed": 68,
+  "by_category": {
+   "freshness": 20,
+   "general": 30,
+   "internal": 65,
+   "multi_source": 15,
+   "multi_turn": 15,
+   "product": 10
+  }
+ },
+ "cases": [
+  {
+   "id": "F-001",
+   "category": "freshness",
+   "question": "Kubernetes 最新版本有哪些新特性和废弃 API？",
+   "source": "real",
+   "reused_case_id": "N08",
+   "reused_case_cat": "negative_adversarial",
+   "constructed_parts": [],
+   "family": "case:N08",
+   "split": "holdout",
+   "required_sources": [
+    "web"
+   ],
+   "acceptable_intents": [
+    "research",
+    "general"
+   ],
+   "freshness_required": "current",
+   "forbidden_misstatements": [
+    "不得在未联网核实的情况下给出「最新」结论",
+    "不得把训练数据里的旧版本说成最新",
+    "不得跳过时间核对"
+   ],
+   "catalog_hints": [],
+   "catalog_hint_origin": "none",
+   "gold": [],
+   "evidence": [],
+   "notes": "真实问题逐字取自 benchmark/cases.json（cat=negative_adversarial）"
+  },
+  {
+   "id": "F-002",
+   "category": "freshness",
+   "question": "今天 AI 领域有什么新闻？",
+   "source": "constructed",
+   "reused_case_id": "",
+   "reused_case_cat": "",
+   "constructed_parts": [
+    "question",
+    "labels"
+   ],
+   "constructed_reason": "时效问题必须联网核对当天信息；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造",
+   "family": "constructed:今天 AI 领域有什么新闻？",
+   "split": "dev",
+   "required_sources": [
+    "web"
+   ],
+   "acceptable_intents": [
+    "research",
+    "general"
+   ],
+   "freshness_required": "current",
+   "forbidden_misstatements": [
+    "不得在未联网核实的情况下给出「最新」结论",
+    "不得把训练数据里的旧版本说成最新",
+    "不得跳过时间核对"
+   ],
+   "catalog_hints": [],
+   "catalog_hint_origin": "none",
+   "gold": [],
+   "evidence": [],
+   "notes": "时效问题必须联网核对当天信息；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造"
+  },
+  {
+   "id": "F-003",
+   "category": "freshness",
+   "question": "最新版本的 Kubernetes 有哪些新特性？",
+   "source": "constructed",
+   "reused_case_id": "",
+   "reused_case_cat": "",
+   "constructed_parts": [
+    "question",
+    "labels"
+   ],
+   "constructed_reason": "明确要求最新版本；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造",
+   "family": "constructed:最新版本的 Kubernetes 有哪些新特性？",
+   "split": "holdout",
+   "required_sources": [
+    "web"
+   ],
+   "acceptable_intents": [
+    "research",
+    "general"
+   ],
+   "freshness_required": "current",
+   "forbidden_misstatements": [
+    "不得在未联网核实的情况下给出「最新」结论",
+    "不得把训练数据里的旧版本说成最新",
+    "不得跳过时间核对"
+   ],
+   "catalog_hints": [],
+   "catalog_hint_origin": "none",
+   "gold": [],
+   "evidence": [],
+   "notes": "明确要求最新版本；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造"
+  },
+  {
+   "id": "F-004",
+   "category": "freshness",
+   "question": "现在主流的向量库最新版本分别是哪些？",
+   "source": "constructed",
+   "reused_case_id": "",
+   "reused_case_cat": "",
+   "constructed_parts": [
+    "question",
+    "labels"
+   ],
+   "constructed_reason": "要求当前版本；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造",
+   "family": "constructed:现在主流的向量库最新版本分别是哪些？",
+   "split": "holdout",
+   "required_sources": [
+    "web"
+   ],
+   "acceptable_intents": [
+    "research",
+    "general"
+   ],
+   "freshness_required": "current",
+   "forbidden_misstatements": [
+    "不得在未联网核实的情况下给出「最新」结论",
+    "不得把训练数据里的旧版本说成最新",
+    "不得跳过时间核对"
+   ],
+   "catalog_hints": [],
+   "catalog_hint_origin": "none",
+   "gold": [],
+   "evidence": [],
+   "notes": "要求当前版本；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造"
+  },
+  {
+   "id": "F-005",
+   "category": "freshness",
+   "question": "DeepSeek 最新发布的模型是什么？",
+   "source": "constructed",
+   "reused_case_id": "",
+   "reused_case_cat": "",
+   "constructed_parts": [
+    "question",
+    "labels"
+   ],
+   "constructed_reason": "要求最新发布；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造",
+   "family": "constructed:DeepSeek 最新发布的模型是什么？",
+   "split": "dev",
+   "required_sources": [
+    "web"
+   ],
+   "acceptable_intents": [
+    "research",
+    "general"
+   ],
+   "freshness_required": "current",
+   "forbidden_misstatements": [
+    "不得在未联网核实的情况下给出「最新」结论",
+    "不得把训练数据里的旧版本说成最新",
+    "不得跳过时间核对"
+   ],
+   "catalog_hints": [],
+   "catalog_hint_origin": "none",
+   "gold": [],
+   "evidence": [],
+   "notes": "要求最新发布；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造"
+  },
+  {
+   "id": "F-006",
+   "category": "freshness",
+   "question": "今天美元兑人民币的汇率是多少？",
+   "source": "constructed",
+   "reused_case_id": "",
+   "reused_case_cat": "",
+   "constructed_parts": [
+    "question",
+    "labels"
+   ],
+   "constructed_reason": "当天数据只能联网核实；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造",
+   "family": "constructed:今天美元兑人民币的汇率是多少？",
+   "split": "dev",
+   "required_sources": [
+    "web"
+   ],
+   "acceptable_intents": [
+    "research",
+    "general"
+   ],
+   "freshness_required": "current",
+   "forbidden_misstatements": [
+    "不得在未联网核实的情况下给出「最新」结论",
+    "不得把训练数据里的旧版本说成最新",
+    "不得跳过时间核对"
+   ],
+   "catalog_hints": [],
+   "catalog_hint_origin": "none",
+   "gold": [],
+   "evidence": [],
+   "notes": "当天数据只能联网核实；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造"
+  },
+  {
+   "id": "F-007",
+   "category": "freshness",
+   "question": "最新的 Vue 3 稳定版本是多少？",
+   "source": "constructed",
+   "reused_case_id": "",
+   "reused_case_cat": "",
+   "constructed_parts": [
+    "question",
+    "labels"
+   ],
+   "constructed_reason": "要求最新稳定版；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造",
+   "family": "constructed:最新的 Vue 3 稳定版本是多少？",
+   "split": "dev",
+   "required_sources": [
+    "web"
+   ],
+   "acceptable_intents": [
+    "research",
+    "general"
+   ],
+   "freshness_required": "current",
+   "forbidden_misstatements": [
+    "不得在未联网核实的情况下给出「最新」结论",
+    "不得把训练数据里的旧版本说成最新",
+    "不得跳过时间核对"
+   ],
+   "catalog_hints": [],
+   "catalog_hint_origin": "none",
+   "gold": [],
+   "evidence": [],
+   "notes": "要求最新稳定版；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造"
+  },
+  {
+   "id": "F-008",
+   "category": "freshness",
+   "question": "当前最新的 Python 版本有哪些变化？",
+   "source": "constructed",
+   "reused_case_id": "",
+   "reused_case_cat": "",
+   "constructed_parts": [
+    "question",
+    "labels"
+   ],
+   "constructed_reason": "要求当前版本；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造",
+   "family": "constructed:当前最新的 Python 版本有哪些变化？",
+   "split": "dev",
+   "required_sources": [
+    "web"
+   ],
+   "acceptable_intents": [
+    "research",
+    "general"
+   ],
+   "freshness_required": "current",
+   "forbidden_misstatements": [
+    "不得在未联网核实的情况下给出「最新」结论",
+    "不得把训练数据里的旧版本说成最新",
+    "不得跳过时间核对"
+   ],
+   "catalog_hints": [],
+   "catalog_hint_origin": "none",
+   "gold": [],
+   "evidence": [],
+   "notes": "要求当前版本；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造"
+  },
+  {
+   "id": "F-009",
+   "category": "freshness",
+   "question": "现在最新的 Node.js LTS 是哪个版本？",
+   "source": "constructed",
+   "reused_case_id": "",
+   "reused_case_cat": "",
+   "constructed_parts": [
+    "question",
+    "labels"
+   ],
+   "constructed_reason": "要求当前 LTS；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造",
+   "family": "constructed:现在最新的 Node.js LTS 是哪个版本？",
+   "split": "dev",
+   "required_sources": [
+    "web"
+   ],
+   "acceptable_intents": [
+    "research",
+    "general"
+   ],
+   "freshness_required": "current",
+   "forbidden_misstatements": [
+    "不得在未联网核实的情况下给出「最新」结论",
+    "不得把训练数据里的旧版本说成最新",
+    "不得跳过时间核对"
+   ],
+   "catalog_hints": [],
+   "catalog_hint_origin": "none",
+   "gold": [],
+   "evidence": [],
+   "notes": "要求当前 LTS；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造"
+  },
+  {
+   "id": "F-010",
+   "category": "freshness",
+   "question": "今天有哪个科技公司发布了重要公告？",
+   "source": "constructed",
+   "reused_case_id": "",
+   "reused_case_cat": "",
+   "constructed_parts": [
+    "question",
+    "labels"
+   ],
+   "constructed_reason": "当天事件；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造",
+   "family": "constructed:今天有哪个科技公司发布了重要公告？",
+   "split": "dev",
+   "required_sources": [
+    "web"
+   ],
+   "acceptable_intents": [
+    "research",
+    "general"
+   ],
+   "freshness_required": "current",
+   "forbidden_misstatements": [
+    "不得在未联网核实的情况下给出「最新」结论",
+    "不得把训练数据里的旧版本说成最新",
+    "不得跳过时间核对"
+   ],
+   "catalog_hints": [],
+   "catalog_hint_origin": "none",
+   "gold": [],
+   "evidence": [],
+   "notes": "当天事件；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造"
+  },
+  {
+   "id": "F-011",
+   "category": "freshness",
+   "question": "最近发布的 Chroma 有哪些更新？",
+   "source": "constructed",
+   "reused_case_id": "",
+   "reused_case_cat": "",
+   "constructed_parts": [
+    "question",
+    "labels"
+   ],
+   "constructed_reason": "时效要求（近期）；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造",
+   "family": "constructed:最近发布的 Chroma 有哪些更新？",
+   "split": "holdout",
+   "required_sources": [
+    "web"
+   ],
+   "acceptable_intents": [
+    "research",
+    "general"
+   ],
+   "freshness_required": "current",
+   "forbidden_misstatements": [
+    "不得在未联网核实的情况下给出「最新」结论",
+    "不得把训练数据里的旧版本说成最新",
+    "不得跳过时间核对"
+   ],
+   "catalog_hints": [],
+   "catalog_hint_origin": "none",
+   "gold": [],
+   "evidence": [],
+   "notes": "时效要求（近期）；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造"
+  },
+  {
+   "id": "F-012",
+   "category": "freshness",
+   "question": "本周 AI 圈有什么值得关注的发布？",
+   "source": "constructed",
+   "reused_case_id": "",
+   "reused_case_cat": "",
+   "constructed_parts": [
+    "question",
+    "labels"
+   ],
+   "constructed_reason": "时间范围表达：本周；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造",
+   "family": "constructed:本周 AI 圈有什么值得关注的发布？",
+   "split": "dev",
+   "required_sources": [
+    "web"
+   ],
+   "acceptable_intents": [
+    "research",
+    "general"
+   ],
+   "freshness_required": "date_range",
+   "forbidden_misstatements": [
+    "不得在未联网核实的情况下给出「最新」结论",
+    "不得把训练数据里的旧版本说成最新",
+    "不得跳过时间核对"
+   ],
+   "catalog_hints": [],
+   "catalog_hint_origin": "none",
+   "gold": [],
+   "evidence": [],
+   "notes": "时间范围表达：本周；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造"
+  },
+  {
+   "id": "F-013",
+   "category": "freshness",
+   "question": "现在最新的 GPT 系列模型有哪些？",
+   "source": "constructed",
+   "reused_case_id": "",
+   "reused_case_cat": "",
+   "constructed_parts": [
+    "question",
+    "labels"
+   ],
+   "constructed_reason": "要求当前模型列表；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造",
+   "family": "constructed:现在最新的 GPT 系列模型有哪些？",
+   "split": "holdout",
+   "required_sources": [
+    "web"
+   ],
+   "acceptable_intents": [
+    "research",
+    "general"
+   ],
+   "freshness_required": "current",
+   "forbidden_misstatements": [
+    "不得在未联网核实的情况下给出「最新」结论",
+    "不得把训练数据里的旧版本说成最新",
+    "不得跳过时间核对"
+   ],
+   "catalog_hints": [],
+   "catalog_hint_origin": "none",
+   "gold": [],
+   "evidence": [],
+   "notes": "要求当前模型列表；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造"
+  },
+  {
+   "id": "F-014",
+   "category": "freshness",
+   "question": "最近的 Playwright 版本有什么新特性？",
+   "source": "constructed",
+   "reused_case_id": "",
+   "reused_case_cat": "",
+   "constructed_parts": [
+    "question",
+    "labels"
+   ],
+   "constructed_reason": "时效要求（最近）；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造",
+   "family": "constructed:最近的 Playwright 版本有什么新特性？",
+   "split": "holdout",
+   "required_sources": [
+    "web"
+   ],
+   "acceptable_intents": [
+    "research",
+    "general"
+   ],
+   "freshness_required": "current",
+   "forbidden_misstatements": [
+    "不得在未联网核实的情况下给出「最新」结论",
+    "不得把训练数据里的旧版本说成最新",
+    "不得跳过时间核对"
+   ],
+   "catalog_hints": [],
+   "catalog_hint_origin": "none",
+   "gold": [],
+   "evidence": [],
+   "notes": "时效要求（最近）；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造"
+  },
+  {
+   "id": "F-015",
+   "category": "freshness",
+   "question": "目前最新的 iOS 版本号是多少？",
+   "source": "constructed",
+   "reused_case_id": "",
+   "reused_case_cat": "",
+   "constructed_parts": [
+    "question",
+    "labels"
+   ],
+   "constructed_reason": "要求当前版本号；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造",
+   "family": "constructed:目前最新的 iOS 版本号是多少？",
+   "split": "dev",
+   "required_sources": [
+    "web"
+   ],
+   "acceptable_intents": [
+    "research",
+    "general"
+   ],
+   "freshness_required": "current",
+   "forbidden_misstatements": [
+    "不得在未联网核实的情况下给出「最新」结论",
+    "不得把训练数据里的旧版本说成最新",
+    "不得跳过时间核对"
+   ],
+   "catalog_hints": [],
+   "catalog_hint_origin": "none",
+   "gold": [],
+   "evidence": [],
+   "notes": "要求当前版本号；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造"
+  },
+  {
+   "id": "F-016",
+   "category": "freshness",
+   "question": "今天上海的天气怎么样？",
+   "source": "constructed",
+   "reused_case_id": "",
+   "reused_case_cat": "",
+   "constructed_parts": [
+    "question",
+    "labels"
+   ],
+   "constructed_reason": "当天数据只能联网核实；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造",
+   "family": "constructed:今天上海的天气怎么样？",
+   "split": "holdout",
+   "required_sources": [
+    "web"
+   ],
+   "acceptable_intents": [
+    "research",
+    "general"
+   ],
+   "freshness_required": "current",
+   "forbidden_misstatements": [
+    "不得在未联网核实的情况下给出「最新」结论",
+    "不得把训练数据里的旧版本说成最新",
+    "不得跳过时间核对"
+   ],
+   "catalog_hints": [],
+   "catalog_hint_origin": "none",
+   "gold": [],
+   "evidence": [],
+   "notes": "当天数据只能联网核实；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造"
+  },
+  {
+   "id": "F-017",
+   "category": "freshness",
+   "question": "最新一期 Nature 的封面文章是什么？",
+   "source": "constructed",
+   "reused_case_id": "",
+   "reused_case_cat": "",
+   "constructed_parts": [
+    "question",
+    "labels"
+   ],
+   "constructed_reason": "要求最新一期；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造",
+   "family": "constructed:最新一期 Nature 的封面文章是什么？",
+   "split": "holdout",
+   "required_sources": [
+    "web"
+   ],
+   "acceptable_intents": [
+    "research",
+    "general"
+   ],
+   "freshness_required": "current",
+   "forbidden_misstatements": [
+    "不得在未联网核实的情况下给出「最新」结论",
+    "不得把训练数据里的旧版本说成最新",
+    "不得跳过时间核对"
+   ],
+   "catalog_hints": [],
+   "catalog_hint_origin": "none",
+   "gold": [],
+   "evidence": [],
+   "notes": "要求最新一期；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造"
+  },
+  {
+   "id": "F-018",
+   "category": "freshness",
+   "question": "现在最新的 React 版本有哪些变化？",
+   "source": "constructed",
+   "reused_case_id": "",
+   "reused_case_cat": "",
+   "constructed_parts": [
+    "question",
+    "labels"
+   ],
+   "constructed_reason": "要求当前版本；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造",
+   "family": "constructed:现在最新的 React 版本有哪些变化？",
+   "split": "dev",
+   "required_sources": [
+    "web"
+   ],
+   "acceptable_intents": [
+    "research",
+    "general"
+   ],
+   "freshness_required": "current",
+   "forbidden_misstatements": [
+    "不得在未联网核实的情况下给出「最新」结论",
+    "不得把训练数据里的旧版本说成最新",
+    "不得跳过时间核对"
+   ],
+   "catalog_hints": [],
+   "catalog_hint_origin": "none",
+   "gold": [],
+   "evidence": [],
+   "notes": "要求当前版本；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造"
+  },
+  {
+   "id": "F-019",
+   "category": "freshness",
+   "question": "近三个月 AI 芯片领域有什么新品发布？",
+   "source": "constructed",
+   "reused_case_id": "",
+   "reused_case_cat": "",
+   "constructed_parts": [
+    "question",
+    "labels"
+   ],
+   "constructed_reason": "时间范围表达：近三个月；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造",
+   "family": "constructed:近三个月 AI 芯片领域有什么新品发布？",
+   "split": "holdout",
+   "required_sources": [
+    "web"
+   ],
+   "acceptable_intents": [
+    "research",
+    "general"
+   ],
+   "freshness_required": "date_range",
+   "forbidden_misstatements": [
+    "不得在未联网核实的情况下给出「最新」结论",
+    "不得把训练数据里的旧版本说成最新",
+    "不得跳过时间核对"
+   ],
+   "catalog_hints": [],
+   "catalog_hint_origin": "none",
+   "gold": [],
+   "evidence": [],
+   "notes": "时间范围表达：近三个月；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造"
+  },
+  {
+   "id": "F-020",
+   "category": "freshness",
+   "question": "最近 OpenAI 有哪些新发布？",
+   "source": "constructed",
+   "reused_case_id": "",
+   "reused_case_cat": "",
+   "constructed_parts": [
+    "question",
+    "labels"
+   ],
+   "constructed_reason": "时效要求（最近）；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造",
+   "family": "constructed:最近 OpenAI 有哪些新发布？",
+   "split": "dev",
+   "required_sources": [
+    "web"
+   ],
+   "acceptable_intents": [
+    "research",
+    "general"
+   ],
+   "freshness_required": "current",
+   "forbidden_misstatements": [
+    "不得在未联网核实的情况下给出「最新」结论",
+    "不得把训练数据里的旧版本说成最新",
+    "不得跳过时间核对"
+   ],
+   "catalog_hints": [],
+   "catalog_hint_origin": "none",
+   "gold": [],
+   "evidence": [],
+   "notes": "时效要求（最近）；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造"
+  },
+  {
+   "id": "G-001",
+   "category": "general",
+   "question": "量子计算中表面码纠错的物理实现原理是什么？",
+   "source": "real",
+   "reused_case_id": "N01",
+   "reused_case_cat": "negative",
+   "constructed_parts": [],
+   "family": "case:N01",
+   "split": "holdout",
+   "required_sources": [
+    "general"
+   ],
+   "acceptable_intents": [
+    "general"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得声称用户资料中存在该结论",
+    "不得伪造内部引用编号"
+   ],
+   "catalog_hints": [],
+   "catalog_hint_origin": "none",
+   "gold": [],
+   "evidence": [],
+   "notes": "真实问题逐字取自 benchmark/cases.json（cat=negative）"
+  },
+  {
+   "id": "G-002",
+   "category": "general",
+   "question": "如何酿造比利时修道院风格的三料啤酒？",
+   "source": "real",
+   "reused_case_id": "N02",
+   "reused_case_cat": "negative",
+   "constructed_parts": [],
+   "family": "case:N02",
+   "split": "dev",
+   "required_sources": [
+    "general"
+   ],
+   "acceptable_intents": [
+    "general"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得声称用户资料中存在该结论",
+    "不得伪造内部引用编号"
+   ],
+   "catalog_hints": [],
+   "catalog_hint_origin": "none",
+   "gold": [],
+   "evidence": [],
+   "notes": "真实问题逐字取自 benchmark/cases.json（cat=negative）"
+  },
+  {
+   "id": "G-003",
+   "category": "general",
+   "question": "2026 年世界杯的赛程和分组抽签结果是什么？",
+   "source": "real",
+   "reused_case_id": "N03",
+   "reused_case_cat": "negative",
+   "constructed_parts": [],
+   "family": "case:N03",
+   "split": "dev",
+   "required_sources": [
+    "general"
+   ],
+   "acceptable_intents": [
+    "general"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得声称用户资料中存在该结论",
+    "不得伪造内部引用编号"
+   ],
+   "catalog_hints": [],
+   "catalog_hint_origin": "none",
+   "gold": [],
+   "evidence": [],
+   "notes": "真实问题逐字取自 benchmark/cases.json（cat=negative）"
+  },
+  {
+   "id": "G-004",
+   "category": "general",
+   "question": "在瑞士租房签订的合同需要注意哪些法律条款？",
+   "source": "real",
+   "reused_case_id": "N04",
+   "reused_case_cat": "negative",
+   "constructed_parts": [],
+   "family": "case:N04",
+   "split": "dev",
+   "required_sources": [
+    "general"
+   ],
+   "acceptable_intents": [
+    "general"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得声称用户资料中存在该结论",
+    "不得伪造内部引用编号"
+   ],
+   "catalog_hints": [],
+   "catalog_hint_origin": "none",
+   "gold": [],
+   "evidence": [],
+   "notes": "真实问题逐字取自 benchmark/cases.json（cat=negative）"
+  },
+  {
+   "id": "G-005",
+   "category": "general",
+   "question": "火星土壤原位资源利用（ISRU）有哪些技术方案？",
+   "source": "real",
+   "reused_case_id": "N05",
+   "reused_case_cat": "negative",
+   "constructed_parts": [],
+   "family": "case:N05",
+   "split": "dev",
+   "required_sources": [
+    "general"
+   ],
+   "acceptable_intents": [
+    "general"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得声称用户资料中存在该结论",
+    "不得伪造内部引用编号"
+   ],
+   "catalog_hints": [],
+   "catalog_hint_origin": "none",
+   "gold": [],
+   "evidence": [],
+   "notes": "真实问题逐字取自 benchmark/cases.json（cat=negative）"
+  },
+  {
+   "id": "G-006",
+   "category": "general",
+   "question": "贝多芬第九交响曲首演的具体时间和地点是哪里？",
+   "source": "real",
+   "reused_case_id": "N06",
+   "reused_case_cat": "negative",
+   "constructed_parts": [],
+   "family": "case:N06",
+   "split": "dev",
+   "required_sources": [
+    "general"
+   ],
+   "acceptable_intents": [
+    "general"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得声称用户资料中存在该结论",
+    "不得伪造内部引用编号"
+   ],
+   "catalog_hints": [],
+   "catalog_hint_origin": "none",
+   "gold": [],
+   "evidence": [],
+   "notes": "真实问题逐字取自 benchmark/cases.json（cat=negative）"
+  },
+  {
+   "id": "G-007",
+   "category": "general",
+   "question": "如何申请日本经营管理签证，需要准备哪些材料？",
+   "source": "real",
+   "reused_case_id": "N07",
+   "reused_case_cat": "negative",
+   "constructed_parts": [],
+   "family": "case:N07",
+   "split": "holdout",
+   "required_sources": [
+    "general"
+   ],
+   "acceptable_intents": [
+    "general"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得声称用户资料中存在该结论",
+    "不得伪造内部引用编号"
+   ],
+   "catalog_hints": [],
+   "catalog_hint_origin": "none",
+   "gold": [],
+   "evidence": [],
+   "notes": "真实问题逐字取自 benchmark/cases.json（cat=negative）"
+  },
+  {
+   "id": "G-008",
+   "category": "general",
+   "question": "怎么给三个月大的幼犬做定点如厕训练？",
+   "source": "real",
+   "reused_case_id": "N09",
+   "reused_case_cat": "negative",
+   "constructed_parts": [],
+   "family": "case:N09",
+   "split": "dev",
+   "required_sources": [
+    "general"
+   ],
+   "acceptable_intents": [
+    "general"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得声称用户资料中存在该结论",
+    "不得伪造内部引用编号"
+   ],
+   "catalog_hints": [],
+   "catalog_hint_origin": "none",
+   "gold": [],
+   "evidence": [],
+   "notes": "真实问题逐字取自 benchmark/cases.json（cat=negative）"
+  },
+  {
+   "id": "G-009",
+   "category": "general",
+   "question": "数据库慢查询一般要怎么排查，有什么通用方法？",
+   "source": "real",
+   "reused_case_id": "N10",
+   "reused_case_cat": "negative_adversarial",
+   "constructed_parts": [],
+   "family": "case:N10",
+   "split": "holdout",
+   "required_sources": [
+    "general"
+   ],
+   "acceptable_intents": [
+    "general"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得声称用户资料中存在该结论",
+    "不得伪造内部引用编号"
+   ],
+   "catalog_hints": [],
+   "catalog_hint_origin": "none",
+   "gold": [],
+   "evidence": [],
+   "notes": "真实问题逐字取自 benchmark/cases.json（cat=negative_adversarial）"
+  },
+  {
+   "id": "G-010",
+   "category": "general",
+   "question": "Redis 大 key 热 key 问题要怎么解决？",
+   "source": "real",
+   "reused_case_id": "N11",
+   "reused_case_cat": "negative_adversarial",
+   "constructed_parts": [],
+   "family": "case:N11",
+   "split": "dev",
+   "required_sources": [
+    "general"
+   ],
+   "acceptable_intents": [
+    "general"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得声称用户资料中存在该结论",
+    "不得伪造内部引用编号"
+   ],
+   "catalog_hints": [],
+   "catalog_hint_origin": "none",
+   "gold": [],
+   "evidence": [],
+   "notes": "真实问题逐字取自 benchmark/cases.json（cat=negative_adversarial）"
+  },
+  {
+   "id": "G-011",
+   "category": "general",
+   "question": "拜占庭帝国灭亡的经济原因有哪些？",
+   "source": "real",
+   "reused_case_id": "N12",
+   "reused_case_cat": "negative",
+   "constructed_parts": [],
+   "family": "case:N12",
+   "split": "dev",
+   "required_sources": [
+    "general"
+   ],
+   "acceptable_intents": [
+    "general"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得声称用户资料中存在该结论",
+    "不得伪造内部引用编号"
+   ],
+   "catalog_hints": [],
+   "catalog_hint_origin": "none",
+   "gold": [],
+   "evidence": [],
+   "notes": "真实问题逐字取自 benchmark/cases.json（cat=negative）"
+  },
+  {
+   "id": "G-012",
+   "category": "general",
+   "question": "什么是向量数据库？它和关系型数据库的区别在哪？",
+   "source": "constructed",
+   "reused_case_id": "",
+   "reused_case_cat": "",
+   "constructed_parts": [
+    "question",
+    "labels"
+   ],
+   "constructed_reason": "通用概念解释，工作区真实语料里没有该主题；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造",
+   "family": "constructed:什么是向量数据库？它和关系型数据库的区别在哪？",
+   "split": "dev",
+   "required_sources": [
+    "general"
+   ],
+   "acceptable_intents": [
+    "general"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得声称用户资料中存在该结论",
+    "不得伪造内部引用编号"
+   ],
+   "catalog_hints": [],
+   "catalog_hint_origin": "none",
+   "gold": [],
+   "evidence": [],
+   "notes": "通用概念解释，工作区真实语料里没有该主题；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造"
+  },
+  {
+   "id": "G-013",
+   "category": "general",
+   "question": "为什么 transformer 需要位置编码？",
+   "source": "constructed",
+   "reused_case_id": "",
+   "reused_case_cat": "",
+   "constructed_parts": [
+    "question",
+    "labels"
+   ],
+   "constructed_reason": "通用模型原理，不属于本工作区资料主题；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造",
+   "family": "constructed:为什么 transformer 需要位置编码？",
+   "split": "dev",
+   "required_sources": [
+    "general"
+   ],
+   "acceptable_intents": [
+    "general"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得声称用户资料中存在该结论",
+    "不得伪造内部引用编号"
+   ],
+   "catalog_hints": [],
+   "catalog_hint_origin": "none",
+   "gold": [],
+   "evidence": [],
+   "notes": "通用模型原理，不属于本工作区资料主题；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造"
+  },
+  {
+   "id": "G-014",
+   "category": "general",
+   "question": "RAG 和微调分别适合什么场景？",
+   "source": "constructed",
+   "reused_case_id": "",
+   "reused_case_cat": "",
+   "constructed_parts": [
+    "question",
+    "labels"
+   ],
+   "constructed_reason": "通用方案比较，语料中没有该讨论；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造",
+   "family": "constructed:RAG 和微调分别适合什么场景？",
+   "split": "holdout",
+   "required_sources": [
+    "general"
+   ],
+   "acceptable_intents": [
+    "general"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得声称用户资料中存在该结论",
+    "不得伪造内部引用编号"
+   ],
+   "catalog_hints": [],
+   "catalog_hint_origin": "none",
+   "gold": [],
+   "evidence": [],
+   "notes": "通用方案比较，语料中没有该讨论；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造"
+  },
+  {
+   "id": "G-015",
+   "category": "general",
+   "question": "什么是 B 树索引？什么情况下会失效？",
+   "source": "constructed",
+   "reused_case_id": "",
+   "reused_case_cat": "",
+   "constructed_parts": [
+    "question",
+    "labels"
+   ],
+   "constructed_reason": "通用数据库概念；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造",
+   "family": "constructed:什么是 B 树索引？什么情况下会失效？",
+   "split": "dev",
+   "required_sources": [
+    "general"
+   ],
+   "acceptable_intents": [
+    "general"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得声称用户资料中存在该结论",
+    "不得伪造内部引用编号"
+   ],
+   "catalog_hints": [],
+   "catalog_hint_origin": "none",
+   "gold": [],
+   "evidence": [],
+   "notes": "通用数据库概念；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造"
+  },
+  {
+   "id": "G-016",
+   "category": "general",
+   "question": "怎么理解 CAP 定理？实际系统是怎么取舍的？",
+   "source": "constructed",
+   "reused_case_id": "",
+   "reused_case_cat": "",
+   "constructed_parts": [
+    "question",
+    "labels"
+   ],
+   "constructed_reason": "通用分布式理论；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造",
+   "family": "constructed:怎么理解 CAP 定理？实际系统是怎么取舍的？",
+   "split": "dev",
+   "required_sources": [
+    "general"
+   ],
+   "acceptable_intents": [
+    "general"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得声称用户资料中存在该结论",
+    "不得伪造内部引用编号"
+   ],
+   "catalog_hints": [],
+   "catalog_hint_origin": "none",
+   "gold": [],
+   "evidence": [],
+   "notes": "通用分布式理论；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造"
+  },
+  {
+   "id": "G-017",
+   "category": "general",
+   "question": "什么是幂等性？接口为什么要保证幂等？",
+   "source": "constructed",
+   "reused_case_id": "",
+   "reused_case_cat": "",
+   "constructed_parts": [
+    "question",
+    "labels"
+   ],
+   "constructed_reason": "通用接口设计概念；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造",
+   "family": "constructed:什么是幂等性？接口为什么要保证幂等？",
+   "split": "dev",
+   "required_sources": [
+    "general"
+   ],
+   "acceptable_intents": [
+    "general"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得声称用户资料中存在该结论",
+    "不得伪造内部引用编号"
+   ],
+   "catalog_hints": [],
+   "catalog_hint_origin": "none",
+   "gold": [],
+   "evidence": [],
+   "notes": "通用接口设计概念；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造"
+  },
+  {
+   "id": "G-018",
+   "category": "general",
+   "question": "为什么分布式缓存需要一致性哈希？",
+   "source": "constructed",
+   "reused_case_id": "",
+   "reused_case_cat": "",
+   "constructed_parts": [
+    "question",
+    "labels"
+   ],
+   "constructed_reason": "通用缓存概念；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造",
+   "family": "constructed:为什么分布式缓存需要一致性哈希？",
+   "split": "dev",
+   "required_sources": [
+    "general"
+   ],
+   "acceptable_intents": [
+    "general"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得声称用户资料中存在该结论",
+    "不得伪造内部引用编号"
+   ],
+   "catalog_hints": [],
+   "catalog_hint_origin": "none",
+   "gold": [],
+   "evidence": [],
+   "notes": "通用缓存概念；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造"
+  },
+  {
+   "id": "G-019",
+   "category": "general",
+   "question": "可观测性里的日志、指标、链路追踪各解决什么问题？",
+   "source": "constructed",
+   "reused_case_id": "",
+   "reused_case_cat": "",
+   "constructed_parts": [
+    "question",
+    "labels"
+   ],
+   "constructed_reason": "通用工程概念；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造",
+   "family": "constructed:可观测性里的日志、指标、链路追踪各解决什么问题？",
+   "split": "holdout",
+   "required_sources": [
+    "general"
+   ],
+   "acceptable_intents": [
+    "general"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得声称用户资料中存在该结论",
+    "不得伪造内部引用编号"
+   ],
+   "catalog_hints": [],
+   "catalog_hint_origin": "none",
+   "gold": [],
+   "evidence": [],
+   "notes": "通用工程概念；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造"
+  },
+  {
+   "id": "G-020",
+   "category": "general",
+   "question": "Python 的 GIL 对多线程性能有什么影响？",
+   "source": "constructed",
+   "reused_case_id": "",
+   "reused_case_cat": "",
+   "constructed_parts": [
+    "question",
+    "labels"
+   ],
+   "constructed_reason": "通用语言实现概念；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造",
+   "family": "constructed:Python 的 GIL 对多线程性能有什么影响",
+   "split": "holdout",
+   "required_sources": [
+    "general"
+   ],
+   "acceptable_intents": [
+    "general"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得声称用户资料中存在该结论",
+    "不得伪造内部引用编号"
+   ],
+   "catalog_hints": [],
+   "catalog_hint_origin": "none",
+   "gold": [],
+   "evidence": [],
+   "notes": "通用语言实现概念；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造"
+  },
+  {
+   "id": "G-021",
+   "category": "general",
+   "question": "什么是 SQL 注入？一般怎么防御？",
+   "source": "constructed",
+   "reused_case_id": "",
+   "reused_case_cat": "",
+   "constructed_parts": [
+    "question",
+    "labels"
+   ],
+   "constructed_reason": "通用安全概念；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造",
+   "family": "constructed:什么是 SQL 注入？一般怎么防御？",
+   "split": "dev",
+   "required_sources": [
+    "general"
+   ],
+   "acceptable_intents": [
+    "general"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得声称用户资料中存在该结论",
+    "不得伪造内部引用编号"
+   ],
+   "catalog_hints": [],
+   "catalog_hint_origin": "none",
+   "gold": [],
+   "evidence": [],
+   "notes": "通用安全概念；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造"
+  },
+  {
+   "id": "G-022",
+   "category": "general",
+   "question": "HTTPS 的证书链校验过程是怎样的？",
+   "source": "constructed",
+   "reused_case_id": "",
+   "reused_case_cat": "",
+   "constructed_parts": [
+    "question",
+    "labels"
+   ],
+   "constructed_reason": "通用网络概念；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造",
+   "family": "constructed:HTTPS 的证书链校验过程是怎样的？",
+   "split": "dev",
+   "required_sources": [
+    "general"
+   ],
+   "acceptable_intents": [
+    "general"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得声称用户资料中存在该结论",
+    "不得伪造内部引用编号"
+   ],
+   "catalog_hints": [],
+   "catalog_hint_origin": "none",
+   "gold": [],
+   "evidence": [],
+   "notes": "通用网络概念；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造"
+  },
+  {
+   "id": "G-023",
+   "category": "general",
+   "question": "什么是死锁？常见的检测与避免方法有哪些？",
+   "source": "constructed",
+   "reused_case_id": "",
+   "reused_case_cat": "",
+   "constructed_parts": [
+    "question",
+    "labels"
+   ],
+   "constructed_reason": "通用并发概念；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造",
+   "family": "constructed:什么是死锁？常见的检测与避免方法有哪些？",
+   "split": "dev",
+   "required_sources": [
+    "general"
+   ],
+   "acceptable_intents": [
+    "general"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得声称用户资料中存在该结论",
+    "不得伪造内部引用编号"
+   ],
+   "catalog_hints": [],
+   "catalog_hint_origin": "none",
+   "gold": [],
+   "evidence": [],
+   "notes": "通用并发概念；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造"
+  },
+  {
+   "id": "G-024",
+   "category": "general",
+   "question": "领域驱动设计里的聚合根是什么？",
+   "source": "constructed",
+   "reused_case_id": "",
+   "reused_case_cat": "",
+   "constructed_parts": [
+    "question",
+    "labels"
+   ],
+   "constructed_reason": "通用架构概念；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造",
+   "family": "constructed:领域驱动设计里的聚合根是什么？",
+   "split": "dev",
+   "required_sources": [
+    "general"
+   ],
+   "acceptable_intents": [
+    "general"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得声称用户资料中存在该结论",
+    "不得伪造内部引用编号"
+   ],
+   "catalog_hints": [],
+   "catalog_hint_origin": "none",
+   "gold": [],
+   "evidence": [],
+   "notes": "通用架构概念；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造"
+  },
+  {
+   "id": "G-025",
+   "category": "general",
+   "question": "为什么并发共享状态推荐用不可变数据结构？",
+   "source": "constructed",
+   "reused_case_id": "",
+   "reused_case_cat": "",
+   "constructed_parts": [
+    "question",
+    "labels"
+   ],
+   "constructed_reason": "通用工程实践；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造",
+   "family": "constructed:为什么并发共享状态推荐用不可变数据结构？",
+   "split": "dev",
+   "required_sources": [
+    "general"
+   ],
+   "acceptable_intents": [
+    "general"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得声称用户资料中存在该结论",
+    "不得伪造内部引用编号"
+   ],
+   "catalog_hints": [],
+   "catalog_hint_origin": "none",
+   "gold": [],
+   "evidence": [],
+   "notes": "通用工程实践；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造"
+  },
+  {
+   "id": "G-026",
+   "category": "general",
+   "question": "流式输出里的背压是什么？一般怎么处理？",
+   "source": "constructed",
+   "reused_case_id": "",
+   "reused_case_cat": "",
+   "constructed_parts": [
+    "question",
+    "labels"
+   ],
+   "constructed_reason": "通用流式概念；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造",
+   "family": "constructed:流式输出里的背压是什么？一般怎么处理？",
+   "split": "holdout",
+   "required_sources": [
+    "general"
+   ],
+   "acceptable_intents": [
+    "general"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得声称用户资料中存在该结论",
+    "不得伪造内部引用编号"
+   ],
+   "catalog_hints": [],
+   "catalog_hint_origin": "none",
+   "gold": [],
+   "evidence": [],
+   "notes": "通用流式概念；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造"
+  },
+  {
+   "id": "G-027",
+   "category": "general",
+   "question": "什么是零拷贝？它在网络传输里怎么生效？",
+   "source": "constructed",
+   "reused_case_id": "",
+   "reused_case_cat": "",
+   "constructed_parts": [
+    "question",
+    "labels"
+   ],
+   "constructed_reason": "通用系统概念；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造",
+   "family": "constructed:什么是零拷贝？它在网络传输里怎么生效？",
+   "split": "dev",
+   "required_sources": [
+    "general"
+   ],
+   "acceptable_intents": [
+    "general"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得声称用户资料中存在该结论",
+    "不得伪造内部引用编号"
+   ],
+   "catalog_hints": [],
+   "catalog_hint_origin": "none",
+   "gold": [],
+   "evidence": [],
+   "notes": "通用系统概念；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造"
+  },
+  {
+   "id": "G-028",
+   "category": "general",
+   "question": "消息队列怎么保证不丢消息？",
+   "source": "constructed",
+   "reused_case_id": "",
+   "reused_case_cat": "",
+   "constructed_parts": [
+    "question",
+    "labels"
+   ],
+   "constructed_reason": "通用中间件概念；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造",
+   "family": "constructed:消息队列怎么保证不丢消息？",
+   "split": "holdout",
+   "required_sources": [
+    "general"
+   ],
+   "acceptable_intents": [
+    "general"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得声称用户资料中存在该结论",
+    "不得伪造内部引用编号"
+   ],
+   "catalog_hints": [],
+   "catalog_hint_origin": "none",
+   "gold": [],
+   "evidence": [],
+   "notes": "通用中间件概念；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造"
+  },
+  {
+   "id": "G-029",
+   "category": "general",
+   "question": "JWT 和 session 各自的优缺点是什么？",
+   "source": "constructed",
+   "reused_case_id": "",
+   "reused_case_cat": "",
+   "constructed_parts": [
+    "question",
+    "labels"
+   ],
+   "constructed_reason": "通用鉴权概念；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造",
+   "family": "constructed:JWT 和 session 各自的优缺点是什么？",
+   "split": "dev",
+   "required_sources": [
+    "general"
+   ],
+   "acceptable_intents": [
+    "general"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得声称用户资料中存在该结论",
+    "不得伪造内部引用编号"
+   ],
+   "catalog_hints": [],
+   "catalog_hint_origin": "none",
+   "gold": [],
+   "evidence": [],
+   "notes": "通用鉴权概念；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造"
+  },
+  {
+   "id": "G-030",
+   "category": "general",
+   "question": "程序里的内存泄漏一般由什么引起？",
+   "source": "constructed",
+   "reused_case_id": "",
+   "reused_case_cat": "",
+   "constructed_parts": [
+    "question",
+    "labels"
+   ],
+   "constructed_reason": "通用工程概念；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造",
+   "family": "constructed:程序里的内存泄漏一般由什么引起？",
+   "split": "dev",
+   "required_sources": [
+    "general"
+   ],
+   "acceptable_intents": [
+    "general"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得声称用户资料中存在该结论",
+    "不得伪造内部引用编号"
+   ],
+   "catalog_hints": [],
+   "catalog_hint_origin": "none",
+   "gold": [],
+   "evidence": [],
+   "notes": "通用工程概念；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造"
+  },
+  {
+   "id": "I-001",
+   "category": "internal",
+   "question": "上新进度管控里，二级风格线和产品标签之间的映射是怎么建立的？",
+   "source": "real",
+   "reused_case_id": "C01",
+   "reused_case_cat": "semantic",
+   "constructed_parts": [],
+   "family": "gold:1",
+   "split": "holdout",
+   "required_sources": [
+    "knowledge"
+   ],
+   "acceptable_intents": [
+    "research",
+    "clarification"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得声称本工作区没有相关资料",
+    "不得用通用知识替代原文依据"
+   ],
+   "catalog_hints": [
+    "二级风格线对产品标签的映射",
+    "product_attr"
+   ],
+   "catalog_hint_origin": "cases_evidence",
+   "gold": [
+    1
+   ],
+   "evidence": [
+    "二级风格线对产品标签的映射",
+    "product_attr"
+   ],
+   "notes": "真实问题逐字取自 benchmark/cases.json"
+  },
+  {
+   "id": "I-002",
+   "category": "internal",
+   "question": "验证码邮件为什么会重复发送给用户？",
+   "source": "real",
+   "reused_case_id": "C02",
+   "reused_case_cat": "fact_lookup",
+   "constructed_parts": [],
+   "family": "gold:2",
+   "split": "dev",
+   "required_sources": [
+    "knowledge"
+   ],
+   "acceptable_intents": [
+    "research",
+    "clarification"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得声称本工作区没有相关资料",
+    "不得用通用知识替代原文依据"
+   ],
+   "catalog_hints": [
+    "int 值来处理自增 ID",
+    "2,147,483,647",
+    "MyBatisSystemException"
+   ],
+   "catalog_hint_origin": "cases_evidence",
+   "gold": [
+    2
+   ],
+   "evidence": [
+    "int 值来处理自增 ID",
+    "2,147,483,647",
+    "MyBatisSystemException"
+   ],
+   "notes": "真实问题逐字取自 benchmark/cases.json"
+  },
+  {
+   "id": "I-003",
+   "category": "internal",
+   "question": "以图搜图功能消耗 token 过多这个问题是怎么被发现和处理的？",
+   "source": "real",
+   "reused_case_id": "C03",
+   "reused_case_cat": "fact_lookup",
+   "constructed_parts": [],
+   "family": "gold:3",
+   "split": "holdout",
+   "required_sources": [
+    "knowledge"
+   ],
+   "acceptable_intents": [
+    "research",
+    "clarification"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得声称本工作区没有相关资料",
+    "不得用通用知识替代原文依据"
+   ],
+   "catalog_hints": [
+    "以图搜图",
+    "@刘江涛",
+    "注释"
+   ],
+   "catalog_hint_origin": "cases_evidence",
+   "gold": [
+    3
+   ],
+   "evidence": [
+    "以图搜图",
+    "@刘江涛",
+    "注释"
+   ],
+   "notes": "真实问题逐字取自 benchmark/cases.json"
+  },
+  {
+   "id": "I-004",
+   "category": "internal",
+   "question": "黑五期间用户侧的业务监控都覆盖了哪些模块？",
+   "source": "real",
+   "reused_case_id": "C04",
+   "reused_case_cat": "semantic",
+   "constructed_parts": [],
+   "family": "gold:4",
+   "split": "holdout",
+   "required_sources": [
+    "knowledge"
+   ],
+   "acceptable_intents": [
+    "research",
+    "clarification"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得声称本工作区没有相关资料",
+    "不得用通用知识替代原文依据"
+   ],
+   "catalog_hints": [
+    "用户礼品卡",
+    "用户心愿单",
+    "用户通知"
+   ],
+   "catalog_hint_origin": "cases_evidence",
+   "gold": [
+    4
+   ],
+   "evidence": [
+    "用户礼品卡",
+    "用户心愿单",
+    "用户通知"
+   ],
+   "notes": "真实问题逐字取自 benchmark/cases.json"
+  },
+  {
+   "id": "I-005",
+   "category": "internal",
+   "question": "第一次黑五两封营销邮件的转化率和带来的 GMV 分别是多少？",
+   "source": "real",
+   "reused_case_id": "C05",
+   "reused_case_cat": "numeric",
+   "constructed_parts": [],
+   "family": "gold:5",
+   "split": "dev",
+   "required_sources": [
+    "knowledge"
+   ],
+   "acceptable_intents": [
+    "research",
+    "clarification"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得声称本工作区没有相关资料",
+    "不得用通用知识替代原文依据"
+   ],
+   "catalog_hints": [
+    "0.19%",
+    "$2604"
+   ],
+   "catalog_hint_origin": "cases_evidence",
+   "gold": [
+    5
+   ],
+   "evidence": [
+    "0.19%",
+    "$2604"
+   ],
+   "notes": "真实问题逐字取自 benchmark/cases.json"
+  },
+  {
+   "id": "I-006",
+   "category": "internal",
+   "question": "为什么 CI 自动生成接口文档时禁止用 Map 或 JSONObject 作为接口返回值？",
+   "source": "real",
+   "reused_case_id": "C06",
+   "reused_case_cat": "identifier",
+   "constructed_parts": [],
+   "family": "gold:6",
+   "split": "holdout",
+   "required_sources": [
+    "knowledge"
+   ],
+   "acceptable_intents": [
+    "research",
+    "clarification"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得声称本工作区没有相关资料",
+    "不得用通用知识替代原文依据"
+   ],
+   "catalog_hints": [
+    "map 的键值无法分析",
+    "JSONObject"
+   ],
+   "catalog_hint_origin": "cases_evidence",
+   "gold": [
+    6
+   ],
+   "evidence": [
+    "map 的键值无法分析",
+    "JSONObject"
+   ],
+   "notes": "真实问题逐字取自 benchmark/cases.json"
+  },
+  {
+   "id": "I-007",
+   "category": "internal",
+   "question": "接入 yapidoc-maven-plugin 时 yapiUrl 要配置成什么地址？",
+   "source": "real",
+   "reused_case_id": "C07",
+   "reused_case_cat": "identifier",
+   "constructed_parts": [],
+   "family": "gold:7",
+   "split": "holdout",
+   "required_sources": [
+    "knowledge"
+   ],
+   "acceptable_intents": [
+    "research",
+    "clarification"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得声称本工作区没有相关资料",
+    "不得用通用知识替代原文依据"
+   ],
+   "catalog_hints": [
+    "yapidoc-maven-plugin",
+    "http://yapi.shopcider.cn/"
+   ],
+   "catalog_hint_origin": "cases_evidence",
+   "gold": [
+    7
+   ],
+   "evidence": [
+    "yapidoc-maven-plugin",
+    "http://yapi.shopcider.cn/"
+   ],
+   "notes": "真实问题逐字取自 benchmark/cases.json"
+  },
+  {
+   "id": "I-008",
+   "category": "internal",
+   "question": "RocketMQ 批量消费消息时，一次最多消费多少条是怎么设置的？",
+   "source": "real",
+   "reused_case_id": "C08",
+   "reused_case_cat": "identifier",
+   "constructed_parts": [],
+   "family": "gold:8",
+   "split": "dev",
+   "required_sources": [
+    "knowledge"
+   ],
+   "acceptable_intents": [
+    "research",
+    "clarification"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得声称本工作区没有相关资料",
+    "不得用通用知识替代原文依据"
+   ],
+   "catalog_hints": [
+    "setConsumeMessageBatchMaxSize(32)",
+    "MessageListenerConcurrently"
+   ],
+   "catalog_hint_origin": "cases_evidence",
+   "gold": [
+    8
+   ],
+   "evidence": [
+    "setConsumeMessageBatchMaxSize(32)",
+    "MessageListenerConcurrently"
+   ],
+   "notes": "真实问题逐字取自 benchmark/cases.json"
+  },
+  {
+   "id": "I-009",
+   "category": "internal",
+   "question": "TikTokShop 商详自动填充功能上线后，累计给运营省了多少时间？",
+   "source": "real",
+   "reused_case_id": "C09",
+   "reused_case_cat": "numeric",
+   "constructed_parts": [],
+   "family": "gold:9",
+   "split": "dev",
+   "required_sources": [
+    "knowledge"
+   ],
+   "acceptable_intents": [
+    "research",
+    "clarification"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得声称本工作区没有相关资料",
+    "不得用通用知识替代原文依据"
+   ],
+   "catalog_hints": [
+    "1500+ SPU",
+    "250 小时"
+   ],
+   "catalog_hint_origin": "cases_evidence",
+   "gold": [
+    9
+   ],
+   "evidence": [
+    "1500+ SPU",
+    "250 小时"
+   ],
+   "notes": "真实问题逐字取自 benchmark/cases.json"
+  },
+  {
+   "id": "I-010",
+   "category": "internal",
+   "question": "对接 Amazon 时为什么最后改用 CSV 传品而不用 API？",
+   "source": "real",
+   "reused_case_id": "C10",
+   "reused_case_cat": "fact_lookup",
+   "constructed_parts": [],
+   "family": "gold:10",
+   "split": "dev",
+   "required_sources": [
+    "knowledge"
+   ],
+   "acceptable_intents": [
+    "research",
+    "clarification"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得声称本工作区没有相关资料",
+    "不得用通用知识替代原文依据"
+   ],
+   "catalog_hints": [
+    "edge case",
+    "csv"
+   ],
+   "catalog_hint_origin": "cases_evidence",
+   "gold": [
+    10
+   ],
+   "evidence": [
+    "edge case",
+    "csv"
+   ],
+   "notes": "真实问题逐字取自 benchmark/cases.json"
+  },
+  {
+   "id": "I-011",
+   "category": "internal",
+   "question": "chatbot 用户提问分析里，msg_analysis 类型返回的 json 包含哪些字段？",
+   "source": "real",
+   "reused_case_id": "C11",
+   "reused_case_cat": "identifier",
+   "constructed_parts": [],
+   "family": "gold:11",
+   "split": "holdout",
+   "required_sources": [
+    "knowledge"
+   ],
+   "acceptable_intents": [
+    "research",
+    "clarification"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得声称本工作区没有相关资料",
+    "不得用通用知识替代原文依据"
+   ],
+   "catalog_hints": [
+    "category_name",
+    "mood_point"
+   ],
+   "catalog_hint_origin": "cases_evidence",
+   "gold": [
+    11
+   ],
+   "evidence": [
+    "category_name",
+    "mood_point"
+   ],
+   "notes": "真实问题逐字取自 benchmark/cases.json"
+  },
+  {
+   "id": "I-012",
+   "category": "internal",
+   "question": "客服助手项目的前端仓库地址和开发分支名是什么？",
+   "source": "real",
+   "reused_case_id": "C12",
+   "reused_case_cat": "fact_lookup",
+   "constructed_parts": [],
+   "family": "gold:12",
+   "split": "holdout",
+   "required_sources": [
+    "knowledge"
+   ],
+   "acceptable_intents": [
+    "research",
+    "clarification"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得声称本工作区没有相关资料",
+    "不得用通用知识替代原文依据"
+   ],
+   "catalog_hints": [
+    "phoebe-web",
+    "vain/feat_客服助手"
+   ],
+   "catalog_hint_origin": "cases_evidence",
+   "gold": [
+    12
+   ],
+   "evidence": [
+    "phoebe-web",
+    "vain/feat_客服助手"
+   ],
+   "notes": "真实问题逐字取自 benchmark/cases.json"
+  },
+  {
+   "id": "I-013",
+   "category": "internal",
+   "question": "obsidian-article skill 的验收标准里，成稿归档到哪个目录？",
+   "source": "real",
+   "reused_case_id": "C13",
+   "reused_case_cat": "fact_lookup",
+   "constructed_parts": [],
+   "family": "gold:13",
+   "split": "holdout",
+   "required_sources": [
+    "knowledge"
+   ],
+   "acceptable_intents": [
+    "research",
+    "clarification"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得声称本工作区没有相关资料",
+    "不得用通用知识替代原文依据"
+   ],
+   "catalog_hints": [
+    "/article/{主题}/",
+    "素材不足时正确拒绝"
+   ],
+   "catalog_hint_origin": "cases_evidence",
+   "gold": [
+    13
+   ],
+   "evidence": [
+    "/article/{主题}/",
+    "素材不足时正确拒绝"
+   ],
+   "notes": "真实问题逐字取自 benchmark/cases.json"
+  },
+  {
+   "id": "I-014",
+   "category": "internal",
+   "question": "obsidian-article skill 里哪些路径可以由用户配置、哪些是固定写死的？",
+   "source": "real",
+   "reused_case_id": "C14",
+   "reused_case_cat": "semantic",
+   "constructed_parts": [],
+   "family": "gold:14",
+   "split": "dev",
+   "required_sources": [
+    "knowledge"
+   ],
+   "acceptable_intents": [
+    "research",
+    "clarification"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得声称本工作区没有相关资料",
+    "不得用通用知识替代原文依据"
+   ],
+   "catalog_hints": [
+    "article.config.yaml",
+    "输出目录固定为 /article"
+   ],
+   "catalog_hint_origin": "cases_evidence",
+   "gold": [
+    14
+   ],
+   "evidence": [
+    "article.config.yaml",
+    "输出目录固定为 /article"
+   ],
+   "notes": "真实问题逐字取自 benchmark/cases.json"
+  },
+  {
+   "id": "I-015",
+   "category": "internal",
+   "question": "Agent-Sentinel 的根因定位准确率是多少？为什么能做到这么高？",
+   "source": "real",
+   "reused_case_id": "C15",
+   "reused_case_cat": "numeric",
+   "constructed_parts": [],
+   "family": "gold:15",
+   "split": "dev",
+   "required_sources": [
+    "knowledge"
+   ],
+   "acceptable_intents": [
+    "research",
+    "clarification"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得声称本工作区没有相关资料",
+    "不得用通用知识替代原文依据"
+   ],
+   "catalog_hints": [
+    "90%",
+    "上下文足够丰富",
+    "提示词工程"
+   ],
+   "catalog_hint_origin": "cases_evidence",
+   "gold": [
+    15
+   ],
+   "evidence": [
+    "90%",
+    "上下文足够丰富",
+    "提示词工程"
+   ],
+   "notes": "真实问题逐字取自 benchmark/cases.json"
+  },
+  {
+   "id": "I-016",
+   "category": "internal",
+   "question": "Agent-Sentinel 未来计划接入哪些办公软件和云厂商？",
+   "source": "real",
+   "reused_case_id": "C16",
+   "reused_case_cat": "fact_lookup",
+   "constructed_parts": [],
+   "family": "gold:16",
+   "split": "dev",
+   "required_sources": [
+    "knowledge"
+   ],
+   "acceptable_intents": [
+    "research",
+    "clarification"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得声称本工作区没有相关资料",
+    "不得用通用知识替代原文依据"
+   ],
+   "catalog_hints": [
+    "企微、钉钉、Slack",
+    "AWS、Azure"
+   ],
+   "catalog_hint_origin": "cases_evidence",
+   "gold": [
+    16
+   ],
+   "evidence": [
+    "企微、钉钉、Slack",
+    "AWS、Azure"
+   ],
+   "notes": "真实问题逐字取自 benchmark/cases.json"
+  },
+  {
+   "id": "I-017",
+   "category": "internal",
+   "question": "芒格说如果在赌桌上你不知道谁是傻瓜，这句话是什么意思？",
+   "source": "real",
+   "reused_case_id": "C17",
+   "reused_case_cat": "semantic",
+   "constructed_parts": [],
+   "family": "gold:17",
+   "split": "holdout",
+   "required_sources": [
+    "knowledge"
+   ],
+   "acceptable_intents": [
+    "research",
+    "clarification"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得声称本工作区没有相关资料",
+    "不得用通用知识替代原文依据"
+   ],
+   "catalog_hints": [
+    "不知道谁是傻瓜，那么你就是"
+   ],
+   "catalog_hint_origin": "cases_evidence",
+   "gold": [
+    17
+   ],
+   "evidence": [
+    "不知道谁是傻瓜，那么你就是"
+   ],
+   "notes": "真实问题逐字取自 benchmark/cases.json"
+  },
+  {
+   "id": "I-018",
+   "category": "internal",
+   "question": "手里拿着铁锤的人看来世界就像一颗钉子，这句话在讲什么思维误区？",
+   "source": "real",
+   "reused_case_id": "C18",
+   "reused_case_cat": "semantic",
+   "constructed_parts": [],
+   "family": "gold:18",
+   "split": "dev",
+   "required_sources": [
+    "knowledge"
+   ],
+   "acceptable_intents": [
+    "research",
+    "clarification"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得声称本工作区没有相关资料",
+    "不得用通用知识替代原文依据"
+   ],
+   "catalog_hints": [
+    "只使用学过的一个学科的思维模型",
+    "分科越细，思维越窄"
+   ],
+   "catalog_hint_origin": "cases_evidence",
+   "gold": [
+    18
+   ],
+   "evidence": [
+    "只使用学过的一个学科的思维模型",
+    "分科越细，思维越窄"
+   ],
+   "notes": "真实问题逐字取自 benchmark/cases.json"
+  },
+  {
+   "id": "I-019",
+   "category": "internal",
+   "question": "广告策略引擎误操作事故中，bi_warehouse_dw_us_w2p_product_app_hourly 这张表出了什么问题？",
+   "source": "real",
+   "reused_case_id": "C19",
+   "reused_case_cat": "identifier",
+   "constructed_parts": [],
+   "family": "gold:19",
+   "split": "dev",
+   "required_sources": [
+    "knowledge"
+   ],
+   "acceptable_intents": [
+    "research",
+    "clarification"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得声称本工作区没有相关资料",
+    "不得用通用知识替代原文依据"
+   ],
+   "catalog_hints": [
+    "bi_warehouse_dw_us_w2p_product_app_hourly",
+    "9号之后数据没了"
+   ],
+   "catalog_hint_origin": "cases_evidence",
+   "gold": [
+    19
+   ],
+   "evidence": [
+    "bi_warehouse_dw_us_w2p_product_app_hourly",
+    "9号之后数据没了"
+   ],
+   "notes": "真实问题逐字取自 benchmark/cases.json"
+  },
+  {
+   "id": "I-020",
+   "category": "internal",
+   "question": "广告策略引擎事故复盘后，apollo 配置发布流程加了什么约束？",
+   "source": "real",
+   "reused_case_id": "C20",
+   "reused_case_cat": "fact_lookup",
+   "constructed_parts": [],
+   "family": "gold:20",
+   "split": "holdout",
+   "required_sources": [
+    "knowledge"
+   ],
+   "acceptable_intents": [
+    "research",
+    "clarification"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得声称本工作区没有相关资料",
+    "不得用通用知识替代原文依据"
+   ],
+   "catalog_hints": [
+    "给apollo里的每个配置加上注释",
+    "@赵凯 Kai approve"
+   ],
+   "catalog_hint_origin": "cases_evidence",
+   "gold": [
+    20
+   ],
+   "evidence": [
+    "给apollo里的每个配置加上注释",
+    "@赵凯 Kai approve"
+   ],
+   "notes": "真实问题逐字取自 benchmark/cases.json"
+  },
+  {
+   "id": "I-021",
+   "category": "internal",
+   "question": "一般性转移支付和专项转移支付的区别是什么？",
+   "source": "real",
+   "reused_case_id": "C21",
+   "reused_case_cat": "definition",
+   "constructed_parts": [],
+   "family": "gold:21",
+   "split": "dev",
+   "required_sources": [
+    "knowledge"
+   ],
+   "acceptable_intents": [
+    "research",
+    "clarification"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得声称本工作区没有相关资料",
+    "不得用通用知识替代原文依据"
+   ],
+   "catalog_hints": [
+    "均衡性转移支付",
+    "专款专用",
+    "四成"
+   ],
+   "catalog_hint_origin": "cases_evidence",
+   "gold": [
+    21
+   ],
+   "evidence": [
+    "均衡性转移支付",
+    "专款专用",
+    "四成"
+   ],
+   "notes": "真实问题逐字取自 benchmark/cases.json"
+  },
+  {
+   "id": "I-022",
+   "category": "internal",
+   "question": "1994 年分税制改革的背景是什么，文章说的鞭打快牛核心矛盾指什么？",
+   "source": "real",
+   "reused_case_id": "C22",
+   "reused_case_cat": "semantic",
+   "constructed_parts": [],
+   "family": "gold:22",
+   "split": "holdout",
+   "required_sources": [
+    "knowledge"
+   ],
+   "acceptable_intents": [
+    "research",
+    "clarification"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得声称本工作区没有相关资料",
+    "不得用通用知识替代原文依据"
+   ],
+   "catalog_hints": [
+    "1994 年分税制改革",
+    "鞭打快牛",
+    "惩罚优秀，纵容平庸"
+   ],
+   "catalog_hint_origin": "cases_evidence",
+   "gold": [
+    22
+   ],
+   "evidence": [
+    "1994 年分税制改革",
+    "鞭打快牛",
+    "惩罚优秀，纵容平庸"
+   ],
+   "notes": "真实问题逐字取自 benchmark/cases.json"
+  },
+  {
+   "id": "I-023",
+   "category": "internal",
+   "question": "弗洛伊德理论中，压抑、未被压抑和升华这三种情况分别导向什么心理结果？",
+   "source": "real",
+   "reused_case_id": "C23",
+   "reused_case_cat": "semantic",
+   "constructed_parts": [],
+   "family": "gold:23",
+   "split": "dev",
+   "required_sources": [
+    "knowledge"
+   ],
+   "acceptable_intents": [
+    "research",
+    "clarification"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得声称本工作区没有相关资料",
+    "不得用通用知识替代原文依据"
+   ],
+   "catalog_hints": [
+    "神经官能症",
+    "性变态",
+    "正常"
+   ],
+   "catalog_hint_origin": "cases_evidence",
+   "gold": [
+    23
+   ],
+   "evidence": [
+    "神经官能症",
+    "性变态",
+    "正常"
+   ],
+   "notes": "真实问题逐字取自 benchmark/cases.json"
+  },
+  {
+   "id": "I-024",
+   "category": "internal",
+   "question": "弗洛伊德说的夸大（exaggeration）在性心理发展里具体指什么？",
+   "source": "real",
+   "reused_case_id": "C24",
+   "reused_case_cat": "definition",
+   "constructed_parts": [],
+   "family": "gold:24",
+   "split": "holdout",
+   "required_sources": [
+    "knowledge"
+   ],
+   "acceptable_intents": [
+    "research",
+    "clarification"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得声称本工作区没有相关资料",
+    "不得用通用知识替代原文依据"
+   ],
+   "catalog_hints": [
+    "过度的力比多投注",
+    "hypercathexis"
+   ],
+   "catalog_hint_origin": "cases_evidence",
+   "gold": [
+    24
+   ],
+   "evidence": [
+    "过度的力比多投注",
+    "hypercathexis"
+   ],
+   "notes": "真实问题逐字取自 benchmark/cases.json"
+  },
+  {
+   "id": "I-025",
+   "category": "internal",
+   "question": "城投公司是什么，地方政府为什么要靠它来借钱？",
+   "source": "real",
+   "reused_case_id": "C25",
+   "reused_case_cat": "definition",
+   "constructed_parts": [],
+   "family": "gold:25",
+   "split": "holdout",
+   "required_sources": [
+    "knowledge"
+   ],
+   "acceptable_intents": [
+    "research",
+    "clarification"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得声称本工作区没有相关资料",
+    "不得用通用知识替代原文依据"
+   ],
+   "catalog_hints": [
+    "城市建设投资公司",
+    "科斯",
+    "15 万亿"
+   ],
+   "catalog_hint_origin": "cases_evidence",
+   "gold": [
+    25
+   ],
+   "evidence": [
+    "城市建设投资公司",
+    "科斯",
+    "15 万亿"
+   ],
+   "notes": "真实问题逐字取自 benchmark/cases.json"
+  },
+  {
+   "id": "I-026",
+   "category": "internal",
+   "question": "土地财政是怎么形成的，地方政府为什么没有动力压低地价？",
+   "source": "real",
+   "reused_case_id": "C26",
+   "reused_case_cat": "semantic",
+   "constructed_parts": [],
+   "family": "gold:26",
+   "split": "dev",
+   "required_sources": [
+    "knowledge"
+   ],
+   "acceptable_intents": [
+    "research",
+    "clarification"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得声称本工作区没有相关资料",
+    "不得用通用知识替代原文依据"
+   ],
+   "catalog_hints": [
+    "压低工业用地价格招商",
+    "收紧商住用地指标",
+    "土地出让金"
+   ],
+   "catalog_hint_origin": "cases_evidence",
+   "gold": [
+    26
+   ],
+   "evidence": [
+    "压低工业用地价格招商",
+    "收紧商住用地指标",
+    "土地出让金"
+   ],
+   "notes": "真实问题逐字取自 benchmark/cases.json"
+  },
+  {
+   "id": "I-027",
+   "category": "internal",
+   "question": "首单加深项目里 1.7 亿行的订单表造成了什么问题，优化后接口耗时降到多少？",
+   "source": "real",
+   "reused_case_id": "C27",
+   "reused_case_cat": "numeric",
+   "constructed_parts": [],
+   "family": "gold:27",
+   "split": "dev",
+   "required_sources": [
+    "knowledge"
+   ],
+   "acceptable_intents": [
+    "research",
+    "clarification"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得声称本工作区没有相关资料",
+    "不得用通用知识替代原文依据"
+   ],
+   "catalog_hints": [
+    "1.7 亿行",
+    "物化视图"
+   ],
+   "catalog_hint_origin": "cases_evidence",
+   "gold": [
+    27
+   ],
+   "evidence": [
+    "1.7 亿行",
+    "物化视图"
+   ],
+   "notes": "真实问题逐字取自 benchmark/cases.json"
+  },
+  {
+   "id": "I-028",
+   "category": "internal",
+   "question": "作者说先立口径基线再谈优化，这句话是什么意思？",
+   "source": "real",
+   "reused_case_id": "C28",
+   "reused_case_cat": "semantic",
+   "constructed_parts": [],
+   "family": "gold:28",
+   "split": "dev",
+   "required_sources": [
+    "knowledge"
+   ],
+   "acceptable_intents": [
+    "research",
+    "clarification"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得声称本工作区没有相关资料",
+    "不得用通用知识替代原文依据"
+   ],
+   "catalog_hints": [
+    "先立口径基线，再谈优化",
+    "任何优化都在改变数据的投影方式"
+   ],
+   "catalog_hint_origin": "cases_evidence",
+   "gold": [
+    28
+   ],
+   "evidence": [
+    "先立口径基线，再谈优化",
+    "任何优化都在改变数据的投影方式"
+   ],
+   "notes": "真实问题逐字取自 benchmark/cases.json"
+  },
+  {
+   "id": "I-029",
+   "category": "internal",
+   "question": "OMS 切面偶发失效的问题，当时的临时解决办法是什么？",
+   "source": "real",
+   "reused_case_id": "C29",
+   "reused_case_cat": "fact_lookup",
+   "constructed_parts": [],
+   "family": "gold:29",
+   "split": "dev",
+   "required_sources": [
+    "knowledge"
+   ],
+   "acceptable_intents": [
+    "research",
+    "clarification"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得声称本工作区没有相关资料",
+    "不得用通用知识替代原文依据"
+   ],
+   "catalog_hints": [
+    "把两个缓存都清除重跑",
+    "CHashMAP"
+   ],
+   "catalog_hint_origin": "cases_evidence",
+   "gold": [
+    29
+   ],
+   "evidence": [
+    "把两个缓存都清除重跑",
+    "CHashMAP"
+   ],
+   "notes": "真实问题逐字取自 benchmark/cases.json"
+  },
+  {
+   "id": "I-030",
+   "category": "internal",
+   "question": "OMS 切面问题最终拿到堆栈后，报的是什么异常，涉及哪两个方法？",
+   "source": "real",
+   "reused_case_id": "C30",
+   "reused_case_cat": "identifier",
+   "constructed_parts": [],
+   "family": "gold:30",
+   "split": "dev",
+   "required_sources": [
+    "knowledge"
+   ],
+   "acceptable_intents": [
+    "research",
+    "clarification"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得声称本工作区没有相关资料",
+    "不得用通用知识替代原文依据"
+   ],
+   "catalog_hints": [
+    "空指针",
+    "getDeclaredMethods",
+    "parameterizedWith"
+   ],
+   "catalog_hint_origin": "cases_evidence",
+   "gold": [
+    30
+   ],
+   "evidence": [
+    "空指针",
+    "getDeclaredMethods",
+    "parameterizedWith"
+   ],
+   "notes": "真实问题逐字取自 benchmark/cases.json"
+  },
+  {
+   "id": "I-031",
+   "category": "internal",
+   "question": "使用 R8 混淆后 APK 体积从多少降到多少，有什么副作用？",
+   "source": "real",
+   "reused_case_id": "C31",
+   "reused_case_cat": "numeric",
+   "constructed_parts": [],
+   "family": "gold:31",
+   "split": "dev",
+   "required_sources": [
+    "knowledge"
+   ],
+   "acceptable_intents": [
+    "research",
+    "clarification"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得声称本工作区没有相关资料",
+    "不得用通用知识替代原文依据"
+   ],
+   "catalog_hints": [
+    "70.1MB --> 63MB",
+    "Flutter相关的部份功能存在不可用",
+    "Firebase"
+   ],
+   "catalog_hint_origin": "cases_evidence",
+   "gold": [
+    31
+   ],
+   "evidence": [
+    "70.1MB --> 63MB",
+    "Flutter相关的部份功能存在不可用",
+    "Firebase"
+   ],
+   "notes": "真实问题逐字取自 benchmark/cases.json"
+  },
+  {
+   "id": "I-032",
+   "category": "internal",
+   "question": "AAB（Android App Bundle）是什么，它怎么解决不同 ab 架构的包体积问题？",
+   "source": "real",
+   "reused_case_id": "C32",
+   "reused_case_cat": "definition",
+   "constructed_parts": [],
+   "family": "gold:32",
+   "split": "dev",
+   "required_sources": [
+    "knowledge"
+   ],
+   "acceptable_intents": [
+    "research",
+    "clarification"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得声称本工作区没有相关资料",
+    "不得用通用知识替代原文依据"
+   ],
+   "catalog_hints": [
+    "Android APP Bundle",
+    ".aab",
+    "Google Play会按照用户机型的ab架构"
+   ],
+   "catalog_hint_origin": "cases_evidence",
+   "gold": [
+    32
+   ],
+   "evidence": [
+    "Android APP Bundle",
+    ".aab",
+    "Google Play会按照用户机型的ab架构"
+   ],
+   "notes": "真实问题逐字取自 benchmark/cases.json"
+  },
+  {
+   "id": "I-033",
+   "category": "internal",
+   "question": "星链系统是给哪个客户做的供应链项目，MPS 模块投入了多少人力？",
+   "source": "real",
+   "reused_case_id": "C33",
+   "reused_case_cat": "fact_lookup",
+   "constructed_parts": [],
+   "family": "gold:33",
+   "split": "dev",
+   "required_sources": [
+    "knowledge"
+   ],
+   "acceptable_intents": [
+    "research",
+    "clarification"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得声称本工作区没有相关资料",
+    "不得用通用知识替代原文依据"
+   ],
+   "catalog_hints": [
+    "百威",
+    "星链系统",
+    "4 个实习生"
+   ],
+   "catalog_hint_origin": "cases_evidence",
+   "gold": [
+    33
+   ],
+   "evidence": [
+    "百威",
+    "星链系统",
+    "4 个实习生"
+   ],
+   "notes": "真实问题逐字取自 benchmark/cases.json"
+  },
+  {
+   "id": "I-034",
+   "category": "internal",
+   "question": "面试结尾反问环节，文档建议向面试官提哪些问题？",
+   "source": "real",
+   "reused_case_id": "C34",
+   "reused_case_cat": "semantic",
+   "constructed_parts": [],
+   "family": "gold:34",
+   "split": "dev",
+   "required_sources": [
+    "knowledge"
+   ],
+   "acceptable_intents": [
+    "research",
+    "clarification"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得声称本工作区没有相关资料",
+    "不得用通用知识替代原文依据"
+   ],
+   "catalog_hints": [
+    "这个岗位需要招聘一个什么样的人",
+    "CTO 或者技术主管"
+   ],
+   "catalog_hint_origin": "cases_evidence",
+   "gold": [
+    34
+   ],
+   "evidence": [
+    "这个岗位需要招聘一个什么样的人",
+    "CTO 或者技术主管"
+   ],
+   "notes": "真实问题逐字取自 benchmark/cases.json"
+  },
+  {
+   "id": "I-035",
+   "category": "internal",
+   "question": "文档里说的遗留代码重构中的鸡生蛋蛋生鸡问题指的是什么？",
+   "source": "real",
+   "reused_case_id": "C35",
+   "reused_case_cat": "semantic",
+   "constructed_parts": [],
+   "family": "gold:35",
+   "split": "dev",
+   "required_sources": [
+    "knowledge"
+   ],
+   "acceptable_intents": [
+    "research",
+    "clarification"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得声称本工作区没有相关资料",
+    "不得用通用知识替代原文依据"
+   ],
+   "catalog_hints": [
+    "重构的时候，发现没有测试",
+    "代码不可测"
+   ],
+   "catalog_hint_origin": "cases_evidence",
+   "gold": [
+    35
+   ],
+   "evidence": [
+    "重构的时候，发现没有测试",
+    "代码不可测"
+   ],
+   "notes": "真实问题逐字取自 benchmark/cases.json"
+  },
+  {
+   "id": "I-036",
+   "category": "internal",
+   "question": "SPM 的拼接规则是什么，举例说明 8.1005482.10003.2 各段代表什么？",
+   "source": "real",
+   "reused_case_id": "C36",
+   "reused_case_cat": "identifier",
+   "constructed_parts": [],
+   "family": "gold:36",
+   "split": "dev",
+   "required_sources": [
+    "knowledge"
+   ],
+   "acceptable_intents": [
+    "research",
+    "clarification"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得声称本工作区没有相关资料",
+    "不得用通用知识替代原文依据"
+   ],
+   "catalog_hints": [
+    "${siteId}.${pageId}.${sectionId}.${clickPosition}",
+    "10003",
+    "第二个点位"
+   ],
+   "catalog_hint_origin": "cases_evidence",
+   "gold": [
+    36
+   ],
+   "evidence": [
+    "${siteId}.${pageId}.${sectionId}.${clickPosition}",
+    "10003",
+    "第二个点位"
+   ],
+   "notes": "真实问题逐字取自 benchmark/cases.json"
+  },
+  {
+   "id": "I-037",
+   "category": "internal",
+   "question": "埋点后台创建事件时，事件需要定义哪些字段？",
+   "source": "real",
+   "reused_case_id": "C37",
+   "reused_case_cat": "identifier",
+   "constructed_parts": [],
+   "family": "gold:37",
+   "split": "dev",
+   "required_sources": [
+    "knowledge"
+   ],
+   "acceptable_intents": [
+    "research",
+    "clarification"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得声称本工作区没有相关资料",
+    "不得用通用知识替代原文依据"
+   ],
+   "catalog_hints": [
+    "eventType",
+    "eventName",
+    "triggerTime",
+    "reportingRule"
+   ],
+   "catalog_hint_origin": "cases_evidence",
+   "gold": [
+    37
+   ],
+   "evidence": [
+    "eventType",
+    "eventName",
+    "triggerTime",
+    "reportingRule"
+   ],
+   "notes": "真实问题逐字取自 benchmark/cases.json"
+  },
+  {
+   "id": "I-038",
+   "category": "internal",
+   "question": "PC 搜索异常事故中，key_word_type 参数上报存在什么问题？",
+   "source": "real",
+   "reused_case_id": "C38",
+   "reused_case_cat": "identifier",
+   "constructed_parts": [],
+   "family": "gold:38",
+   "split": "dev",
+   "required_sources": [
+    "knowledge"
+   ],
+   "acceptable_intents": [
+    "research",
+    "clarification"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得声称本工作区没有相关资料",
+    "不得用通用知识替代原文依据"
+   ],
+   "catalog_hints": [
+    "key_word_type",
+    "上报存在多份",
+    "回滚"
+   ],
+   "catalog_hint_origin": "cases_evidence",
+   "gold": [
+    38
+   ],
+   "evidence": [
+    "key_word_type",
+    "上报存在多份",
+    "回滚"
+   ],
+   "notes": "真实问题逐字取自 benchmark/cases.json"
+  },
+  {
+   "id": "I-039",
+   "category": "internal",
+   "question": "置身事内这本书里，中央和地方各自掌握哪些权力和优势？",
+   "source": "real",
+   "reused_case_id": "C39",
+   "reused_case_cat": "semantic",
+   "constructed_parts": [],
+   "family": "gold:39",
+   "split": "dev",
+   "required_sources": [
+    "knowledge"
+   ],
+   "acceptable_intents": [
+    "research",
+    "clarification"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得声称本工作区没有相关资料",
+    "不得用通用知识替代原文依据"
+   ],
+   "catalog_hints": [
+    "任命权",
+    "信息优势",
+    "委托—代理问题"
+   ],
+   "catalog_hint_origin": "cases_evidence",
+   "gold": [
+    39
+   ],
+   "evidence": [
+    "任命权",
+    "信息优势",
+    "委托—代理问题"
+   ],
+   "notes": "真实问题逐字取自 benchmark/cases.json"
+  },
+  {
+   "id": "I-040",
+   "category": "internal",
+   "question": "cider 仓库的 CLAUDE.md 里提到自研系统包含哪些？",
+   "source": "real",
+   "reused_case_id": "C40",
+   "reused_case_cat": "semantic",
+   "constructed_parts": [],
+   "family": "gold:40",
+   "split": "holdout",
+   "required_sources": [
+    "knowledge"
+   ],
+   "acceptable_intents": [
+    "research",
+    "clarification"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得声称本工作区没有相关资料",
+    "不得用通用知识替代原文依据"
+   ],
+   "catalog_hints": [
+    "LiveChat platform replacing Twilio",
+    "custom recommendation engines"
+   ],
+   "catalog_hint_origin": "cases_evidence",
+   "gold": [
+    40
+   ],
+   "evidence": [
+    "LiveChat platform replacing Twilio",
+    "custom recommendation engines"
+   ],
+   "notes": "真实问题逐字取自 benchmark/cases.json"
+  },
+  {
+   "id": "I-041",
+   "category": "internal",
+   "question": "购物车分表分了多少张表，用的是什么哈希算法？",
+   "source": "real",
+   "reused_case_id": "C41",
+   "reused_case_cat": "numeric",
+   "constructed_parts": [],
+   "family": "gold:41",
+   "split": "holdout",
+   "required_sources": [
+    "knowledge"
+   ],
+   "acceptable_intents": [
+    "research",
+    "clarification"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得声称本工作区没有相关资料",
+    "不得用通用知识替代原文依据"
+   ],
+   "catalog_hints": [
+    "32 tables",
+    "MurmurHash"
+   ],
+   "catalog_hint_origin": "cases_evidence",
+   "gold": [
+    41
+   ],
+   "evidence": [
+    "32 tables",
+    "MurmurHash"
+   ],
+   "notes": "真实问题逐字取自 benchmark/cases.json"
+  },
+  {
+   "id": "I-042",
+   "category": "internal",
+   "question": "WMS 后段入库拆分二期独立部署上线时，是怎么控制上线风险的？",
+   "source": "real",
+   "reused_case_id": "C42",
+   "reused_case_cat": "semantic",
+   "constructed_parts": [],
+   "family": "gold:42",
+   "split": "dev",
+   "required_sources": [
+    "knowledge"
+   ],
+   "acceptable_intents": [
+    "research",
+    "clarification"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得声称本工作区没有相关资料",
+    "不得用通用知识替代原文依据"
+   ],
+   "catalog_hints": [
+    "先把 在库稽查 独立上线",
+    "权限网关",
+    "10分钟内的回滚"
+   ],
+   "catalog_hint_origin": "cases_evidence",
+   "gold": [
+    42
+   ],
+   "evidence": [
+    "先把 在库稽查 独立上线",
+    "权限网关",
+    "10分钟内的回滚"
+   ],
+   "notes": "真实问题逐字取自 benchmark/cases.json"
+  },
+  {
+   "id": "I-043",
+   "category": "internal",
+   "question": "影响力这本书里讲的拒绝后撤策略是什么？",
+   "source": "real",
+   "reused_case_id": "C43",
+   "reused_case_cat": "definition",
+   "constructed_parts": [],
+   "family": "gold:43",
+   "split": "dev",
+   "required_sources": [
+    "knowledge"
+   ],
+   "acceptable_intents": [
+    "research",
+    "clarification"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得声称本工作区没有相关资料",
+    "不得用通用知识替代原文依据"
+   ],
+   "catalog_hints": [
+    "拒绝回撤策略",
+    "提一个大些的要求",
+    "退而其次的较小要求"
+   ],
+   "catalog_hint_origin": "cases_evidence",
+   "gold": [
+    43
+   ],
+   "evidence": [
+    "拒绝回撤策略",
+    "提一个大些的要求",
+    "退而其次的较小要求"
+   ],
+   "notes": "真实问题逐字取自 benchmark/cases.json"
+  },
+  {
+   "id": "I-044",
+   "category": "internal",
+   "question": "影响力里提到的认知吝啬、锚定效应，还列举了哪些思维惯式？",
+   "source": "real",
+   "reused_case_id": "C44",
+   "reused_case_cat": "semantic",
+   "constructed_parts": [],
+   "family": "gold:44",
+   "split": "dev",
+   "required_sources": [
+    "knowledge"
+   ],
+   "acceptable_intents": [
+    "research",
+    "clarification"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得声称本工作区没有相关资料",
+    "不得用通用知识替代原文依据"
+   ],
+   "catalog_hints": [
+    "贵就是好",
+    "拆屋效应",
+    "社会认同原则"
+   ],
+   "catalog_hint_origin": "cases_evidence",
+   "gold": [
+    44
+   ],
+   "evidence": [
+    "贵就是好",
+    "拆屋效应",
+    "社会认同原则"
+   ],
+   "notes": "真实问题逐字取自 benchmark/cases.json"
+  },
+  {
+   "id": "I-045",
+   "category": "internal",
+   "question": "针对新加坡爬虫调小接口阈值后，ctr 和 session 分别降到多少？",
+   "source": "real",
+   "reused_case_id": "C45",
+   "reused_case_cat": "numeric",
+   "constructed_parts": [],
+   "family": "gold:45",
+   "split": "dev",
+   "required_sources": [
+    "knowledge"
+   ],
+   "acceptable_intents": [
+    "research",
+    "clarification"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得声称本工作区没有相关资料",
+    "不得用通用知识替代原文依据"
+   ],
+   "catalog_hints": [
+    "358%",
+    "30+%",
+    "2k+",
+    "22"
+   ],
+   "catalog_hint_origin": "cases_evidence",
+   "gold": [
+    45
+   ],
+   "evidence": [
+    "358%",
+    "30+%",
+    "2k+",
+    "22"
+   ],
+   "notes": "真实问题逐字取自 benchmark/cases.json"
+  },
+  {
+   "id": "I-046",
+   "category": "internal",
+   "question": "人机识别 v3 给出风险分 0.7 但没有被拉黑的用户，用的是什么机型？",
+   "source": "real",
+   "reused_case_id": "C46",
+   "reused_case_cat": "identifier",
+   "constructed_parts": [],
+   "family": "gold:46",
+   "split": "dev",
+   "required_sources": [
+    "knowledge"
+   ],
+   "acceptable_intents": [
+    "research",
+    "clarification"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得声称本工作区没有相关资料",
+    "不得用通用知识替代原文依据"
+   ],
+   "catalog_hints": [
+    "vivo 1920",
+    "Android 11",
+    "CiderAPP(Android/2.26.1)"
+   ],
+   "catalog_hint_origin": "cases_evidence",
+   "gold": [
+    46
+   ],
+   "evidence": [
+    "vivo 1920",
+    "Android 11",
+    "CiderAPP(Android/2.26.1)"
+   ],
+   "notes": "真实问题逐字取自 benchmark/cases.json"
+  },
+  {
+   "id": "I-047",
+   "category": "internal",
+   "question": "客服 Agent 的会话工作空间隔离是怎么实现的？",
+   "source": "real",
+   "reused_case_id": "C47",
+   "reused_case_cat": "semantic",
+   "constructed_parts": [],
+   "family": "gold:47",
+   "split": "holdout",
+   "required_sources": [
+    "knowledge"
+   ],
+   "acceptable_intents": [
+    "research",
+    "clarification"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得声称本工作区没有相关资料",
+    "不得用通用知识替代原文依据"
+   ],
+   "catalog_hints": [
+    "/workspace/session_123/",
+    "chat_history:session_123"
+   ],
+   "catalog_hint_origin": "cases_evidence",
+   "gold": [
+    47
+   ],
+   "evidence": [
+    "/workspace/session_123/",
+    "chat_history:session_123"
+   ],
+   "notes": "真实问题逐字取自 benchmark/cases.json"
+  },
+  {
+   "id": "I-048",
+   "category": "internal",
+   "question": "客服 Agent 怎么防止用户查到别人的订单信息？",
+   "source": "real",
+   "reused_case_id": "C48",
+   "reused_case_cat": "semantic",
+   "constructed_parts": [],
+   "family": "gold:48",
+   "split": "dev",
+   "required_sources": [
+    "knowledge"
+   ],
+   "acceptable_intents": [
+    "research",
+    "clarification"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得声称本工作区没有相关资料",
+    "不得用通用知识替代原文依据"
+   ],
+   "catalog_hints": [
+    "订单查询工具会自动验证订单所有权",
+    "用户 A 不能查用户 B 的订单"
+   ],
+   "catalog_hint_origin": "cases_evidence",
+   "gold": [
+    48
+   ],
+   "evidence": [
+    "订单查询工具会自动验证订单所有权",
+    "用户 A 不能查用户 B 的订单"
+   ],
+   "notes": "真实问题逐字取自 benchmark/cases.json"
+  },
+  {
+   "id": "I-049",
+   "category": "internal",
+   "question": "SKU 上架时间在五年前甚至十年前，首 30 天总销量统计不到该怎么处理？",
+   "source": "real",
+   "reused_case_id": "C49",
+   "reused_case_cat": "semantic",
+   "constructed_parts": [],
+   "family": "gold:49",
+   "split": "holdout",
+   "required_sources": [
+    "knowledge"
+   ],
+   "acceptable_intents": [
+    "research",
+    "clarification"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得声称本工作区没有相关资料",
+    "不得用通用知识替代原文依据"
+   ],
+   "catalog_hints": [
+    "shelf_date",
+    "兜底：基表计算",
+    "mv_sku_daily_sales"
+   ],
+   "catalog_hint_origin": "cases_evidence",
+   "gold": [
+    49
+   ],
+   "evidence": [
+    "shelf_date",
+    "兜底：基表计算",
+    "mv_sku_daily_sales"
+   ],
+   "notes": "真实问题逐字取自 benchmark/cases.json"
+  },
+  {
+   "id": "I-050",
+   "category": "internal",
+   "question": "物化视图跑出来的结果和原 SQL 有细微数据差异，可能是什么原因？",
+   "source": "real",
+   "reused_case_id": "C50",
+   "reused_case_cat": "semantic",
+   "constructed_parts": [],
+   "family": "gold:50",
+   "split": "dev",
+   "required_sources": [
+    "knowledge"
+   ],
+   "acceptable_intents": [
+    "research",
+    "clarification"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得声称本工作区没有相关资料",
+    "不得用通用知识替代原文依据"
+   ],
+   "catalog_hints": [
+    "inner join 造成丢单",
+    "时区问题",
+    "asia/shanghai"
+   ],
+   "catalog_hint_origin": "cases_evidence",
+   "gold": [
+    50
+   ],
+   "evidence": [
+    "inner join 造成丢单",
+    "时区问题",
+    "asia/shanghai"
+   ],
+   "notes": "真实问题逐字取自 benchmark/cases.json"
+  },
+  {
+   "id": "I-051",
+   "category": "internal",
+   "question": "Windows 上配置 claude 使用国产大模型，请求地址和主模型要填什么？",
+   "source": "real",
+   "reused_case_id": "C51",
+   "reused_case_cat": "identifier",
+   "constructed_parts": [],
+   "family": "gold:51",
+   "split": "dev",
+   "required_sources": [
+    "knowledge"
+   ],
+   "acceptable_intents": [
+    "research",
+    "clarification"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得声称本工作区没有相关资料",
+    "不得用通用知识替代原文依据"
+   ],
+   "catalog_hints": [
+    "cc-switch",
+    "https://api.deepseek.com/anthropic",
+    "deepseek-v4-pro[1M]"
+   ],
+   "catalog_hint_origin": "cases_evidence",
+   "gold": [
+    51
+   ],
+   "evidence": [
+    "cc-switch",
+    "https://api.deepseek.com/anthropic",
+    "deepseek-v4-pro[1M]"
+   ],
+   "notes": "真实问题逐字取自 benchmark/cases.json"
+  },
+  {
+   "id": "I-052",
+   "category": "internal",
+   "question": "电商为什么要用坑位归因，而不是靠单因素 AB 测试来评估改版效果？",
+   "source": "real",
+   "reused_case_id": "C52",
+   "reused_case_cat": "semantic",
+   "constructed_parts": [],
+   "family": "gold:52",
+   "split": "dev",
+   "required_sources": [
+    "knowledge"
+   ],
+   "acceptable_intents": [
+    "research",
+    "clarification"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得声称本工作区没有相关资料",
+    "不得用通用知识替代原文依据"
+   ],
+   "catalog_hints": [
+    "单因素变量控制并不容易做到完全可控",
+    "评估 20 个坑位内容改变就需要 40 天"
+   ],
+   "catalog_hint_origin": "cases_evidence",
+   "gold": [
+    52
+   ],
+   "evidence": [
+    "单因素变量控制并不容易做到完全可控",
+    "评估 20 个坑位内容改变就需要 40 天"
+   ],
+   "notes": "真实问题逐字取自 benchmark/cases.json"
+  },
+  {
+   "id": "I-053",
+   "category": "internal",
+   "question": "只根据坑位归因的转化价值来评判坑位会有什么问题？",
+   "source": "real",
+   "reused_case_id": "C53",
+   "reused_case_cat": "semantic",
+   "constructed_parts": [],
+   "family": "gold:53",
+   "split": "holdout",
+   "required_sources": [
+    "knowledge"
+   ],
+   "acceptable_intents": [
+    "research",
+    "clarification"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得声称本工作区没有相关资料",
+    "不得用通用知识替代原文依据"
+   ],
+   "catalog_hints": [
+    "短期偏见",
+    "产品价值定位"
+   ],
+   "catalog_hint_origin": "cases_evidence",
+   "gold": [
+    53
+   ],
+   "evidence": [
+    "短期偏见",
+    "产品价值定位"
+   ],
+   "notes": "真实问题逐字取自 benchmark/cases.json"
+  },
+  {
+   "id": "I-054",
+   "category": "internal",
+   "question": "PageHelper 为什么会带来数据安全问题，怎么避免？",
+   "source": "real",
+   "reused_case_id": "C54",
+   "reused_case_cat": "identifier",
+   "constructed_parts": [],
+   "family": "gold:54",
+   "split": "dev",
+   "required_sources": [
+    "knowledge"
+   ],
+   "acceptable_intents": [
+    "research",
+    "clarification"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得声称本工作区没有相关资料",
+    "不得用通用知识替代原文依据"
+   ],
+   "catalog_hints": [
+    "ThreadLocal",
+    "finally代码段中自动清除",
+    "紧跟MyBatis查询方法"
+   ],
+   "catalog_hint_origin": "cases_evidence",
+   "gold": [
+    54
+   ],
+   "evidence": [
+    "ThreadLocal",
+    "finally代码段中自动清除",
+    "紧跟MyBatis查询方法"
+   ],
+   "notes": "真实问题逐字取自 benchmark/cases.json"
+  },
+  {
+   "id": "I-055",
+   "category": "internal",
+   "question": "K8S 路由异常导致商品服务 503 的最终根因是什么？",
+   "source": "real",
+   "reused_case_id": "C55",
+   "reused_case_cat": "fact_lookup",
+   "constructed_parts": [],
+   "family": "gold:55",
+   "split": "dev",
+   "required_sources": [
+    "knowledge"
+   ],
+   "acceptable_intents": [
+    "research",
+    "clarification"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得声称本工作区没有相关资料",
+    "不得用通用知识替代原文依据"
+   ],
+   "catalog_hints": [
+    "pod 的label丢失",
+    "k8s的生产标签丢失",
+    "17:34"
+   ],
+   "catalog_hint_origin": "cases_evidence",
+   "gold": [
+    55
+   ],
+   "evidence": [
+    "pod 的label丢失",
+    "k8s的生产标签丢失",
+    "17:34"
+   ],
+   "notes": "真实问题逐字取自 benchmark/cases.json"
+  },
+  {
+   "id": "I-056",
+   "category": "internal",
+   "question": "星链系统里手动完成节点任务时，后端需要更新哪些字段？",
+   "source": "real",
+   "reused_case_id": "C56",
+   "reused_case_cat": "fact_lookup",
+   "constructed_parts": [],
+   "family": "gold:56",
+   "split": "dev",
+   "required_sources": [
+    "knowledge"
+   ],
+   "acceptable_intents": [
+    "research",
+    "clarification"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得声称本工作区没有相关资料",
+    "不得用通用知识替代原文依据"
+   ],
+   "catalog_hints": [
+    "实际完成人",
+    "任务状态",
+    "耗时",
+    "后继节点"
+   ],
+   "catalog_hint_origin": "cases_evidence",
+   "gold": [
+    56
+   ],
+   "evidence": [
+    "实际完成人",
+    "任务状态",
+    "耗时",
+    "后继节点"
+   ],
+   "notes": "真实问题逐字取自 benchmark/cases.json"
+  },
+  {
+   "id": "I-057",
+   "category": "internal",
+   "question": "青浦工厂原料排产时，原料和待包品混排的优先级是怎么定的？",
+   "source": "real",
+   "reused_case_id": "C57",
+   "reused_case_cat": "semantic",
+   "constructed_parts": [],
+   "family": "gold:57",
+   "split": "dev",
+   "required_sources": [
+    "knowledge"
+   ],
+   "acceptable_intents": [
+    "research",
+    "clarification"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得声称本工作区没有相关资料",
+    "不得用通用知识替代原文依据"
+   ],
+   "catalog_hints": [
+    "优先满足各个月的待包品",
+    "青浦复合物",
+    "SRM"
+   ],
+   "catalog_hint_origin": "cases_evidence",
+   "gold": [
+    57
+   ],
+   "evidence": [
+    "优先满足各个月的待包品",
+    "青浦复合物",
+    "SRM"
+   ],
+   "notes": "真实问题逐字取自 benchmark/cases.json"
+  },
+  {
+   "id": "I-058",
+   "category": "internal",
+   "question": "黑五期间 Redis reco 集群 0007 分片异常的原因是什么？",
+   "source": "real",
+   "reused_case_id": "C58",
+   "reused_case_cat": "fact_lookup",
+   "constructed_parts": [],
+   "family": "gold:58",
+   "split": "dev",
+   "required_sources": [
+    "knowledge"
+   ],
+   "acceptable_intents": [
+    "research",
+    "clarification"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得声称本工作区没有相关资料",
+    "不得用通用知识替代原文依据"
+   ],
+   "catalog_hints": [
+    "0007分片",
+    "网络带宽被打满",
+    "纵向扩容"
+   ],
+   "catalog_hint_origin": "cases_evidence",
+   "gold": [
+    58
+   ],
+   "evidence": [
+    "0007分片",
+    "网络带宽被打满",
+    "纵向扩容"
+   ],
+   "notes": "真实问题逐字取自 benchmark/cases.json"
+  },
+  {
+   "id": "I-059",
+   "category": "internal",
+   "question": "弗洛伊德说的自恋式地选择对象是什么意思？",
+   "source": "real",
+   "reused_case_id": "C59",
+   "reused_case_cat": "definition",
+   "constructed_parts": [],
+   "family": "gold:59",
+   "split": "dev",
+   "required_sources": [
+    "knowledge"
+   ],
+   "acceptable_intents": [
+    "research",
+    "clarification"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得声称本工作区没有相关资料",
+    "不得用通用知识替代原文依据"
+   ],
+   "catalog_hints": [
+    "人会爱上与自己有关的东西",
+    "理想中的自己",
+    "自我价值崩塌"
+   ],
+   "catalog_hint_origin": "cases_evidence",
+   "gold": [
+    59
+   ],
+   "evidence": [
+    "人会爱上与自己有关的东西",
+    "理想中的自己",
+    "自我价值崩塌"
+   ],
+   "notes": "真实问题逐字取自 benchmark/cases.json"
+  },
+  {
+   "id": "I-060",
+   "category": "internal",
+   "question": "chatbot 接入 Livechat 需要调用哪些第三方接口？",
+   "source": "real",
+   "reused_case_id": "C60",
+   "reused_case_cat": "identifier",
+   "constructed_parts": [],
+   "family": "gold:60",
+   "split": "dev",
+   "required_sources": [
+    "knowledge"
+   ],
+   "acceptable_intents": [
+    "research",
+    "clarification"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得声称本工作区没有相关资料",
+    "不得用通用知识替代原文依据"
+   ],
+   "catalog_hints": [
+    "/ms/oms/front/order-list/search",
+    "/ms/hades/logistics/v1/tracking/list",
+    "robot/transfer"
+   ],
+   "catalog_hint_origin": "cases_evidence",
+   "gold": [
+    60
+   ],
+   "evidence": [
+    "/ms/oms/front/order-list/search",
+    "/ms/hades/logistics/v1/tracking/list",
+    "robot/transfer"
+   ],
+   "notes": "真实问题逐字取自 benchmark/cases.json"
+  },
+  {
+   "id": "I-061",
+   "category": "internal",
+   "question": "我想问一下哈，就那个验证码邮件重复发的问题，到底是啥原因来着？",
+   "source": "real",
+   "reused_case_id": "Q01",
+   "reused_case_cat": "colloquial",
+   "constructed_parts": [],
+   "family": "gold:2",
+   "split": "dev",
+   "required_sources": [
+    "knowledge"
+   ],
+   "acceptable_intents": [
+    "research",
+    "clarification"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得声称本工作区没有相关资料",
+    "不得用通用知识替代原文依据"
+   ],
+   "catalog_hints": [
+    "int 值来处理自增 ID",
+    "MyBatisSystemException"
+   ],
+   "catalog_hint_origin": "cases_evidence",
+   "gold": [
+    2
+   ],
+   "evidence": [
+    "int 值来处理自增 ID",
+    "MyBatisSystemException"
+   ],
+   "notes": "真实问题逐字取自 benchmark/cases.json"
+  },
+  {
+   "id": "I-062",
+   "category": "internal",
+   "question": "请问一下 AAB 是什么？",
+   "source": "real",
+   "reused_case_id": "Q02",
+   "reused_case_cat": "definition",
+   "constructed_parts": [],
+   "family": "gold:32",
+   "split": "dev",
+   "required_sources": [
+    "knowledge"
+   ],
+   "acceptable_intents": [
+    "research",
+    "clarification"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得声称本工作区没有相关资料",
+    "不得用通用知识替代原文依据"
+   ],
+   "catalog_hints": [
+    "Android APP Bundle"
+   ],
+   "catalog_hint_origin": "cases_evidence",
+   "gold": [
+    32
+   ],
+   "evidence": [
+    "Android APP Bundle"
+   ],
+   "notes": "真实问题逐字取自 benchmark/cases.json"
+  },
+  {
+   "id": "I-063",
+   "category": "internal",
+   "question": "什么是 MVCC？",
+   "source": "real",
+   "reused_case_id": "Q03",
+   "reused_case_cat": "definition",
+   "constructed_parts": [],
+   "family": "gold:62",
+   "split": "dev",
+   "required_sources": [
+    "knowledge"
+   ],
+   "acceptable_intents": [
+    "research",
+    "clarification"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得声称本工作区没有相关资料",
+    "不得用通用知识替代原文依据"
+   ],
+   "catalog_hints": [
+    "多版本并发控制"
+   ],
+   "catalog_hint_origin": "cases_evidence",
+   "gold": [
+    62
+   ],
+   "evidence": [
+    "多版本并发控制"
+   ],
+   "notes": "真实问题逐字取自 benchmark/cases.json"
+  },
+  {
+   "id": "I-064",
+   "category": "internal",
+   "question": "我记得好像有个商品服务 503 的事故，是不是 k8s 的问题来着，最后怎么定位的？",
+   "source": "real",
+   "reused_case_id": "Q04",
+   "reused_case_cat": "colloquial",
+   "constructed_parts": [],
+   "family": "gold:55",
+   "split": "dev",
+   "required_sources": [
+    "knowledge"
+   ],
+   "acceptable_intents": [
+    "research",
+    "clarification"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得声称本工作区没有相关资料",
+    "不得用通用知识替代原文依据"
+   ],
+   "catalog_hints": [
+    "pod 的label丢失",
+    "灰度"
+   ],
+   "catalog_hint_origin": "cases_evidence",
+   "gold": [
+    55
+   ],
+   "evidence": [
+    "pod 的label丢失",
+    "灰度"
+   ],
+   "notes": "真实问题逐字取自 benchmark/cases.json"
+  },
+  {
+   "id": "I-065",
+   "category": "internal",
+   "question": "PageHelper 是什么，它的原理是什么？",
+   "source": "real",
+   "reused_case_id": "Q05",
+   "reused_case_cat": "definition",
+   "constructed_parts": [],
+   "family": "gold:54",
+   "split": "dev",
+   "required_sources": [
+    "knowledge"
+   ],
+   "acceptable_intents": [
+    "research",
+    "clarification"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得声称本工作区没有相关资料",
+    "不得用通用知识替代原文依据"
+   ],
+   "catalog_hints": [
+    "ThreadLocal",
+    "分页参数"
+   ],
+   "catalog_hint_origin": "cases_evidence",
+   "gold": [
+    54
+   ],
+   "evidence": [
+    "ThreadLocal",
+    "分页参数"
+   ],
+   "notes": "真实问题逐字取自 benchmark/cases.json"
+  },
+  {
+   "id": "M-001",
+   "category": "multi_source",
+   "question": "OMS 切面偶发失效问题从 5 月 26 日排查到 5 月 29 日拿到堆栈，整个过程是怎样的？",
+   "source": "real",
+   "reused_case_id": "M01",
+   "reused_case_cat": "multi_hop",
+   "constructed_parts": [],
+   "family": "gold:29,30",
+   "split": "holdout",
+   "required_sources": [
+    "knowledge"
+   ],
+   "acceptable_intents": [
+    "research",
+    "memory",
+    "clarification"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得声称本工作区没有相关资料",
+    "不得只凭单一来源就下结论",
+    "不得用通用知识替代原文依据"
+   ],
+   "catalog_hints": [
+    "CHashMAP",
+    "空指针",
+    "getDeclaredMethods"
+   ],
+   "catalog_hint_origin": "cases_evidence",
+   "gold": [
+    29,
+    30
+   ],
+   "evidence": [
+    "CHashMAP",
+    "空指针",
+    "getDeclaredMethods"
+   ],
+   "notes": "真实问题逐字取自 benchmark/cases.json（cat=multi_hop）"
+  },
+  {
+   "id": "M-002",
+   "category": "multi_source",
+   "question": "电商坑位归因方案的目的是什么，它又有什么局限性？",
+   "source": "real",
+   "reused_case_id": "M02",
+   "reused_case_cat": "multi_hop",
+   "constructed_parts": [],
+   "family": "gold:52,53",
+   "split": "holdout",
+   "required_sources": [
+    "knowledge"
+   ],
+   "acceptable_intents": [
+    "research",
+    "memory",
+    "clarification"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得声称本工作区没有相关资料",
+    "不得只凭单一来源就下结论",
+    "不得用通用知识替代原文依据"
+   ],
+   "catalog_hints": [
+    "坑位",
+    "短期偏见"
+   ],
+   "catalog_hint_origin": "cases_evidence",
+   "gold": [
+    52,
+    53
+   ],
+   "evidence": [
+    "坑位",
+    "短期偏见"
+   ],
+   "notes": "真实问题逐字取自 benchmark/cases.json（cat=multi_hop）"
+  },
+  {
+   "id": "M-003",
+   "category": "multi_source",
+   "question": "Cider Android 包体积优化针对资源和处理架构分别采取了什么手段？",
+   "source": "real",
+   "reused_case_id": "M03",
+   "reused_case_cat": "multi_hop",
+   "constructed_parts": [],
+   "family": "gold:31,32",
+   "split": "dev",
+   "required_sources": [
+    "knowledge"
+   ],
+   "acceptable_intents": [
+    "research",
+    "memory",
+    "clarification"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得声称本工作区没有相关资料",
+    "不得只凭单一来源就下结论",
+    "不得用通用知识替代原文依据"
+   ],
+   "catalog_hints": [
+    "R8混淆技术",
+    "AAB"
+   ],
+   "catalog_hint_origin": "cases_evidence",
+   "gold": [
+    31,
+    32
+   ],
+   "evidence": [
+    "R8混淆技术",
+    "AAB"
+   ],
+   "notes": "真实问题逐字取自 benchmark/cases.json（cat=multi_hop）"
+  },
+  {
+   "id": "M-004",
+   "category": "multi_source",
+   "question": "土地财政和城投平台分别是怎样把地方政府债务滚起来的？",
+   "source": "real",
+   "reused_case_id": "M04",
+   "reused_case_cat": "multi_hop",
+   "constructed_parts": [],
+   "family": "gold:25,26",
+   "split": "dev",
+   "required_sources": [
+    "knowledge"
+   ],
+   "acceptable_intents": [
+    "research",
+    "memory",
+    "clarification"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得声称本工作区没有相关资料",
+    "不得只凭单一来源就下结论",
+    "不得用通用知识替代原文依据"
+   ],
+   "catalog_hints": [
+    "土地出让金",
+    "城投公司"
+   ],
+   "catalog_hint_origin": "cases_evidence",
+   "gold": [
+    25,
+    26
+   ],
+   "evidence": [
+    "土地出让金",
+    "城投公司"
+   ],
+   "notes": "真实问题逐字取自 benchmark/cases.json（cat=multi_hop）"
+  },
+  {
+   "id": "M-005",
+   "category": "multi_source",
+   "question": "Agent-Sentinel 的准确率、可观测监控项以及未来演进方向分别是什么？",
+   "source": "real",
+   "reused_case_id": "M05",
+   "reused_case_cat": "multi_hop",
+   "constructed_parts": [],
+   "family": "gold:15,16",
+   "split": "dev",
+   "required_sources": [
+    "knowledge"
+   ],
+   "acceptable_intents": [
+    "research",
+    "memory",
+    "clarification"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得声称本工作区没有相关资料",
+    "不得只凭单一来源就下结论",
+    "不得用通用知识替代原文依据"
+   ],
+   "catalog_hints": [
+    "90%",
+    "LangGraph",
+    "根因知识库"
+   ],
+   "catalog_hint_origin": "cases_evidence",
+   "gold": [
+    15,
+    16
+   ],
+   "evidence": [
+    "90%",
+    "LangGraph",
+    "根因知识库"
+   ],
+   "notes": "真实问题逐字取自 benchmark/cases.json（cat=multi_hop）"
+  },
+  {
+   "id": "M-006",
+   "category": "multi_source",
+   "question": "黑五期间用户侧监控完善到了什么程度，第一次做黑五又暴露了哪些不足？",
+   "source": "real",
+   "reused_case_id": "M06",
+   "reused_case_cat": "multi_hop",
+   "constructed_parts": [],
+   "family": "gold:4,5",
+   "split": "dev",
+   "required_sources": [
+    "knowledge"
+   ],
+   "acceptable_intents": [
+    "research",
+    "memory",
+    "clarification"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得声称本工作区没有相关资料",
+    "不得只凭单一来源就下结论",
+    "不得用通用知识替代原文依据"
+   ],
+   "catalog_hints": [
+    "用户心愿单",
+    "0.19%"
+   ],
+   "catalog_hint_origin": "cases_evidence",
+   "gold": [
+    4,
+    5
+   ],
+   "evidence": [
+    "用户心愿单",
+    "0.19%"
+   ],
+   "notes": "真实问题逐字取自 benchmark/cases.json（cat=multi_hop）"
+  },
+  {
+   "id": "M-007",
+   "category": "multi_source",
+   "question": "PG 数据库加字段导致锁表的排查过程中，隔离级别和表级锁分别查到了什么结论？",
+   "source": "real",
+   "reused_case_id": "M07",
+   "reused_case_cat": "multi_hop",
+   "constructed_parts": [],
+   "family": "gold:62,63",
+   "split": "holdout",
+   "required_sources": [
+    "knowledge"
+   ],
+   "acceptable_intents": [
+    "research",
+    "memory",
+    "clarification"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得声称本工作区没有相关资料",
+    "不得只凭单一来源就下结论",
+    "不得用通用知识替代原文依据"
+   ],
+   "catalog_hints": [
+    "读已提交",
+    "表级锁共有八种模式",
+    "pg_locks"
+   ],
+   "catalog_hint_origin": "cases_evidence",
+   "gold": [
+    62,
+    63
+   ],
+   "evidence": [
+    "读已提交",
+    "表级锁共有八种模式",
+    "pg_locks"
+   ],
+   "notes": "真实问题逐字取自 benchmark/cases.json（cat=multi_hop）"
+  },
+  {
+   "id": "M-008",
+   "category": "multi_source",
+   "question": "弗洛伊德理论里，子本能被夸大但未被压抑，和自恋式地选择对象，分别解释了什么现象？",
+   "source": "real",
+   "reused_case_id": "M08",
+   "reused_case_cat": "multi_hop",
+   "constructed_parts": [],
+   "family": "gold:24,59",
+   "split": "dev",
+   "required_sources": [
+    "knowledge"
+   ],
+   "acceptable_intents": [
+    "research",
+    "memory",
+    "clarification"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得声称本工作区没有相关资料",
+    "不得只凭单一来源就下结论",
+    "不得用通用知识替代原文依据"
+   ],
+   "catalog_hints": [
+    "hypercathexis",
+    "自我价值崩塌"
+   ],
+   "catalog_hint_origin": "cases_evidence",
+   "gold": [
+    24,
+    59
+   ],
+   "evidence": [
+    "hypercathexis",
+    "自我价值崩塌"
+   ],
+   "notes": "真实问题逐字取自 benchmark/cases.json（cat=multi_hop）"
+  },
+  {
+   "id": "M-009",
+   "category": "multi_source",
+   "question": "影响力这本书里，互惠原则和影响力的武器分别列举了哪些说服心理机制？",
+   "source": "real",
+   "reused_case_id": "M09",
+   "reused_case_cat": "multi_hop",
+   "constructed_parts": [],
+   "family": "gold:43,44",
+   "split": "holdout",
+   "required_sources": [
+    "knowledge"
+   ],
+   "acceptable_intents": [
+    "research",
+    "memory",
+    "clarification"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得声称本工作区没有相关资料",
+    "不得只凭单一来源就下结论",
+    "不得用通用知识替代原文依据"
+   ],
+   "catalog_hints": [
+    "拒绝回撤策略",
+    "锚定效应",
+    "社会认同原则"
+   ],
+   "catalog_hint_origin": "cases_evidence",
+   "gold": [
+    43,
+    44
+   ],
+   "evidence": [
+    "拒绝回撤策略",
+    "锚定效应",
+    "社会认同原则"
+   ],
+   "notes": "真实问题逐字取自 benchmark/cases.json（cat=multi_hop）"
+  },
+  {
+   "id": "M-010",
+   "category": "multi_source",
+   "question": "首单加深项目里，销量数据对不上的根因有哪些，时区问题具体是怎么统一解决的？",
+   "source": "real",
+   "reused_case_id": "M10",
+   "reused_case_cat": "multi_hop",
+   "constructed_parts": [],
+   "family": "gold:27,50",
+   "split": "dev",
+   "required_sources": [
+    "knowledge"
+   ],
+   "acceptable_intents": [
+    "research",
+    "memory",
+    "clarification"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得声称本工作区没有相关资料",
+    "不得只凭单一来源就下结论",
+    "不得用通用知识替代原文依据"
+   ],
+   "catalog_hints": [
+    "1.7 亿行",
+    "asia/shanghai"
+   ],
+   "catalog_hint_origin": "cases_evidence",
+   "gold": [
+    27,
+    50
+   ],
+   "evidence": [
+    "1.7 亿行",
+    "asia/shanghai"
+   ],
+   "notes": "真实问题逐字取自 benchmark/cases.json（cat=multi_hop）"
+  },
+  {
+   "id": "M-011",
+   "category": "multi_source",
+   "question": "结合我们内部的 P99 限流方案和业界最新的限流实践，这套方案还有哪些可改进的地方？",
+   "source": "constructed",
+   "reused_case_id": "",
+   "reused_case_cat": "",
+   "constructed_parts": [
+    "question",
+    "labels"
+   ],
+   "constructed_reason": "内部方案 + 最新外部实践，两个来源都要；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造",
+   "family": "constructed:结合我们内部的 P99 限流方案和业界最新的限流",
+   "split": "dev",
+   "required_sources": [
+    "knowledge",
+    "web"
+   ],
+   "acceptable_intents": [
+    "research",
+    "memory",
+    "clarification"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得声称本工作区没有相关资料",
+    "不得只凭单一来源就下结论",
+    "不得用通用知识替代原文依据"
+   ],
+   "catalog_hints": [],
+   "catalog_hint_origin": "none",
+   "gold": [],
+   "evidence": [],
+   "notes": "内部方案 + 最新外部实践，两个来源都要；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造"
+  },
+  {
+   "id": "M-012",
+   "category": "multi_source",
+   "question": "我们内部的坑位归因方案和行业通用的投放归因模型相比，一般该怎么取舍？",
+   "source": "constructed",
+   "reused_case_id": "",
+   "reused_case_cat": "",
+   "constructed_parts": [
+    "question",
+    "labels"
+   ],
+   "constructed_reason": "内部方案 + 通用模型对比；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造",
+   "family": "constructed:我们内部的坑位归因方案和行业通用的投放归因模型相",
+   "split": "holdout",
+   "required_sources": [
+    "knowledge",
+    "general"
+   ],
+   "acceptable_intents": [
+    "research",
+    "memory",
+    "clarification"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得声称本工作区没有相关资料",
+    "不得只凭单一来源就下结论",
+    "不得用通用知识替代原文依据"
+   ],
+   "catalog_hints": [],
+   "catalog_hint_origin": "none",
+   "gold": [],
+   "evidence": [],
+   "notes": "内部方案 + 通用模型对比；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造"
+  },
+  {
+   "id": "M-013",
+   "category": "multi_source",
+   "question": "我笔记里记的向量库选型结论，和现在最新的向量库能力对比还成立吗？",
+   "source": "constructed",
+   "reused_case_id": "",
+   "reused_case_cat": "",
+   "constructed_parts": [
+    "question",
+    "labels"
+   ],
+   "constructed_reason": "内部结论 + 最新外部能力（时效）；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造",
+   "family": "constructed:我笔记里记的向量库选型结论，和现在最新的向量库能",
+   "split": "holdout",
+   "required_sources": [
+    "knowledge",
+    "web"
+   ],
+   "acceptable_intents": [
+    "research",
+    "memory",
+    "clarification"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得声称本工作区没有相关资料",
+    "不得只凭单一来源就下结论",
+    "不得用通用知识替代原文依据"
+   ],
+   "catalog_hints": [],
+   "catalog_hint_origin": "none",
+   "gold": [],
+   "evidence": [],
+   "notes": "内部结论 + 最新外部能力（时效）；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造"
+  },
+  {
+   "id": "M-014",
+   "category": "multi_source",
+   "question": "我们之前讨论过的那套缓存方案，和一般的最佳实践相比有哪些取舍？",
+   "source": "constructed",
+   "reused_case_id": "",
+   "reused_case_cat": "",
+   "constructed_parts": [
+    "question",
+    "labels"
+   ],
+   "constructed_reason": "历史讨论 + 内部方案 + 通用实践；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造",
+   "family": "constructed:我们之前讨论过的那套缓存方案，和一般的最佳实践相",
+   "split": "dev",
+   "required_sources": [
+    "knowledge",
+    "history",
+    "general"
+   ],
+   "acceptable_intents": [
+    "research",
+    "memory",
+    "clarification"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得声称本工作区没有相关资料",
+    "不得只凭单一来源就下结论",
+    "不得用通用知识替代原文依据"
+   ],
+   "catalog_hints": [],
+   "catalog_hint_origin": "none",
+   "gold": [],
+   "evidence": [],
+   "notes": "历史讨论 + 内部方案 + 通用实践；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造",
+   "turns": [
+    {
+     "role": "user",
+     "content": "我们之前的缓存方案是怎么设计的？"
+    }
+   ]
+  },
+  {
+   "id": "M-015",
+   "category": "multi_source",
+   "question": "我们内部事故复盘文档里的排查思路，一般能用到通用的慢查询排查上吗？",
+   "source": "constructed",
+   "reused_case_id": "",
+   "reused_case_cat": "",
+   "constructed_parts": [
+    "question",
+    "labels"
+   ],
+   "constructed_reason": "内部复盘 + 通用方法迁移；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造",
+   "family": "constructed:我们内部事故复盘文档里的排查思路，一般能用到通用",
+   "split": "holdout",
+   "required_sources": [
+    "knowledge",
+    "general"
+   ],
+   "acceptable_intents": [
+    "research",
+    "memory",
+    "clarification"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得声称本工作区没有相关资料",
+    "不得只凭单一来源就下结论",
+    "不得用通用知识替代原文依据"
+   ],
+   "catalog_hints": [],
+   "catalog_hint_origin": "none",
+   "gold": [],
+   "evidence": [],
+   "notes": "内部复盘 + 通用方法迁移；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造"
+  },
+  {
+   "id": "T-001",
+   "category": "multi_turn",
+   "question": "这个方案在高并发下会有什么问题？",
+   "source": "constructed",
+   "reused_case_id": "",
+   "reused_case_cat": "",
+   "constructed_parts": [
+    "question",
+    "labels"
+   ],
+   "constructed_reason": "指代「这个方案」需按上一轮补全；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造",
+   "family": "constructed-turn:内部风控 P99 方案是怎么设计的？",
+   "split": "holdout",
+   "required_sources": [
+    "knowledge"
+   ],
+   "acceptable_intents": [
+    "research",
+    "memory",
+    "clarification"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得丢失上一轮的对象，把追问当成全新问题",
+    "不得声称本工作区没有相关资料"
+   ],
+   "catalog_hints": [],
+   "catalog_hint_origin": "none",
+   "gold": [],
+   "evidence": [],
+   "notes": "指代「这个方案」需按上一轮补全；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造",
+   "turns": [
+    {
+     "role": "user",
+     "content": "内部风控 P99 方案是怎么设计的？"
+    },
+    {
+     "role": "assistant",
+     "content": "（上一轮答复占位：已围绕「内部风控 P99 方案是怎么设计的？」给出要点。）"
+    }
+   ]
+  },
+  {
+   "id": "T-002",
+   "category": "multi_turn",
+   "question": "它的局限性主要体现在哪？",
+   "source": "constructed",
+   "reused_case_id": "",
+   "reused_case_cat": "",
+   "constructed_parts": [
+    "question",
+    "labels"
+   ],
+   "constructed_reason": "指代「它」需按上一轮补全；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造",
+   "family": "constructed-turn:坑位归因方案解决了什么问题？",
+   "split": "dev",
+   "required_sources": [
+    "knowledge"
+   ],
+   "acceptable_intents": [
+    "research",
+    "memory",
+    "clarification"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得丢失上一轮的对象，把追问当成全新问题",
+    "不得声称本工作区没有相关资料"
+   ],
+   "catalog_hints": [],
+   "catalog_hint_origin": "none",
+   "gold": [],
+   "evidence": [],
+   "notes": "指代「它」需按上一轮补全；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造",
+   "turns": [
+    {
+     "role": "user",
+     "content": "坑位归因方案解决了什么问题？"
+    },
+    {
+     "role": "assistant",
+     "content": "（上一轮答复占位：已围绕「坑位归因方案解决了什么问题？」给出要点。）"
+    }
+   ]
+  },
+  {
+   "id": "T-003",
+   "category": "multi_turn",
+   "question": "第二种方式在什么场景下更合适？",
+   "source": "constructed",
+   "reused_case_id": "",
+   "reused_case_cat": "",
+   "constructed_parts": [
+    "question",
+    "labels"
+   ],
+   "constructed_reason": "指代「第二种方式」需按上一轮补全；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造",
+   "family": "constructed-turn:我们上次讨论的慢查询排查流程是什么？",
+   "split": "holdout",
+   "required_sources": [
+    "knowledge"
+   ],
+   "acceptable_intents": [
+    "research",
+    "memory",
+    "clarification"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得丢失上一轮的对象，把追问当成全新问题",
+    "不得声称本工作区没有相关资料"
+   ],
+   "catalog_hints": [],
+   "catalog_hint_origin": "none",
+   "gold": [],
+   "evidence": [],
+   "notes": "指代「第二种方式」需按上一轮补全；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造",
+   "turns": [
+    {
+     "role": "user",
+     "content": "我们上次讨论的慢查询排查流程是什么？"
+    },
+    {
+     "role": "assistant",
+     "content": "（上一轮答复占位：已围绕「我们上次讨论的慢查询排查流程是什么？」给出要点。）"
+    }
+   ]
+  },
+  {
+   "id": "T-004",
+   "category": "multi_turn",
+   "question": "那个修复方式后来上线了吗？",
+   "source": "constructed",
+   "reused_case_id": "",
+   "reused_case_cat": "",
+   "constructed_parts": [
+    "question",
+    "labels"
+   ],
+   "constructed_reason": "指代「那个修复方式」需按上一轮补全；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造",
+   "family": "constructed-turn:验证码邮件重复发送的原因是自增 ID 溢出吗？",
+   "split": "dev",
+   "required_sources": [
+    "knowledge"
+   ],
+   "acceptable_intents": [
+    "research",
+    "memory",
+    "clarification"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得丢失上一轮的对象，把追问当成全新问题",
+    "不得声称本工作区没有相关资料"
+   ],
+   "catalog_hints": [],
+   "catalog_hint_origin": "none",
+   "gold": [],
+   "evidence": [],
+   "notes": "指代「那个修复方式」需按上一轮补全；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造",
+   "turns": [
+    {
+     "role": "user",
+     "content": "验证码邮件重复发送的原因是自增 ID 溢出吗？"
+    },
+    {
+     "role": "assistant",
+     "content": "（上一轮答复占位：已围绕「验证码邮件重复发送的原因是自增 ID 溢出吗？」给出要点。）"
+    }
+   ]
+  },
+  {
+   "id": "T-005",
+   "category": "multi_turn",
+   "question": "这个处理方式有没有副作用？",
+   "source": "constructed",
+   "reused_case_id": "",
+   "reused_case_cat": "",
+   "constructed_parts": [
+    "question",
+    "labels"
+   ],
+   "constructed_reason": "追问同一内部事实的处理后果；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造",
+   "family": "constructed-turn:以图搜图 token 消耗过高是怎么处理的？",
+   "split": "dev",
+   "required_sources": [
+    "knowledge"
+   ],
+   "acceptable_intents": [
+    "research",
+    "memory",
+    "clarification"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得丢失上一轮的对象，把追问当成全新问题",
+    "不得声称本工作区没有相关资料"
+   ],
+   "catalog_hints": [],
+   "catalog_hint_origin": "none",
+   "gold": [],
+   "evidence": [],
+   "notes": "追问同一内部事实的处理后果；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造",
+   "turns": [
+    {
+     "role": "user",
+     "content": "以图搜图 token 消耗过高是怎么处理的？"
+    },
+    {
+     "role": "assistant",
+     "content": "（上一轮答复占位：已围绕「以图搜图 token 消耗过高是怎么处理的？」给出要点。）"
+    }
+   ]
+  },
+  {
+   "id": "T-006",
+   "category": "multi_turn",
+   "question": "这个规范里 JSONObject 的情况一样吗？",
+   "source": "constructed",
+   "reused_case_id": "",
+   "reused_case_cat": "",
+   "constructed_parts": [
+    "question",
+    "labels"
+   ],
+   "constructed_reason": "追问同一规范下的另一个类型；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造",
+   "family": "constructed-turn:CI 接口文档为什么不允许返回 Map？",
+   "split": "dev",
+   "required_sources": [
+    "knowledge"
+   ],
+   "acceptable_intents": [
+    "research",
+    "memory",
+    "clarification"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得丢失上一轮的对象，把追问当成全新问题",
+    "不得声称本工作区没有相关资料"
+   ],
+   "catalog_hints": [],
+   "catalog_hint_origin": "none",
+   "gold": [],
+   "evidence": [],
+   "notes": "追问同一规范下的另一个类型；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造",
+   "turns": [
+    {
+     "role": "user",
+     "content": "CI 接口文档为什么不允许返回 Map？"
+    },
+    {
+     "role": "assistant",
+     "content": "（上一轮答复占位：已围绕「CI 接口文档为什么不允许返回 Map？」给出要点。）"
+    }
+   ]
+  },
+  {
+   "id": "T-007",
+   "category": "multi_turn",
+   "question": "我们之前讨论过的那个定位过程有记录吗？",
+   "source": "constructed",
+   "reused_case_id": "",
+   "reused_case_cat": "",
+   "constructed_parts": [
+    "question",
+    "labels"
+   ],
+   "constructed_reason": "内部事故 + 历史记录；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造",
+   "family": "constructed-turn:上次事故是 k8s 的 label 丢失导致的吗",
+   "split": "dev",
+   "required_sources": [
+    "knowledge",
+    "history"
+   ],
+   "acceptable_intents": [
+    "research",
+    "memory",
+    "clarification"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得丢失上一轮的对象，把追问当成全新问题",
+    "不得声称本工作区没有相关资料"
+   ],
+   "catalog_hints": [],
+   "catalog_hint_origin": "none",
+   "gold": [],
+   "evidence": [],
+   "notes": "内部事故 + 历史记录；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造",
+   "turns": [
+    {
+     "role": "user",
+     "content": "上次事故是 k8s 的 label 丢失导致的吗？"
+    },
+    {
+     "role": "assistant",
+     "content": "（上一轮答复占位：已围绕「上次事故是 k8s 的 label 丢失导致的吗？」给出要点。）"
+    }
+   ]
+  },
+  {
+   "id": "T-008",
+   "category": "multi_turn",
+   "question": "那这个转化率对应的 GMV 呢？",
+   "source": "constructed",
+   "reused_case_id": "",
+   "reused_case_cat": "",
+   "constructed_parts": [
+    "question",
+    "labels"
+   ],
+   "constructed_reason": "指代同一批数据的另一指标；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造",
+   "family": "constructed-turn:黑五两封营销邮件的转化率分别是多少？",
+   "split": "holdout",
+   "required_sources": [
+    "knowledge"
+   ],
+   "acceptable_intents": [
+    "research",
+    "memory",
+    "clarification"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得丢失上一轮的对象，把追问当成全新问题",
+    "不得声称本工作区没有相关资料"
+   ],
+   "catalog_hints": [],
+   "catalog_hint_origin": "none",
+   "gold": [],
+   "evidence": [],
+   "notes": "指代同一批数据的另一指标；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造",
+   "turns": [
+    {
+     "role": "user",
+     "content": "黑五两封营销邮件的转化率分别是多少？"
+    },
+    {
+     "role": "assistant",
+     "content": "（上一轮答复占位：已围绕「黑五两封营销邮件的转化率分别是多少？」给出要点。）"
+    }
+   ]
+  },
+  {
+   "id": "T-009",
+   "category": "multi_turn",
+   "question": "这个功能覆盖了多少 SPU？",
+   "source": "constructed",
+   "reused_case_id": "",
+   "reused_case_cat": "",
+   "constructed_parts": [
+    "question",
+    "labels"
+   ],
+   "constructed_reason": "追问同一功能的覆盖量；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造",
+   "family": "constructed-turn:TikTokShop 商详自动填充省了多少时间？",
+   "split": "dev",
+   "required_sources": [
+    "knowledge"
+   ],
+   "acceptable_intents": [
+    "research",
+    "memory",
+    "clarification"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得丢失上一轮的对象，把追问当成全新问题",
+    "不得声称本工作区没有相关资料"
+   ],
+   "catalog_hints": [],
+   "catalog_hint_origin": "none",
+   "gold": [],
+   "evidence": [],
+   "notes": "追问同一功能的覆盖量；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造",
+   "turns": [
+    {
+     "role": "user",
+     "content": "TikTokShop 商详自动填充省了多少时间？"
+    },
+    {
+     "role": "assistant",
+     "content": "（上一轮答复占位：已围绕「TikTokShop 商详自动填充省了多少时间？」给出要点。）"
+    }
+   ]
+  },
+  {
+   "id": "T-010",
+   "category": "multi_turn",
+   "question": "这个映射在新增标签时会自动更新吗？",
+   "source": "constructed",
+   "reused_case_id": "",
+   "reused_case_cat": "",
+   "constructed_parts": [
+    "question",
+    "labels"
+   ],
+   "constructed_reason": "追问同一映射的机制边界；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造",
+   "family": "constructed-turn:二级风格线和产品标签的映射是怎么建立的？",
+   "split": "dev",
+   "required_sources": [
+    "knowledge"
+   ],
+   "acceptable_intents": [
+    "research",
+    "memory",
+    "clarification"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得丢失上一轮的对象，把追问当成全新问题",
+    "不得声称本工作区没有相关资料"
+   ],
+   "catalog_hints": [],
+   "catalog_hint_origin": "none",
+   "gold": [],
+   "evidence": [],
+   "notes": "追问同一映射的机制边界；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造",
+   "turns": [
+    {
+     "role": "user",
+     "content": "二级风格线和产品标签的映射是怎么建立的？"
+    },
+    {
+     "role": "assistant",
+     "content": "（上一轮答复占位：已围绕「二级风格线和产品标签的映射是怎么建立的？」给出要点。）"
+    }
+   ]
+  },
+  {
+   "id": "T-011",
+   "category": "multi_turn",
+   "question": "那种排查方式为什么没找到？",
+   "source": "constructed",
+   "reused_case_id": "",
+   "reused_case_cat": "",
+   "constructed_parts": [
+    "question",
+    "labels"
+   ],
+   "constructed_reason": "指代「那种」+ 历史；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造",
+   "family": "constructed-turn:OMS 切面偶发失效最后是怎么定位的？",
+   "split": "dev",
+   "required_sources": [
+    "knowledge"
+   ],
+   "acceptable_intents": [
+    "research",
+    "memory",
+    "clarification"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得丢失上一轮的对象，把追问当成全新问题",
+    "不得声称本工作区没有相关资料"
+   ],
+   "catalog_hints": [],
+   "catalog_hint_origin": "none",
+   "gold": [],
+   "evidence": [],
+   "notes": "指代「那种」+ 历史；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造",
+   "turns": [
+    {
+     "role": "user",
+     "content": "OMS 切面偶发失效最后是怎么定位的？"
+    },
+    {
+     "role": "assistant",
+     "content": "（上一轮答复占位：已围绕「OMS 切面偶发失效最后是怎么定位的？」给出要点。）"
+    }
+   ]
+  },
+  {
+   "id": "T-012",
+   "category": "multi_turn",
+   "question": "这些方案里有关于限流的吗？",
+   "source": "constructed",
+   "reused_case_id": "",
+   "reused_case_cat": "",
+   "constructed_parts": [
+    "question",
+    "labels"
+   ],
+   "constructed_reason": "先概览再追问限定主题；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造",
+   "family": "constructed-turn:我们内部知识库里的技术方案都有哪些？",
+   "split": "dev",
+   "required_sources": [
+    "knowledge"
+   ],
+   "acceptable_intents": [
+    "research",
+    "memory",
+    "clarification"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得丢失上一轮的对象，把追问当成全新问题",
+    "不得声称本工作区没有相关资料"
+   ],
+   "catalog_hints": [],
+   "catalog_hint_origin": "none",
+   "gold": [],
+   "evidence": [],
+   "notes": "先概览再追问限定主题；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造",
+   "turns": [
+    {
+     "role": "user",
+     "content": "我们内部知识库里的技术方案都有哪些？"
+    },
+    {
+     "role": "assistant",
+     "content": "（上一轮答复占位：已围绕「我们内部知识库里的技术方案都有哪些？」给出要点。）"
+    }
+   ]
+  },
+  {
+   "id": "T-013",
+   "category": "multi_turn",
+   "question": "我们之前聊过的那个快照机制在会话移动时会怎样？",
+   "source": "constructed",
+   "reused_case_id": "",
+   "reused_case_cat": "",
+   "constructed_parts": [
+    "question",
+    "labels"
+   ],
+   "constructed_reason": "回忆历史 + 追问同一机制；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造",
+   "family": "constructed-turn:之前聊过的工作区记忆快照机制是什么？",
+   "split": "holdout",
+   "required_sources": [
+    "knowledge",
+    "history"
+   ],
+   "acceptable_intents": [
+    "research",
+    "memory",
+    "clarification"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得丢失上一轮的对象，把追问当成全新问题",
+    "不得声称本工作区没有相关资料"
+   ],
+   "catalog_hints": [],
+   "catalog_hint_origin": "none",
+   "gold": [],
+   "evidence": [],
+   "notes": "回忆历史 + 追问同一机制；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造",
+   "turns": [
+    {
+     "role": "user",
+     "content": "之前聊过的工作区记忆快照机制是什么？"
+    },
+    {
+     "role": "assistant",
+     "content": "（上一轮答复占位：已围绕「之前聊过的工作区记忆快照机制是什么？」给出要点。）"
+    }
+   ]
+  },
+  {
+   "id": "T-014",
+   "category": "multi_turn",
+   "question": "那它对长尾延迟的影响呢？",
+   "source": "constructed",
+   "reused_case_id": "",
+   "reused_case_cat": "",
+   "constructed_parts": [
+    "question",
+    "labels"
+   ],
+   "constructed_reason": "追问同一结论的另一维度；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造",
+   "family": "constructed-turn:我笔记里关于分层限流的结论是什么？",
+   "split": "dev",
+   "required_sources": [
+    "knowledge"
+   ],
+   "acceptable_intents": [
+    "research",
+    "memory",
+    "clarification"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得丢失上一轮的对象，把追问当成全新问题",
+    "不得声称本工作区没有相关资料"
+   ],
+   "catalog_hints": [],
+   "catalog_hint_origin": "none",
+   "gold": [],
+   "evidence": [],
+   "notes": "追问同一结论的另一维度；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造",
+   "turns": [
+    {
+     "role": "user",
+     "content": "我笔记里关于分层限流的结论是什么？"
+    },
+    {
+     "role": "assistant",
+     "content": "（上一轮答复占位：已围绕「我笔记里关于分层限流的结论是什么？」给出要点。）"
+    }
+   ]
+  },
+  {
+   "id": "T-015",
+   "category": "multi_turn",
+   "question": "那些记录里提到过本地模型吗？",
+   "source": "constructed",
+   "reused_case_id": "",
+   "reused_case_cat": "",
+   "constructed_parts": [
+    "question",
+    "labels"
+   ],
+   "constructed_reason": "先检索再追问限定条件；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造",
+   "family": "constructed-turn:导入的文档里有关于图片识别的记录吗？",
+   "split": "holdout",
+   "required_sources": [
+    "knowledge"
+   ],
+   "acceptable_intents": [
+    "research",
+    "memory",
+    "clarification"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得丢失上一轮的对象，把追问当成全新问题",
+    "不得声称本工作区没有相关资料"
+   ],
+   "catalog_hints": [],
+   "catalog_hint_origin": "none",
+   "gold": [],
+   "evidence": [],
+   "notes": "先检索再追问限定条件；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造",
+   "turns": [
+    {
+     "role": "user",
+     "content": "导入的文档里有关于图片识别的记录吗？"
+    },
+    {
+     "role": "assistant",
+     "content": "（上一轮答复占位：已围绕「导入的文档里有关于图片识别的记录吗？」给出要点。）"
+    }
+   ]
+  },
+  {
+   "id": "P-001",
+   "category": "product",
+   "question": "Everything RAG 是做什么的？",
+   "source": "constructed",
+   "reused_case_id": "",
+   "reused_case_cat": "",
+   "constructed_parts": [
+    "question",
+    "labels"
+   ],
+   "constructed_reason": "产品功能问题（产品文档已定义）；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造",
+   "family": "constructed:Everything RAG 是做什么的？",
+   "split": "holdout",
+   "required_sources": [
+    "product"
+   ],
+   "acceptable_intents": [
+    "product"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得把产品说明伪装成文档引用",
+    "不得编造产品不具备的能力"
+   ],
+   "catalog_hints": [],
+   "catalog_hint_origin": "none",
+   "gold": [],
+   "evidence": [],
+   "notes": "产品功能问题（产品文档已定义）；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造"
+  },
+  {
+   "id": "P-002",
+   "category": "product",
+   "question": "你能做什么？",
+   "source": "constructed",
+   "reused_case_id": "",
+   "reused_case_cat": "",
+   "constructed_parts": [
+    "question",
+    "labels"
+   ],
+   "constructed_reason": "产品功能问题；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造",
+   "family": "constructed:你能做什么？",
+   "split": "holdout",
+   "required_sources": [
+    "product"
+   ],
+   "acceptable_intents": [
+    "product"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得把产品说明伪装成文档引用",
+    "不得编造产品不具备的能力"
+   ],
+   "catalog_hints": [],
+   "catalog_hint_origin": "none",
+   "gold": [],
+   "evidence": [],
+   "notes": "产品功能问题；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造"
+  },
+  {
+   "id": "P-003",
+   "category": "product",
+   "question": "Everything RAG 怎么用？",
+   "source": "constructed",
+   "reused_case_id": "",
+   "reused_case_cat": "",
+   "constructed_parts": [
+    "question",
+    "labels"
+   ],
+   "constructed_reason": "产品用法问题；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造",
+   "family": "constructed:Everything RAG 怎么用？",
+   "split": "holdout",
+   "required_sources": [
+    "product"
+   ],
+   "acceptable_intents": [
+    "product"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得把产品说明伪装成文档引用",
+    "不得编造产品不具备的能力"
+   ],
+   "catalog_hints": [],
+   "catalog_hint_origin": "none",
+   "gold": [],
+   "evidence": [],
+   "notes": "产品用法问题；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造"
+  },
+  {
+   "id": "P-004",
+   "category": "product",
+   "question": "这个项目支持联网搜索吗？",
+   "source": "constructed",
+   "reused_case_id": "",
+   "reused_case_cat": "",
+   "constructed_parts": [
+    "question",
+    "labels"
+   ],
+   "constructed_reason": "产品能力问题；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造",
+   "family": "constructed:这个项目支持联网搜索吗？",
+   "split": "dev",
+   "required_sources": [
+    "product"
+   ],
+   "acceptable_intents": [
+    "product"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得把产品说明伪装成文档引用",
+    "不得编造产品不具备的能力"
+   ],
+   "catalog_hints": [],
+   "catalog_hint_origin": "none",
+   "gold": [],
+   "evidence": [],
+   "notes": "产品能力问题；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造"
+  },
+  {
+   "id": "P-005",
+   "category": "product",
+   "question": "Everything RAG 会把我的资料上传到云端吗？",
+   "source": "constructed",
+   "reused_case_id": "",
+   "reused_case_cat": "",
+   "constructed_parts": [
+    "question",
+    "labels"
+   ],
+   "constructed_reason": "产品隐私能力问题；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造",
+   "family": "constructed:Everything RAG 会把我的资料上传到",
+   "split": "dev",
+   "required_sources": [
+    "product"
+   ],
+   "acceptable_intents": [
+    "product"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得把产品说明伪装成文档引用",
+    "不得编造产品不具备的能力"
+   ],
+   "catalog_hints": [],
+   "catalog_hint_origin": "none",
+   "gold": [],
+   "evidence": [],
+   "notes": "产品隐私能力问题；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造"
+  },
+  {
+   "id": "P-006",
+   "category": "product",
+   "question": "你能帮我识图吗？",
+   "source": "constructed",
+   "reused_case_id": "",
+   "reused_case_cat": "",
+   "constructed_parts": [
+    "question",
+    "labels"
+   ],
+   "constructed_reason": "产品能力问题；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造",
+   "family": "constructed:你能帮我识图吗？",
+   "split": "dev",
+   "required_sources": [
+    "product"
+   ],
+   "acceptable_intents": [
+    "product"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得把产品说明伪装成文档引用",
+    "不得编造产品不具备的能力"
+   ],
+   "catalog_hints": [],
+   "catalog_hint_origin": "none",
+   "gold": [],
+   "evidence": [],
+   "notes": "产品能力问题；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造"
+  },
+  {
+   "id": "P-007",
+   "category": "product",
+   "question": "Everything RAG 支持哪些模型？",
+   "source": "constructed",
+   "reused_case_id": "",
+   "reused_case_cat": "",
+   "constructed_parts": [
+    "question",
+    "labels"
+   ],
+   "constructed_reason": "产品配置能力问题；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造",
+   "family": "constructed:Everything RAG 支持哪些模型？",
+   "split": "dev",
+   "required_sources": [
+    "product"
+   ],
+   "acceptable_intents": [
+    "product"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得把产品说明伪装成文档引用",
+    "不得编造产品不具备的能力"
+   ],
+   "catalog_hints": [],
+   "catalog_hint_origin": "none",
+   "gold": [],
+   "evidence": [],
+   "notes": "产品配置能力问题；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造"
+  },
+  {
+   "id": "P-008",
+   "category": "product",
+   "question": "这个助手有几种权限模式？",
+   "source": "constructed",
+   "reused_case_id": "",
+   "reused_case_cat": "",
+   "constructed_parts": [
+    "question",
+    "labels"
+   ],
+   "constructed_reason": "产品功能问题；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造",
+   "family": "constructed:这个助手有几种权限模式？",
+   "split": "dev",
+   "required_sources": [
+    "product"
+   ],
+   "acceptable_intents": [
+    "product"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得把产品说明伪装成文档引用",
+    "不得编造产品不具备的能力"
+   ],
+   "catalog_hints": [],
+   "catalog_hint_origin": "none",
+   "gold": [],
+   "evidence": [],
+   "notes": "产品功能问题；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造"
+  },
+  {
+   "id": "P-009",
+   "category": "product",
+   "question": "知识库里有哪些文档？",
+   "source": "constructed",
+   "reused_case_id": "",
+   "reused_case_cat": "",
+   "constructed_parts": [
+    "question",
+    "labels"
+   ],
+   "constructed_reason": "文档数量与概览（结构化统计）；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造",
+   "family": "constructed:知识库里有哪些文档？",
+   "split": "holdout",
+   "required_sources": [
+    "catalog"
+   ],
+   "acceptable_intents": [
+    "catalog"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得把产品说明伪装成文档引用",
+    "不得编造产品不具备的能力"
+   ],
+   "catalog_hints": [],
+   "catalog_hint_origin": "none",
+   "gold": [],
+   "evidence": [],
+   "notes": "文档数量与概览（结构化统计）；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造"
+  },
+  {
+   "id": "P-010",
+   "category": "product",
+   "question": "我的资料库一共有多少个切片？",
+   "source": "constructed",
+   "reused_case_id": "",
+   "reused_case_cat": "",
+   "constructed_parts": [
+    "question",
+    "labels"
+   ],
+   "constructed_reason": "文档数量与切片统计；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造",
+   "family": "constructed:我的资料库一共有多少个切片？",
+   "split": "dev",
+   "required_sources": [
+    "catalog"
+   ],
+   "acceptable_intents": [
+    "catalog"
+   ],
+   "freshness_required": "none",
+   "forbidden_misstatements": [
+    "不得把产品说明伪装成文档引用",
+    "不得编造产品不具备的能力"
+   ],
+   "catalog_hints": [],
+   "catalog_hint_origin": "none",
+   "gold": [],
+   "evidence": [],
+   "notes": "文档数量与切片统计；真实语料中没有对应用户问题，由 t6 按 PRD 16.3 的六类配额构造"
+  }
+ ]
+}

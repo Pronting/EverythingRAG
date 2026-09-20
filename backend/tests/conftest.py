@@ -46,5 +46,62 @@ def _isolate_local_deps(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
     from app.ingestion.state_store import DocumentStateStore
 
     app.dependency_overrides[deps.get_state_store] = lambda: DocumentStateStore(tmp_path / "state.db")
+
+    # --- V1.2.0 工作区隔离（T01，append-only：不修改上面既有语义） ---
+    # deps 新增的按区 provider（get_workspace_context / *_vector_store / *_state_store /
+    # *_knowledge_area）也要隔离到 tmp。这里直接 monkeypatch 模块单例，而不仅
+    # dependency_overrides：按区 provider 支持**非注入式直接调用**（迁移、后台任务、
+    # 工具执行器），只 override FastAPI 依赖会漏掉那条路径并读到真实 ~/.everything-rag。
+    from app.api import deps as deps_mod
+    from app.core.workspace_context import commit_storage_version
+
+    # 与 conversations 路由的 workspace_store 指向同一目录，避免两处状态分叉。
+    monkeypatch.setattr(deps_mod, "workspace_store", WorkspaceStore(tmp_path / "conv-data"))
+    # app.db 访问层由 lifespan 注册；测试里一律由用例显式注入（内存 AppStore）。
+    monkeypatch.setattr(deps_mod, "_app_store", None)
+    deps_mod.reset_workspace_scoped_caches()
+    # 默认按**已迁移**（每工作区布局）解析：tmp 目录里没有旧布局产物，若不提交标记，
+    # 一旦某用例造出 data_dir/state.db 之类的旧布局产物，解析结果会在用例内翻转。
+    commit_storage_version(tmp_path / "erag-data")
     yield
     app.dependency_overrides.clear()
+
+
+def _stop_chroma_systems() -> None:
+    """先显式 ``stop()`` 每个存活 System，再清空 Chroma 的进程级缓存。
+
+    只调 ``clear_system_cache()`` 是**不够**的：它丢掉引用但**不关闭**上一用例
+    ``PersistentClient`` 持有的 HNSW 读写句柄。那些句柄仍挂在被清的 System 上，后续用例
+    在同一 persist 根再建 client 时会拿到「半死」System —— 全量运行时表现为随机失败
+    （captain 实测到 ``Error in compaction: Failed to get hnsw segment writer``，
+    本工作流实测到 ``Error creating hnsw segment reader: Nothing found on disk``，
+    同一根因的 writer / reader 两个面）。teardown 必须尽力而为，绝不掩盖真实失败。
+    """
+
+    try:
+        from chromadb.api.shared_system_client import SharedSystemClient
+    except ImportError:  # pragma: no cover - chromadb 是硬依赖
+        return
+    systems = getattr(SharedSystemClient, "_identifier_to_system", {})
+    for system in list(systems.values()):
+        stop = getattr(system, "stop", None)
+        if stop is None:
+            continue
+        try:
+            stop()
+        except Exception:  # noqa: BLE001, S110 -- 关闭失败不影响测试结果判定
+            pass
+    SharedSystemClient.clear_system_cache()
+
+
+@pytest.fixture(autouse=True)
+def _reset_chroma_system_cache() -> None:
+    """每个用例前后**停止并清空** Chroma 的进程级 System 缓存（T01 append-only 补充）。
+
+    Chroma 按 settings 标识缓存 ``PersistentClient`` 背后的 System；跨用例残留的写句柄
+    会让后续用例拿到半死 System。见 :func:`_stop_chroma_systems`。
+    """
+
+    _stop_chroma_systems()
+    yield
+    _stop_chroma_systems()

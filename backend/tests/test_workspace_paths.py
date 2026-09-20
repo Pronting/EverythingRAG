@@ -1,0 +1,206 @@
+"""PRD 5.1 目录树与 ``storage_key`` 解析（T01）。
+
+覆盖：
+- ``storage_key`` 服务端生成、稳定、唯一；历史数据确定性回填；
+- ``data_dir/workspaces/<storage_key>/`` 的完整目录形状；
+- 迁移前（旧根布局）与迁移后（每工作区布局）的解析切换只由 ``storage.json`` 决定，
+  **不会因为某次写入而自动翻转**。
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+
+from app.core.workspace_context import (
+    LayoutMode,
+    WorkspaceContextFactory,
+    WorkspaceNotFoundError,
+    commit_storage_version,
+    committed_storage_version,
+    read_storage_marker,
+)
+from app.core.workspace_store import (
+    DEFAULT_STORAGE_KEY,
+    DEFAULT_WORKSPACE_ID,
+    WORKSPACE_LAYOUT_VERSION,
+    WORKSPACE_SUBDIRS,
+    WorkspaceStore,
+)
+
+
+def _legacy_data_dir(tmp_path: Path) -> Path:
+    """造一个迁移前的旧布局数据目录（V1.1.0：知识数据在 data_dir 根）。
+
+    目录名刻意不用 ``erag-data``：conftest 会为 ``settings.data_dir`` 的默认 tmp 路径
+    提交 ``storage.json``，同名目录会让「未迁移」的前提失效。
+    """
+
+    data_dir = tmp_path / "legacy-data"
+    data_dir.mkdir(parents=True, exist_ok=True)
+    (data_dir / "chroma.sqlite3").write_bytes(b"legacy-chroma")
+    (data_dir / "state.db").write_bytes(b"legacy-state")
+    (data_dir / "documents").mkdir(exist_ok=True)
+    (data_dir / "documents" / "a.md").write_text("旧上传", encoding="utf-8")
+    return data_dir
+
+
+def test_storage_key_is_generated_stable_and_unique(tmp_path: Path) -> None:
+    store = WorkspaceStore(tmp_path)
+    default = store.get(DEFAULT_WORKSPACE_ID)
+    assert default is not None
+    assert default.storage_key == DEFAULT_STORAGE_KEY
+
+    first = store.create("研究")
+    second = store.create("工作")
+    assert first.storage_key and second.storage_key
+    assert first.storage_key != second.storage_key
+    # 不同工作区绝不能指向同一目录
+    assert len({first.storage_key, second.storage_key, default.storage_key}) == 3
+
+    # 重新加载后 key 不变（稳定 = 目录不会漂移）
+    reloaded = WorkspaceStore(tmp_path)
+    assert reloaded.get(first.id).storage_key == first.storage_key  # type: ignore[union-attr]
+    assert reloaded.get_by_storage_key(first.storage_key).id == first.id  # type: ignore[union-attr]
+
+
+def test_legacy_rows_without_storage_key_get_deterministic_backfill(tmp_path: Path) -> None:
+    """历史 ``workspaces.json`` 没有 ``storage_key`` 时按 id 确定性派生并落盘。"""
+
+    (tmp_path / "workspaces.json").write_text(
+        '[{"id": "default", "name": "默认", "is_default": true},'
+        ' {"id": "research", "name": "研究"}]',
+        encoding="utf-8",
+    )
+    first = WorkspaceStore(tmp_path)
+    keys = {item.id: item.storage_key for item in first.list()}
+    assert keys[DEFAULT_WORKSPACE_ID] == DEFAULT_STORAGE_KEY
+    assert keys["research"]
+
+    second = WorkspaceStore(tmp_path)
+    assert {item.id: item.storage_key for item in second.list()} == keys
+
+
+def test_colliding_storage_keys_are_repaired(tmp_path: Path) -> None:
+    """手工把两条记录写成同一个 key 时重新派生，绝不让两区共用目录。"""
+
+    (tmp_path / "workspaces.json").write_text(
+        '[{"id": "a", "name": "A", "storage_key": "same"},'
+        ' {"id": "b", "name": "B", "storage_key": "same"}]',
+        encoding="utf-8",
+    )
+    store = WorkspaceStore(tmp_path)
+    keys = [item.storage_key for item in store.list()]
+    assert len(set(keys)) == len(keys)
+    assert {"a", "b"} <= {item.id for item in store.list()}
+
+
+def test_workspace_directory_tree_matches_prd_5_1(tmp_path: Path) -> None:
+    data_dir = tmp_path / "erag-data"
+    store = WorkspaceStore(data_dir)
+    workspace = store.create("研究")
+
+    root = store.ensure_dirs(data_dir, workspace.id)
+    assert root == data_dir / "workspaces" / workspace.storage_key
+    for relative in WORKSPACE_SUBDIRS:
+        assert (root / relative).is_dir(), relative
+
+    # PRD 5.1 的七个路径都能由 storage_key 推出（文件由各自拥有者首次写入时创建）
+    factory = WorkspaceContextFactory(data_dir, store)
+    paths = factory.paths_for(workspace.id)
+    assert paths.root_dir == root
+    assert paths.documents_dir == root / "documents"
+    assert paths.state_db == root / "state.db"
+    assert paths.image_state_db == root / "image_state.db"
+    assert paths.chroma_dir == root / "chroma"
+    assert paths.memory_json == root / "memory.json"
+    assert paths.checkpoints_db == root / "checkpoints.db"
+    assert paths.artifacts_dir == root / "artifacts"
+
+
+def test_legacy_layout_is_used_before_migration_and_never_flips_on_write(
+    tmp_path: Path,
+) -> None:
+    data_dir = _legacy_data_dir(tmp_path)
+    store = WorkspaceStore(data_dir)
+    factory = WorkspaceContextFactory(data_dir, store)
+
+    assert factory.layout_mode(DEFAULT_WORKSPACE_ID) is LayoutMode.LEGACY
+    legacy = factory.paths_for(DEFAULT_WORKSPACE_ID)
+    # 旧布局：Chroma persist 根就是 data_dir 本身（chroma.sqlite3 与分段目录同层）
+    assert legacy.chroma_dir == data_dir
+    assert legacy.state_db == data_dir / "state.db"
+
+    # 写入新目录树**不会**让解析翻转：判定只依据 storage.json（PRD 15.2 第 10 步）
+    store.ensure_dirs(data_dir, DEFAULT_WORKSPACE_ID)
+    assert factory.layout_mode(DEFAULT_WORKSPACE_ID) is LayoutMode.LEGACY
+    assert factory.paths_for(DEFAULT_WORKSPACE_ID).layout is LayoutMode.LEGACY
+
+
+def test_committing_storage_version_switches_to_workspace_layout(tmp_path: Path) -> None:
+    data_dir = _legacy_data_dir(tmp_path)
+    store = WorkspaceStore(data_dir)
+    factory = WorkspaceContextFactory(data_dir, store)
+    workspace = factory.resolve(DEFAULT_WORKSPACE_ID)
+    assert workspace.layout is LayoutMode.LEGACY
+
+    assert committed_storage_version(data_dir) == 0
+    commit_storage_version(
+        data_dir,
+        version=WORKSPACE_LAYOUT_VERSION,
+        extra={"migration_version": "v1.2.0"},
+    )
+    assert committed_storage_version(data_dir) == WORKSPACE_LAYOUT_VERSION
+    marker = read_storage_marker(data_dir)
+    assert marker["layout"] == "workspace"
+    assert marker["migration_version"] == "v1.2.0"
+
+    after = factory.paths_for(DEFAULT_WORKSPACE_ID)
+    assert after.layout is LayoutMode.WORKSPACE
+    assert after.chroma_dir == data_dir / "workspaces" / DEFAULT_STORAGE_KEY / "chroma"
+
+
+def test_fresh_install_without_legacy_artifacts_uses_workspace_layout(tmp_path: Path) -> None:
+    """全新安装里 ``workspaces.json`` 会立刻出现，但它不是旧布局的判据。"""
+
+    data_dir = tmp_path / "fresh"
+    store = WorkspaceStore(data_dir)
+    assert (data_dir / "workspaces.json").is_file()
+
+    factory = WorkspaceContextFactory(data_dir, store)
+    assert factory.layout_mode(DEFAULT_WORKSPACE_ID) is LayoutMode.WORKSPACE
+
+
+def test_loading_a_legacy_file_does_not_rewrite_it(tmp_path: Path) -> None:
+    """构造 ``WorkspaceStore`` 不得改写用户文件。
+
+    真实数据上 ``import app.api.deps`` 会在模块级构造 ``WorkspaceStore(settings.data_dir)``；
+    若回填顺手落盘，就变成「仅仅 import 一次改写了用户的 workspaces.json」。
+    确定性派生让回填无需落盘即可跨加载稳定。
+    """
+
+    path = tmp_path / "workspaces.json"
+    original = (
+        '[{"id": "default", "name": "默认", "is_default": true},\n'
+        ' {"id": "research", "name": "研究"}]\n'
+    )
+    path.write_text(original, encoding="utf-8")
+
+    store = WorkspaceStore(tmp_path)
+    assert path.read_text(encoding="utf-8") == original
+    assert store.get(DEFAULT_WORKSPACE_ID).storage_key == DEFAULT_STORAGE_KEY  # type: ignore[union-attr]
+    first = store.get("research").storage_key  # type: ignore[union-attr]
+    assert first
+    # 不落盘也必须每次加载得到同一个 key
+    assert WorkspaceStore(tmp_path).get("research").storage_key == first  # type: ignore[union-attr]
+
+
+def test_unknown_workspace_and_storage_key_have_no_paths(tmp_path: Path) -> None:
+    store = WorkspaceStore(tmp_path)
+    factory = WorkspaceContextFactory(tmp_path, store)
+    assert store.workspace_root(tmp_path, "nope") is None
+    assert store.storage_key("nope") is None
+    assert store.get_by_storage_key("nope") is None
+    with pytest.raises(WorkspaceNotFoundError):
+        factory.paths_for("nope")
