@@ -2,11 +2,36 @@
 import asyncio
 from datetime import UTC, datetime
 from time import perf_counter
+from typing import Any
 from urllib.parse import urlsplit
 
 from openai import APIConnectionError, APIStatusError, APITimeoutError, AsyncOpenAI
 
 from app.core.outbound import OutboundEvent, outbound_client
+from app.generation.capabilities import (
+    CAPABILITY_ENV_VAR,
+    CapabilityConfigurationError,
+    describe_capabilities,
+    resolve_capabilities,
+)
+
+
+def probe_capabilities(model: str, base_url: str | None = None) -> dict[str, Any]:
+    """能力探测（纯本地）：按 provider 配置解析能力，零联网、零副作用。
+
+    未知模型 / 未声明的端点 -> ``success=False`` + 明确配置错误消息（含环境变量
+    与内置模型名），界面照消息提示用户声明能力即可，不猜测、不静默降级（PRD 9.2）。
+    """
+    try:
+        capabilities = resolve_capabilities(model, base_url)
+    except CapabilityConfigurationError as exc:
+        return {"success": False, "message": str(exc), "capabilities": None}
+    return {
+        "success": True,
+        "message": "能力已声明",
+        "capabilities": describe_capabilities(capabilities),
+        "source": CAPABILITY_ENV_VAR,
+    }
 
 
 async def probe_model(kind: str, base_url: str, model: str, api_key: str | None) -> dict:
