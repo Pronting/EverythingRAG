@@ -652,9 +652,12 @@ class ToolContext:
     #: 筛选**结果**上报（纯追加，集成 t5）：``await rerank_outcome(payload)``，
     #: ``payload`` = ``{"status", "result_count", "source_count", "sources"}`` ——
     #: ``result_count`` 是入选来源数（0 ⇒ 筛选后 0 条）、``source_count`` 是候选数、
-    #: ``sources`` 是入选来源的相关性记录（键为 ``source_ref``）。运行层用它把**真实计数**
-    #: 填进 ``tool.completed``（前端据此区分 ``filtered`` / ``empty``），并把 ``sources``
-    #: 记下来供 ``answer.meta.citations`` 的「已筛选资料」字段使用。
+    #: ``sources`` 是来源的相关性记录（键为 ``source_ref``，含**原始向量分数** ``similarity``）。
+    #: 运行层用它把**真实计数**填进 ``tool.completed``（前端据此区分 ``filtered`` / ``empty``），
+    #: 并把 ``sources`` 记下来供 ``answer.meta.citations`` 的「已筛选资料」字段使用。
+    #:
+    #: ``status="disabled"``（未启用筛选，t9）是特例：payload 只有 ``status`` 与 ``sources``，
+    #: 运行层**只登记来源、不发布任何事件** —— 三态判定依赖事件流，故仍判 ``disabled``。
     #: ``None`` = 未注入 ⇒ 退回 ``rerank_progress("done")``（接线前行为不变）。
     rerank_outcome: Callable[[Mapping[str, Any]], Awaitable[None]] | None = None
 
@@ -1449,11 +1452,44 @@ async def _search_knowledge(params: SearchKnowledgeParams, context: ToolContext)
         data["retrieval"] = outcome.to_dict()
         # 入选数 > 0 ⇒ 前端可判 ``filtered``；同批记录供引用卡片使用。
         await _report_rerank_outcome(context, outcome)
+    else:
+        # 未启用筛选：也要把来源的**原始向量分数**交上去（t9 修的回归：不交的话前端会把
+        # 向量命中误标成「词法命中」）。这条路径**不发布任何筛选事件**，见函数 docstring。
+        await _report_disabled_sources(context, selected)
     return ToolResult(
         tool=tool,
         status=ToolStatus.OK,
         data=data,
         message=f"命中 {len(selected)} 个知识片段",
+    )
+
+
+async def _report_disabled_sources(context: ToolContext, chunks: Sequence[Any]) -> None:
+    """未启用筛选时也把来源的**原始向量分数**交给运行层（**不发布任何筛选事件**）。
+
+    为什么需要（t9 修的回归）：``tool.completed(tool_name="rerank")`` 只在**筛选真的执行**时
+    发布，而未启用筛选时的来源此前不带任何记录 ⇒ 引用上的 ``similarity`` 恒为 ``None`` ⇒
+    前端 ``util/source.ts::sourceMatchLabel`` 会把**密集向量命中**误标成「词法命中」
+    （main 的旧 ``meta.sources`` 对**所有**来源都给 similarity，不会这样）。
+
+    安全边界（与主流程严格区分）：
+
+    * ``status="disabled"`` ⇒ 运行层据此**只登记来源、不发布事件**，因此前端的三态判定
+      （依赖事件流）仍判 ``disabled``，不会因为本修复被误判成 ``filtered``/``empty``；
+    * 记录里 ``relevance_checked`` 仍为 ``False``、重排字段仍为默认值 ⇒ 前端的 ``filtered``
+      闸门不会显示任何重排分数，**不伪造「已筛选资料」**；
+    * 唯一新增效果：未筛选来源也能携带**真实的原始向量分数**（缺向量分数仍是 ``None``，
+      真实 ``0.0`` 如实保留）。
+    """
+
+    sink = context.rerank_outcome
+    if sink is None or not chunks:
+        return
+    await sink(
+        {
+            "status": rerank_pipeline.STATUS_DISABLED,
+            "sources": _rerank_source_records(chunks),
+        }
     )
 
 

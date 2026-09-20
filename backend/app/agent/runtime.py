@@ -1903,25 +1903,35 @@ async def tool_context_for(
 def _rerank_outcome_sink(
     manager: RunManager, run: Any
 ) -> Callable[[Mapping[str, Any]], Awaitable[None]]:
-    """把工具层上报的筛选**结果**转成 v2 事件 + 记下入选来源的相关性记录。
+    """把工具层上报的筛选**结果**转成 v2 事件 + 记下来源的相关性记录。
 
     * ``tool.completed`` 填**真实** ``result_count``（入选来源数，0 ⇒ 筛选后 0 条）与
       ``source_count``（候选数）—— 前端据此区分 ``filtered`` / ``empty``，不再把 0 当成
       「未统计」；
-    * 入选来源按 ``source_ref`` 记到本 run（:meth:`RunManager.register_rerank_sources`），
-      在合成阶段交给 :func:`app.agent.verification.assign_citation_ids`，成为
-      ``answer.meta.citations`` 上「已筛选资料」的追加字段（PRD §8.3）。
+    * 来源按 ``source_ref`` 记到本 run（:meth:`RunManager.register_rerank_sources`），在合成
+      阶段交给 :func:`app.agent.verification.assign_citation_ids`，成为
+      ``answer.meta.citations`` 的追加字段（PRD §8.3 / RAG-relevance `:304`）。
+
+    **``status="disabled"`` 是特例（t9）**：未启用筛选时**不发布任何事件**，只登记来源 ——
+    前端的「已筛选 / 空 / 未启用」三态判定**依赖事件流**（无 rerank 事件 ⇒ ``disabled``），
+    因此这里绝不能补发一个 ``tool.completed``，否则会把未筛选的一轮误报成「筛选过」；
+    登记来源是为了让引用仍能带上**真实向量相似度**（PRD RAG-relevance `:52`）。
 
     只用**已声明事件的现有字段**：不新增事件类型、不改 payload 模型。
     """
 
-    from app.retrieval.rerank_pipeline import RERANK_PROGRESS_TOOL_NAME
+    from app.retrieval.rerank_pipeline import RERANK_PROGRESS_TOOL_NAME, STATUS_DISABLED
 
     run_id = str(run.id)
 
     async def report(payload: Mapping[str, Any]) -> None:
-        sources = [dict(item) for item in (payload.get("sources") or []) if isinstance(item, Mapping)]
+        sources = [
+            dict(item) for item in (payload.get("sources") or []) if isinstance(item, Mapping)
+        ]
         manager.register_rerank_sources(run_id, sources)
+        if str(payload.get("status") or "") == STATUS_DISABLED:
+            # 未启用筛选：只登记来源（让引用带上真实向量分数），**不发布筛选事件**。
+            return
         await manager.publish_event(
             run_id,
             EventType.TOOL_COMPLETED,

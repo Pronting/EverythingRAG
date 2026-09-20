@@ -526,6 +526,56 @@ async def test_source_record_without_vector_similarity_stays_none() -> None:
     assert record["rerank_score"] == pytest.approx(0.9)
 
 
+async def test_disabled_registers_sources_with_the_real_vector_similarity() -> None:
+    """t9：未启用筛选时也要交来源记录，且 ``similarity`` 是**真实原始向量分数**。
+
+    回归背景：不交记录 ⇒ 引用上 ``similarity`` 恒为 ``None`` ⇒ 前端 ``sourceMatchLabel``
+    会把**密集向量命中**误标成「词法命中」（main 的旧 ``meta.sources`` 不会）。
+
+    同时守住安全边界：记录里 ``relevance_checked`` 仍为 ``False``、重排字段仍为默认值，
+    因此前端的 ``filtered`` 闸门不会显示任何重排分数（不伪造「已筛选资料」）。
+    """
+
+    chunks = [make_chunk("b1", similarity=0.42), make_chunk("b2", similarity=0.9)]
+    outcome = OutcomeRecorder()
+    progress = ProgressRecorder()
+
+    result = await search(
+        make_context(chunks, runtime=None, outcome=outcome, progress=progress)
+    )
+
+    assert result.status is ToolStatus.OK
+    assert progress.events == [], "未启用筛选不得上报筛选进度（三态判定依赖事件流）"
+    payload = outcome.last
+    assert payload["status"] == rerank_pipeline.STATUS_DISABLED
+    by_ref = {item["source_ref"]: item for item in payload["sources"]}
+    assert by_ref["b1#b1"]["similarity"] == pytest.approx(0.42)
+    assert by_ref["b2#b2"]["similarity"] == pytest.approx(0.9)
+    for item in payload["sources"]:
+        assert item["similarity"] != item["rerank_score"]  # 两条通路不混淆
+        assert item["relevance_checked"] is False
+        assert item["rerank_score"] is None
+        assert item["score_type"] == "" and item["profile_id"] == ""
+        assert item["evidence_hash"] == "" and item["member_refs"] == []
+
+
+async def test_disabled_source_similarity_none_and_zero_are_not_conflated() -> None:
+    """t9：真正词法命中（无向量分数）⇒ ``None``；**真实 0.0 如实保留**（不与缺失混同）。"""
+
+    chunks = [
+        make_chunk("b-lexical", similarity=None),
+        make_chunk("b-zero", similarity=0.0),
+    ]
+    outcome = OutcomeRecorder()
+
+    await search(make_context(chunks, runtime=None, outcome=outcome))
+
+    by_ref = {item["source_ref"]: item for item in outcome.last["sources"]}
+    assert by_ref["b-lexical#b-lexical"]["similarity"] is None, "缺向量分数不得编造 0"
+    assert by_ref["b-zero#b-zero"]["similarity"] == 0.0
+    assert by_ref["b-zero#b-zero"]["similarity"] is not None
+
+
 async def test_outcome_sink_absent_falls_back_to_the_legacy_done_progress() -> None:
     """未注入 ``rerank_outcome`` 的旧装配：仍只发 ``rerank_progress("done")``（行为不变）。"""
 
@@ -842,6 +892,25 @@ def _evidence_texts(events: Any) -> str:
     )
 
 
+def _retrieval_status_from_events(events: Any) -> str:
+    """前端三态判据的镜像（``processState.retrievalFromRerankTool``）。
+
+    无 rerank 完成事件 ⇒ ``disabled``；成功且 ``result_count > 0`` ⇒ ``filtered``；
+    成功且 ``result_count == 0`` ⇒ ``empty``。t9 的安全边界就是靠这里显式钉住：
+    未启用筛选时**不得**因为补了来源记录而冒出一个 rerank 完成事件。
+    """
+
+    completed = [
+        item
+        for item in _events_of(events, EventType.TOOL_COMPLETED)
+        if item.payload.get("tool_name") == "rerank"
+        and item.payload.get("status") == "succeeded"
+    ]
+    if not completed:
+        return "disabled"
+    return "filtered" if int(completed[-1].payload.get("result_count") or 0) > 0 else "empty"
+
+
 async def test_run_api_reports_rerank_progress_and_filters_evidence(tmp_path: Path) -> None:
     """启用筛选：进度走 v2 ``tool.*`` 事件，且只有入选候选进入证据。"""
 
@@ -992,6 +1061,56 @@ async def test_run_api_answer_meta_citations_default_without_rerank(tmp_path: Pa
             assert citation["profile_id"] == ""
             assert citation["evidence_hash"] == ""
             assert citation["member_refs"] == []
+        # t9：未启用筛选也要带**真实原始向量分数**（否则前端把向量命中标成「词法命中」）
+        assert {item["source_ref"] for item in citations} <= {
+            "b-orange#b-orange",
+            "b-polar#b-polar",
+        }, citations
+        for citation in citations:
+            expected = 0.42 if citation["source_ref"].startswith("b-orange") else 0.9
+            assert citation["similarity"] == pytest.approx(expected), citation
+            assert citation["similarity"] != citation["rerank_score"]
+        # 安全边界：本轮仍判 disabled（没有因为补来源记录而冒出一个 rerank 完成事件）
+        assert _retrieval_status_from_events(events) == "disabled"
+    finally:
+        await env.close()
+
+
+async def test_run_api_disabled_sources_keep_vector_similarity_without_rerank_events(
+    tmp_path: Path,
+) -> None:
+    """t9 回归修复的端到端证据：未启用筛选时引用带真实向量分数，且**事件流完全不变**。
+
+    两件事必须同时成立：
+
+    1. 引用上的 ``similarity`` 是检索命中的**真实原始向量分数**（0.42 / 0.9，按 source_ref
+       各自对应），重排字段仍是默认值（``relevance_checked=False``）；
+    2. **没有**任何 rerank 的 ``tool.started`` / ``tool.completed`` ⇒ 前端三态仍判 ``disabled``
+       （这正是本修复的安全边界：只补数据，不补事件）。
+    """
+
+    env = await _build_run_env(tmp_path, runtime=None)
+    try:
+        run_id, events = await _run(env)
+        run = await env.store.get_run(run_id)
+        assert run.status in {RunStatus.COMPLETED, RunStatus.COMPLETED_WITH_GAPS}
+
+        assert not _events_of(events, EventType.TOOL_STARTED), "disabled 不得有筛选开始事件"
+        assert not _events_of(events, EventType.TOOL_COMPLETED), "disabled 不得有筛选完成事件"
+        assert _retrieval_status_from_events(events) == "disabled"
+
+        citations = _events_of(events, EventType.ANSWER_META)[-1].payload["citations"]
+        assert citations
+        for citation in citations:
+            assert citation["similarity"] is not None, citation
+            assert citation["similarity"] != citation["rerank_score"]
+            assert citation["relevance_checked"] is False
+            assert citation["rerank_score"] is None
+        # 落库往返同样保留向量分数（旧记录缺字段时仍回落默认）
+        artifact = await env.store.get_answer(run.answer_id)
+        assert artifact is not None and artifact.citations
+        assert all(item.similarity is not None for item in artifact.citations)
+        assert all(item.relevance_checked is False for item in artifact.citations)
     finally:
         await env.close()
 
