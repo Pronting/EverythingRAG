@@ -1,0 +1,7927 @@
+{
+ "mode": "rule-layer-offline",
+ "catalog": "hint-proxy",
+ "split": "all",
+ "cases": 155,
+ "model_calls": 0,
+ "routing_rules_version": "routing-rules-v1",
+ "query_modes": {
+  "PRODUCT_HELP": 8,
+  "KNOWLEDGE_OVERVIEW": 2,
+  "CONTENT_QA": 145
+ },
+ "metrics": [
+  {
+   "id": "M1",
+   "name": "用户确认的关键内部问题全部进入知识路径",
+   "requirement": "100%",
+   "numerator": 65,
+   "denominator": 65,
+   "rate": 1.0,
+   "passed": true,
+   "note": "",
+   "failed_case_ids": []
+  },
+  {
+   "id": "M2",
+   "name": "内部问题来源召回率（保留集）",
+   "requirement": "100%",
+   "numerator": 18,
+   "denominator": 18,
+   "rate": 1.0,
+   "passed": true,
+   "note": "",
+   "failed_case_ids": []
+  },
+  {
+   "id": "M3",
+   "name": "普通问题无无关知识注入比例",
+   "requirement": ">=95%",
+   "numerator": 60,
+   "denominator": 60,
+   "rate": 1.0,
+   "passed": true,
+   "note": "",
+   "failed_case_ids": []
+  },
+  {
+   "id": "M4",
+   "name": "最新信息问题正确选择 Web",
+   "requirement": "100%",
+   "numerator": 20,
+   "denominator": 20,
+   "rate": 1.0,
+   "passed": true,
+   "note": "",
+   "failed_case_ids": []
+  },
+  {
+   "id": "M5",
+   "name": "产品和统计问题选择正确来源",
+   "requirement": "100%",
+   "numerator": 10,
+   "denominator": 10,
+   "rate": 1.0,
+   "passed": true,
+   "note": "",
+   "failed_case_ids": []
+  },
+  {
+   "id": "M6",
+   "name": "多来源与多轮问题完成来源要求",
+   "requirement": ">=95%",
+   "numerator": 30,
+   "denominator": 30,
+   "rate": 1.0,
+   "passed": true,
+   "note": "",
+   "failed_case_ids": []
+  }
+ ],
+ "failures": [],
+ "scope_checks": {
+  "cases_with_scope_evidence": 75,
+  "cases_with_unresolved_terms": 0
+ },
+ "not_covered_here": {
+  "M7": "跨工作区内容误用需要真实工作区；由 T_verify 在真实数据上执行",
+  "tools_executed": "离线模式不执行工具，只给 planned_tools_not_executed",
+  "answer_quality": "答案质量评测（PRD 16.4）由 T_verify 执行"
+ },
+ "records": [
+  {
+   "id": "F-001",
+   "category": "freshness",
+   "split": "holdout",
+   "source": "real",
+   "question": "Kubernetes 最新版本有哪些新特性和废弃 API？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "Kubernetes 最新版本有哪些新特性和废弃 API？",
+    "resolved_question": "Kubernetes 最新版本有哪些新特性和废弃 API？",
+    "intent": "research",
+    "needs_knowledge": false,
+    "needs_web": true,
+    "needs_history": false,
+    "needs_general": false,
+    "freshness": "current",
+    "entities": [],
+    "scope_evidence_ids": [],
+    "unresolved_terms": [],
+    "reason_summary": "需要公开且可核实的最新信息，走联网路径"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": true,
+    "notes": [
+     "本区知识目录为空"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "web_search",
+    "read_web_page"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 0,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "F-002",
+   "category": "freshness",
+   "split": "dev",
+   "source": "constructed",
+   "question": "今天 AI 领域有什么新闻？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "今天 AI 领域有什么新闻？",
+    "resolved_question": "今天 AI 领域有什么新闻？",
+    "intent": "research",
+    "needs_knowledge": false,
+    "needs_web": true,
+    "needs_history": false,
+    "needs_general": false,
+    "freshness": "current",
+    "entities": [],
+    "scope_evidence_ids": [],
+    "unresolved_terms": [],
+    "reason_summary": "需要公开且可核实的最新信息，走联网路径"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": true,
+    "notes": [
+     "本区知识目录为空"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "web_search",
+    "read_web_page"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 0,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "F-003",
+   "category": "freshness",
+   "split": "holdout",
+   "source": "constructed",
+   "question": "最新版本的 Kubernetes 有哪些新特性？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "最新版本的 Kubernetes 有哪些新特性？",
+    "resolved_question": "最新版本的 Kubernetes 有哪些新特性？",
+    "intent": "research",
+    "needs_knowledge": false,
+    "needs_web": true,
+    "needs_history": false,
+    "needs_general": false,
+    "freshness": "current",
+    "entities": [],
+    "scope_evidence_ids": [],
+    "unresolved_terms": [],
+    "reason_summary": "需要公开且可核实的最新信息，走联网路径"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": true,
+    "notes": [
+     "本区知识目录为空"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "web_search",
+    "read_web_page"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 0,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "F-004",
+   "category": "freshness",
+   "split": "holdout",
+   "source": "constructed",
+   "question": "现在主流的向量库最新版本分别是哪些？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "现在主流的向量库最新版本分别是哪些？",
+    "resolved_question": "现在主流的向量库最新版本分别是哪些？",
+    "intent": "research",
+    "needs_knowledge": false,
+    "needs_web": true,
+    "needs_history": false,
+    "needs_general": false,
+    "freshness": "current",
+    "entities": [],
+    "scope_evidence_ids": [],
+    "unresolved_terms": [],
+    "reason_summary": "需要公开且可核实的最新信息，走联网路径"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": true,
+    "notes": [
+     "本区知识目录为空"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "web_search",
+    "read_web_page"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 0,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "F-005",
+   "category": "freshness",
+   "split": "dev",
+   "source": "constructed",
+   "question": "DeepSeek 最新发布的模型是什么？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "DeepSeek 最新发布的模型是什么？",
+    "resolved_question": "DeepSeek 最新发布的模型是什么？",
+    "intent": "research",
+    "needs_knowledge": false,
+    "needs_web": true,
+    "needs_history": false,
+    "needs_general": false,
+    "freshness": "current",
+    "entities": [],
+    "scope_evidence_ids": [],
+    "unresolved_terms": [],
+    "reason_summary": "需要公开且可核实的最新信息，走联网路径"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": true,
+    "notes": [
+     "本区知识目录为空"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "web_search",
+    "read_web_page"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 0,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "F-006",
+   "category": "freshness",
+   "split": "dev",
+   "source": "constructed",
+   "question": "今天美元兑人民币的汇率是多少？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "今天美元兑人民币的汇率是多少？",
+    "resolved_question": "今天美元兑人民币的汇率是多少？",
+    "intent": "research",
+    "needs_knowledge": false,
+    "needs_web": true,
+    "needs_history": false,
+    "needs_general": false,
+    "freshness": "current",
+    "entities": [],
+    "scope_evidence_ids": [],
+    "unresolved_terms": [],
+    "reason_summary": "需要公开且可核实的最新信息，走联网路径"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": true,
+    "notes": [
+     "本区知识目录为空"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "web_search",
+    "read_web_page"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 0,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "F-007",
+   "category": "freshness",
+   "split": "dev",
+   "source": "constructed",
+   "question": "最新的 Vue 3 稳定版本是多少？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "最新的 Vue 3 稳定版本是多少？",
+    "resolved_question": "最新的 Vue 3 稳定版本是多少？",
+    "intent": "research",
+    "needs_knowledge": false,
+    "needs_web": true,
+    "needs_history": false,
+    "needs_general": false,
+    "freshness": "current",
+    "entities": [],
+    "scope_evidence_ids": [],
+    "unresolved_terms": [],
+    "reason_summary": "需要公开且可核实的最新信息，走联网路径"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": true,
+    "notes": [
+     "本区知识目录为空"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "web_search",
+    "read_web_page"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 0,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "F-008",
+   "category": "freshness",
+   "split": "dev",
+   "source": "constructed",
+   "question": "当前最新的 Python 版本有哪些变化？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "当前最新的 Python 版本有哪些变化？",
+    "resolved_question": "当前最新的 Python 版本有哪些变化？",
+    "intent": "research",
+    "needs_knowledge": false,
+    "needs_web": true,
+    "needs_history": false,
+    "needs_general": false,
+    "freshness": "current",
+    "entities": [],
+    "scope_evidence_ids": [],
+    "unresolved_terms": [],
+    "reason_summary": "需要公开且可核实的最新信息，走联网路径"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": true,
+    "notes": [
+     "本区知识目录为空"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "web_search",
+    "read_web_page"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 0,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "F-009",
+   "category": "freshness",
+   "split": "dev",
+   "source": "constructed",
+   "question": "现在最新的 Node.js LTS 是哪个版本？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "现在最新的 Node.js LTS 是哪个版本？",
+    "resolved_question": "现在最新的 Node.js LTS 是哪个版本？",
+    "intent": "research",
+    "needs_knowledge": false,
+    "needs_web": true,
+    "needs_history": false,
+    "needs_general": false,
+    "freshness": "current",
+    "entities": [],
+    "scope_evidence_ids": [],
+    "unresolved_terms": [],
+    "reason_summary": "需要公开且可核实的最新信息，走联网路径"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": true,
+    "notes": [
+     "本区知识目录为空"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "web_search",
+    "read_web_page"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 0,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "F-010",
+   "category": "freshness",
+   "split": "dev",
+   "source": "constructed",
+   "question": "今天有哪个科技公司发布了重要公告？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "今天有哪个科技公司发布了重要公告？",
+    "resolved_question": "今天有哪个科技公司发布了重要公告？",
+    "intent": "research",
+    "needs_knowledge": false,
+    "needs_web": true,
+    "needs_history": false,
+    "needs_general": false,
+    "freshness": "current",
+    "entities": [],
+    "scope_evidence_ids": [],
+    "unresolved_terms": [],
+    "reason_summary": "需要公开且可核实的最新信息，走联网路径"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": true,
+    "notes": [
+     "本区知识目录为空"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "web_search",
+    "read_web_page"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 0,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "F-011",
+   "category": "freshness",
+   "split": "holdout",
+   "source": "constructed",
+   "question": "最近发布的 Chroma 有哪些更新？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "最近发布的 Chroma 有哪些更新？",
+    "resolved_question": "最近发布的 Chroma 有哪些更新？",
+    "intent": "research",
+    "needs_knowledge": false,
+    "needs_web": true,
+    "needs_history": false,
+    "needs_general": false,
+    "freshness": "current",
+    "entities": [],
+    "scope_evidence_ids": [],
+    "unresolved_terms": [],
+    "reason_summary": "需要公开且可核实的最新信息，走联网路径"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": true,
+    "notes": [
+     "本区知识目录为空"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "web_search",
+    "read_web_page"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 0,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "F-012",
+   "category": "freshness",
+   "split": "dev",
+   "source": "constructed",
+   "question": "本周 AI 圈有什么值得关注的发布？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "本周 AI 圈有什么值得关注的发布？",
+    "resolved_question": "本周 AI 圈有什么值得关注的发布？",
+    "intent": "research",
+    "needs_knowledge": false,
+    "needs_web": true,
+    "needs_history": false,
+    "needs_general": false,
+    "freshness": "date_range",
+    "entities": [],
+    "scope_evidence_ids": [],
+    "unresolved_terms": [],
+    "reason_summary": "需要公开且可核实的最新信息，走联网路径"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": true,
+    "notes": [
+     "本区知识目录为空"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "web_search",
+    "read_web_page"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 0,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "F-013",
+   "category": "freshness",
+   "split": "holdout",
+   "source": "constructed",
+   "question": "现在最新的 GPT 系列模型有哪些？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "现在最新的 GPT 系列模型有哪些？",
+    "resolved_question": "现在最新的 GPT 系列模型有哪些？",
+    "intent": "research",
+    "needs_knowledge": false,
+    "needs_web": true,
+    "needs_history": false,
+    "needs_general": false,
+    "freshness": "current",
+    "entities": [],
+    "scope_evidence_ids": [],
+    "unresolved_terms": [],
+    "reason_summary": "需要公开且可核实的最新信息，走联网路径"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": true,
+    "notes": [
+     "本区知识目录为空"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "web_search",
+    "read_web_page"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 0,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "F-014",
+   "category": "freshness",
+   "split": "holdout",
+   "source": "constructed",
+   "question": "最近的 Playwright 版本有什么新特性？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "最近的 Playwright 版本有什么新特性？",
+    "resolved_question": "最近的 Playwright 版本有什么新特性？",
+    "intent": "research",
+    "needs_knowledge": false,
+    "needs_web": true,
+    "needs_history": false,
+    "needs_general": false,
+    "freshness": "current",
+    "entities": [],
+    "scope_evidence_ids": [],
+    "unresolved_terms": [],
+    "reason_summary": "需要公开且可核实的最新信息，走联网路径"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": true,
+    "notes": [
+     "本区知识目录为空"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "web_search",
+    "read_web_page"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 0,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "F-015",
+   "category": "freshness",
+   "split": "dev",
+   "source": "constructed",
+   "question": "目前最新的 iOS 版本号是多少？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "目前最新的 iOS 版本号是多少？",
+    "resolved_question": "目前最新的 iOS 版本号是多少？",
+    "intent": "research",
+    "needs_knowledge": false,
+    "needs_web": true,
+    "needs_history": false,
+    "needs_general": false,
+    "freshness": "current",
+    "entities": [],
+    "scope_evidence_ids": [],
+    "unresolved_terms": [],
+    "reason_summary": "需要公开且可核实的最新信息，走联网路径"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": true,
+    "notes": [
+     "本区知识目录为空"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "web_search",
+    "read_web_page"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 0,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "F-016",
+   "category": "freshness",
+   "split": "holdout",
+   "source": "constructed",
+   "question": "今天上海的天气怎么样？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "今天上海的天气怎么样？",
+    "resolved_question": "今天上海的天气怎么样？",
+    "intent": "research",
+    "needs_knowledge": false,
+    "needs_web": true,
+    "needs_history": false,
+    "needs_general": false,
+    "freshness": "current",
+    "entities": [],
+    "scope_evidence_ids": [],
+    "unresolved_terms": [],
+    "reason_summary": "需要公开且可核实的最新信息，走联网路径"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": true,
+    "notes": [
+     "本区知识目录为空"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "web_search",
+    "read_web_page"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 0,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "F-017",
+   "category": "freshness",
+   "split": "holdout",
+   "source": "constructed",
+   "question": "最新一期 Nature 的封面文章是什么？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "最新一期 Nature 的封面文章是什么？",
+    "resolved_question": "最新一期 Nature 的封面文章是什么？",
+    "intent": "research",
+    "needs_knowledge": false,
+    "needs_web": true,
+    "needs_history": false,
+    "needs_general": false,
+    "freshness": "current",
+    "entities": [],
+    "scope_evidence_ids": [],
+    "unresolved_terms": [],
+    "reason_summary": "需要公开且可核实的最新信息，走联网路径"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": true,
+    "notes": [
+     "本区知识目录为空"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "web_search",
+    "read_web_page"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 0,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "F-018",
+   "category": "freshness",
+   "split": "dev",
+   "source": "constructed",
+   "question": "现在最新的 React 版本有哪些变化？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "现在最新的 React 版本有哪些变化？",
+    "resolved_question": "现在最新的 React 版本有哪些变化？",
+    "intent": "research",
+    "needs_knowledge": false,
+    "needs_web": true,
+    "needs_history": false,
+    "needs_general": false,
+    "freshness": "current",
+    "entities": [],
+    "scope_evidence_ids": [],
+    "unresolved_terms": [],
+    "reason_summary": "需要公开且可核实的最新信息，走联网路径"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": true,
+    "notes": [
+     "本区知识目录为空"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "web_search",
+    "read_web_page"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 0,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "F-019",
+   "category": "freshness",
+   "split": "holdout",
+   "source": "constructed",
+   "question": "近三个月 AI 芯片领域有什么新品发布？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "近三个月 AI 芯片领域有什么新品发布？",
+    "resolved_question": "近三个月 AI 芯片领域有什么新品发布？",
+    "intent": "research",
+    "needs_knowledge": false,
+    "needs_web": true,
+    "needs_history": false,
+    "needs_general": false,
+    "freshness": "date_range",
+    "entities": [],
+    "scope_evidence_ids": [],
+    "unresolved_terms": [],
+    "reason_summary": "需要公开且可核实的最新信息，走联网路径"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": true,
+    "notes": [
+     "本区知识目录为空"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "web_search",
+    "read_web_page"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 0,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "F-020",
+   "category": "freshness",
+   "split": "dev",
+   "source": "constructed",
+   "question": "最近 OpenAI 有哪些新发布？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "最近 OpenAI 有哪些新发布？",
+    "resolved_question": "最近 OpenAI 有哪些新发布？",
+    "intent": "research",
+    "needs_knowledge": false,
+    "needs_web": true,
+    "needs_history": false,
+    "needs_general": false,
+    "freshness": "current",
+    "entities": [],
+    "scope_evidence_ids": [],
+    "unresolved_terms": [],
+    "reason_summary": "需要公开且可核实的最新信息，走联网路径"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": true,
+    "notes": [
+     "本区知识目录为空"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "web_search",
+    "read_web_page"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 0,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "G-001",
+   "category": "general",
+   "split": "holdout",
+   "source": "real",
+   "question": "量子计算中表面码纠错的物理实现原理是什么？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "量子计算中表面码纠错的物理实现原理是什么？",
+    "resolved_question": "量子计算中表面码纠错的物理实现原理是什么？",
+    "intent": "general",
+    "needs_knowledge": false,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": true,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [],
+    "unresolved_terms": [],
+    "reason_summary": "用通用知识解释"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": true,
+    "notes": [
+     "本区知识目录为空"
+    ]
+   },
+   "planned_tools_not_executed": [],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 0,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "G-002",
+   "category": "general",
+   "split": "dev",
+   "source": "real",
+   "question": "如何酿造比利时修道院风格的三料啤酒？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "如何酿造比利时修道院风格的三料啤酒？",
+    "resolved_question": "如何酿造比利时修道院风格的三料啤酒？",
+    "intent": "general",
+    "needs_knowledge": false,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": true,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [],
+    "unresolved_terms": [],
+    "reason_summary": "用通用知识解释"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": true,
+    "notes": [
+     "本区知识目录为空"
+    ]
+   },
+   "planned_tools_not_executed": [],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 0,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "G-003",
+   "category": "general",
+   "split": "dev",
+   "source": "real",
+   "question": "2026 年世界杯的赛程和分组抽签结果是什么？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "2026 年世界杯的赛程和分组抽签结果是什么？",
+    "resolved_question": "2026 年世界杯的赛程和分组抽签结果是什么？",
+    "intent": "general",
+    "needs_knowledge": false,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": true,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [],
+    "unresolved_terms": [],
+    "reason_summary": "用通用知识解释"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": true,
+    "notes": [
+     "本区知识目录为空"
+    ]
+   },
+   "planned_tools_not_executed": [],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 0,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "G-004",
+   "category": "general",
+   "split": "dev",
+   "source": "real",
+   "question": "在瑞士租房签订的合同需要注意哪些法律条款？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "在瑞士租房签订的合同需要注意哪些法律条款？",
+    "resolved_question": "在瑞士租房签订的合同需要注意哪些法律条款？",
+    "intent": "general",
+    "needs_knowledge": false,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": true,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [],
+    "unresolved_terms": [],
+    "reason_summary": "用通用知识解释"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": true,
+    "notes": [
+     "本区知识目录为空"
+    ]
+   },
+   "planned_tools_not_executed": [],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 0,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "G-005",
+   "category": "general",
+   "split": "dev",
+   "source": "real",
+   "question": "火星土壤原位资源利用（ISRU）有哪些技术方案？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "火星土壤原位资源利用（ISRU）有哪些技术方案？",
+    "resolved_question": "火星土壤原位资源利用（ISRU）有哪些技术方案？",
+    "intent": "general",
+    "needs_knowledge": false,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": true,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [],
+    "unresolved_terms": [],
+    "reason_summary": "用通用知识解释"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": true,
+    "notes": [
+     "本区知识目录为空"
+    ]
+   },
+   "planned_tools_not_executed": [],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 0,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "G-006",
+   "category": "general",
+   "split": "dev",
+   "source": "real",
+   "question": "贝多芬第九交响曲首演的具体时间和地点是哪里？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "贝多芬第九交响曲首演的具体时间和地点是哪里？",
+    "resolved_question": "贝多芬第九交响曲首演的具体时间和地点是哪里？",
+    "intent": "general",
+    "needs_knowledge": false,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": true,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [],
+    "unresolved_terms": [],
+    "reason_summary": "用通用知识解释"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": true,
+    "notes": [
+     "本区知识目录为空"
+    ]
+   },
+   "planned_tools_not_executed": [],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 0,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "G-007",
+   "category": "general",
+   "split": "holdout",
+   "source": "real",
+   "question": "如何申请日本经营管理签证，需要准备哪些材料？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "如何申请日本经营管理签证，需要准备哪些材料？",
+    "resolved_question": "如何申请日本经营管理签证，需要准备哪些材料？",
+    "intent": "general",
+    "needs_knowledge": false,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": true,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [],
+    "unresolved_terms": [],
+    "reason_summary": "用通用知识解释"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": true,
+    "notes": [
+     "本区知识目录为空"
+    ]
+   },
+   "planned_tools_not_executed": [],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 0,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "G-008",
+   "category": "general",
+   "split": "dev",
+   "source": "real",
+   "question": "怎么给三个月大的幼犬做定点如厕训练？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "怎么给三个月大的幼犬做定点如厕训练？",
+    "resolved_question": "怎么给三个月大的幼犬做定点如厕训练？",
+    "intent": "general",
+    "needs_knowledge": false,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": true,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [],
+    "unresolved_terms": [],
+    "reason_summary": "用通用知识解释"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": true,
+    "notes": [
+     "本区知识目录为空"
+    ]
+   },
+   "planned_tools_not_executed": [],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 0,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "G-009",
+   "category": "general",
+   "split": "holdout",
+   "source": "real",
+   "question": "数据库慢查询一般要怎么排查，有什么通用方法？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "数据库慢查询一般要怎么排查，有什么通用方法？",
+    "resolved_question": "数据库慢查询一般要怎么排查，有什么通用方法？",
+    "intent": "general",
+    "needs_knowledge": false,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": true,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [],
+    "unresolved_terms": [],
+    "reason_summary": "用通用知识解释"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": true,
+    "notes": [
+     "本区知识目录为空"
+    ]
+   },
+   "planned_tools_not_executed": [],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 0,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "G-010",
+   "category": "general",
+   "split": "dev",
+   "source": "real",
+   "question": "Redis 大 key 热 key 问题要怎么解决？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "Redis 大 key 热 key 问题要怎么解决？",
+    "resolved_question": "Redis 大 key 热 key 问题要怎么解决？",
+    "intent": "general",
+    "needs_knowledge": false,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": true,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [],
+    "unresolved_terms": [],
+    "reason_summary": "用通用知识解释"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": true,
+    "notes": [
+     "本区知识目录为空"
+    ]
+   },
+   "planned_tools_not_executed": [],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 0,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "G-011",
+   "category": "general",
+   "split": "dev",
+   "source": "real",
+   "question": "拜占庭帝国灭亡的经济原因有哪些？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "拜占庭帝国灭亡的经济原因有哪些？",
+    "resolved_question": "拜占庭帝国灭亡的经济原因有哪些？",
+    "intent": "general",
+    "needs_knowledge": false,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": true,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [],
+    "unresolved_terms": [],
+    "reason_summary": "用通用知识解释"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": true,
+    "notes": [
+     "本区知识目录为空"
+    ]
+   },
+   "planned_tools_not_executed": [],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 0,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "G-012",
+   "category": "general",
+   "split": "dev",
+   "source": "constructed",
+   "question": "什么是向量数据库？它和关系型数据库的区别在哪？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "什么是向量数据库？它和关系型数据库的区别在哪？",
+    "resolved_question": "什么是向量数据库？它和关系型数据库的区别在哪？",
+    "intent": "general",
+    "needs_knowledge": false,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": true,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [],
+    "unresolved_terms": [],
+    "reason_summary": "用通用知识解释"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": true,
+    "notes": [
+     "本区知识目录为空"
+    ]
+   },
+   "planned_tools_not_executed": [],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 0,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "G-013",
+   "category": "general",
+   "split": "dev",
+   "source": "constructed",
+   "question": "为什么 transformer 需要位置编码？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "为什么 transformer 需要位置编码？",
+    "resolved_question": "为什么 transformer 需要位置编码？",
+    "intent": "general",
+    "needs_knowledge": false,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": true,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [],
+    "unresolved_terms": [],
+    "reason_summary": "用通用知识解释"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": true,
+    "notes": [
+     "本区知识目录为空"
+    ]
+   },
+   "planned_tools_not_executed": [],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 0,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "G-014",
+   "category": "general",
+   "split": "holdout",
+   "source": "constructed",
+   "question": "RAG 和微调分别适合什么场景？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "RAG 和微调分别适合什么场景？",
+    "resolved_question": "RAG 和微调分别适合什么场景？",
+    "intent": "general",
+    "needs_knowledge": false,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": true,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [],
+    "unresolved_terms": [],
+    "reason_summary": "用通用知识解释"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": true,
+    "notes": [
+     "本区知识目录为空"
+    ]
+   },
+   "planned_tools_not_executed": [],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 0,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "G-015",
+   "category": "general",
+   "split": "dev",
+   "source": "constructed",
+   "question": "什么是 B 树索引？什么情况下会失效？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "什么是 B 树索引？什么情况下会失效？",
+    "resolved_question": "什么是 B 树索引？什么情况下会失效？",
+    "intent": "general",
+    "needs_knowledge": false,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": true,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [],
+    "unresolved_terms": [],
+    "reason_summary": "用通用知识解释"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": true,
+    "notes": [
+     "本区知识目录为空"
+    ]
+   },
+   "planned_tools_not_executed": [],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 0,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "G-016",
+   "category": "general",
+   "split": "dev",
+   "source": "constructed",
+   "question": "怎么理解 CAP 定理？实际系统是怎么取舍的？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "怎么理解 CAP 定理？实际系统是怎么取舍的？",
+    "resolved_question": "怎么理解 CAP 定理？实际系统是怎么取舍的？",
+    "intent": "general",
+    "needs_knowledge": false,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": true,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [],
+    "unresolved_terms": [],
+    "reason_summary": "用通用知识解释"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": true,
+    "notes": [
+     "本区知识目录为空"
+    ]
+   },
+   "planned_tools_not_executed": [],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 0,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "G-017",
+   "category": "general",
+   "split": "dev",
+   "source": "constructed",
+   "question": "什么是幂等性？接口为什么要保证幂等？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "什么是幂等性？接口为什么要保证幂等？",
+    "resolved_question": "什么是幂等性？接口为什么要保证幂等？",
+    "intent": "general",
+    "needs_knowledge": false,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": true,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [],
+    "unresolved_terms": [],
+    "reason_summary": "用通用知识解释"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": true,
+    "notes": [
+     "本区知识目录为空"
+    ]
+   },
+   "planned_tools_not_executed": [],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 0,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "G-018",
+   "category": "general",
+   "split": "dev",
+   "source": "constructed",
+   "question": "为什么分布式缓存需要一致性哈希？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "为什么分布式缓存需要一致性哈希？",
+    "resolved_question": "为什么分布式缓存需要一致性哈希？",
+    "intent": "general",
+    "needs_knowledge": false,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": true,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [],
+    "unresolved_terms": [],
+    "reason_summary": "用通用知识解释"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": true,
+    "notes": [
+     "本区知识目录为空"
+    ]
+   },
+   "planned_tools_not_executed": [],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 0,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "G-019",
+   "category": "general",
+   "split": "holdout",
+   "source": "constructed",
+   "question": "可观测性里的日志、指标、链路追踪各解决什么问题？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "可观测性里的日志、指标、链路追踪各解决什么问题？",
+    "resolved_question": "可观测性里的日志、指标、链路追踪各解决什么问题？",
+    "intent": "general",
+    "needs_knowledge": false,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": true,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [],
+    "unresolved_terms": [],
+    "reason_summary": "用通用知识解释"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": true,
+    "notes": [
+     "本区知识目录为空"
+    ]
+   },
+   "planned_tools_not_executed": [],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 0,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "G-020",
+   "category": "general",
+   "split": "holdout",
+   "source": "constructed",
+   "question": "Python 的 GIL 对多线程性能有什么影响？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "Python 的 GIL 对多线程性能有什么影响？",
+    "resolved_question": "Python 的 GIL 对多线程性能有什么影响？",
+    "intent": "general",
+    "needs_knowledge": false,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": true,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [],
+    "unresolved_terms": [],
+    "reason_summary": "用通用知识解释"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": true,
+    "notes": [
+     "本区知识目录为空"
+    ]
+   },
+   "planned_tools_not_executed": [],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 0,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "G-021",
+   "category": "general",
+   "split": "dev",
+   "source": "constructed",
+   "question": "什么是 SQL 注入？一般怎么防御？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "什么是 SQL 注入？一般怎么防御？",
+    "resolved_question": "什么是 SQL 注入？一般怎么防御？",
+    "intent": "general",
+    "needs_knowledge": false,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": true,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [],
+    "unresolved_terms": [],
+    "reason_summary": "用通用知识解释"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": true,
+    "notes": [
+     "本区知识目录为空"
+    ]
+   },
+   "planned_tools_not_executed": [],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 0,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "G-022",
+   "category": "general",
+   "split": "dev",
+   "source": "constructed",
+   "question": "HTTPS 的证书链校验过程是怎样的？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "HTTPS 的证书链校验过程是怎样的？",
+    "resolved_question": "HTTPS 的证书链校验过程是怎样的？",
+    "intent": "general",
+    "needs_knowledge": false,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": true,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [],
+    "unresolved_terms": [],
+    "reason_summary": "用通用知识解释"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": true,
+    "notes": [
+     "本区知识目录为空"
+    ]
+   },
+   "planned_tools_not_executed": [],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 0,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "G-023",
+   "category": "general",
+   "split": "dev",
+   "source": "constructed",
+   "question": "什么是死锁？常见的检测与避免方法有哪些？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "什么是死锁？常见的检测与避免方法有哪些？",
+    "resolved_question": "什么是死锁？常见的检测与避免方法有哪些？",
+    "intent": "general",
+    "needs_knowledge": false,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": true,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [],
+    "unresolved_terms": [],
+    "reason_summary": "用通用知识解释"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": true,
+    "notes": [
+     "本区知识目录为空"
+    ]
+   },
+   "planned_tools_not_executed": [],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 0,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "G-024",
+   "category": "general",
+   "split": "dev",
+   "source": "constructed",
+   "question": "领域驱动设计里的聚合根是什么？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "领域驱动设计里的聚合根是什么？",
+    "resolved_question": "领域驱动设计里的聚合根是什么？",
+    "intent": "general",
+    "needs_knowledge": false,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": true,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [],
+    "unresolved_terms": [],
+    "reason_summary": "用通用知识解释"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": true,
+    "notes": [
+     "本区知识目录为空"
+    ]
+   },
+   "planned_tools_not_executed": [],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 0,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "G-025",
+   "category": "general",
+   "split": "dev",
+   "source": "constructed",
+   "question": "为什么并发共享状态推荐用不可变数据结构？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "为什么并发共享状态推荐用不可变数据结构？",
+    "resolved_question": "为什么并发共享状态推荐用不可变数据结构？",
+    "intent": "general",
+    "needs_knowledge": false,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": true,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [],
+    "unresolved_terms": [],
+    "reason_summary": "用通用知识解释"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": true,
+    "notes": [
+     "本区知识目录为空"
+    ]
+   },
+   "planned_tools_not_executed": [],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 0,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "G-026",
+   "category": "general",
+   "split": "holdout",
+   "source": "constructed",
+   "question": "流式输出里的背压是什么？一般怎么处理？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "流式输出里的背压是什么？一般怎么处理？",
+    "resolved_question": "流式输出里的背压是什么？一般怎么处理？",
+    "intent": "general",
+    "needs_knowledge": false,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": true,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [],
+    "unresolved_terms": [],
+    "reason_summary": "用通用知识解释"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": true,
+    "notes": [
+     "本区知识目录为空"
+    ]
+   },
+   "planned_tools_not_executed": [],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 0,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "G-027",
+   "category": "general",
+   "split": "dev",
+   "source": "constructed",
+   "question": "什么是零拷贝？它在网络传输里怎么生效？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "什么是零拷贝？它在网络传输里怎么生效？",
+    "resolved_question": "什么是零拷贝？它在网络传输里怎么生效？",
+    "intent": "general",
+    "needs_knowledge": false,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": true,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [],
+    "unresolved_terms": [],
+    "reason_summary": "用通用知识解释"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": true,
+    "notes": [
+     "本区知识目录为空"
+    ]
+   },
+   "planned_tools_not_executed": [],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 0,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "G-028",
+   "category": "general",
+   "split": "holdout",
+   "source": "constructed",
+   "question": "消息队列怎么保证不丢消息？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "消息队列怎么保证不丢消息？",
+    "resolved_question": "消息队列怎么保证不丢消息？",
+    "intent": "general",
+    "needs_knowledge": false,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": true,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [],
+    "unresolved_terms": [],
+    "reason_summary": "用通用知识解释"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": true,
+    "notes": [
+     "本区知识目录为空"
+    ]
+   },
+   "planned_tools_not_executed": [],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 0,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "G-029",
+   "category": "general",
+   "split": "dev",
+   "source": "constructed",
+   "question": "JWT 和 session 各自的优缺点是什么？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "JWT 和 session 各自的优缺点是什么？",
+    "resolved_question": "JWT 和 session 各自的优缺点是什么？",
+    "intent": "general",
+    "needs_knowledge": false,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": true,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [],
+    "unresolved_terms": [],
+    "reason_summary": "用通用知识解释"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": true,
+    "notes": [
+     "本区知识目录为空"
+    ]
+   },
+   "planned_tools_not_executed": [],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 0,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "G-030",
+   "category": "general",
+   "split": "dev",
+   "source": "constructed",
+   "question": "程序里的内存泄漏一般由什么引起？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "程序里的内存泄漏一般由什么引起？",
+    "resolved_question": "程序里的内存泄漏一般由什么引起？",
+    "intent": "general",
+    "needs_knowledge": false,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": true,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [],
+    "unresolved_terms": [],
+    "reason_summary": "用通用知识解释"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": true,
+    "notes": [
+     "本区知识目录为空"
+    ]
+   },
+   "planned_tools_not_executed": [],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 0,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "I-001",
+   "category": "internal",
+   "split": "holdout",
+   "source": "real",
+   "question": "上新进度管控里，二级风格线和产品标签之间的映射是怎么建立的？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "上新进度管控里，二级风格线和产品标签之间的映射是怎么建立的？",
+    "resolved_question": "上新进度管控里，二级风格线和产品标签之间的映射是怎么建立的？",
+    "intent": "research",
+    "needs_knowledge": true,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": false,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [
+     "二级风格线对产品标签的映射",
+     "product_attr",
+     "hint-1",
+     "hint-2"
+    ],
+    "unresolved_terms": [],
+    "reason_summary": "查本工作区资料"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [
+     "二级风格线对产品标签的映射",
+     "product_attr",
+     "hint-1",
+     "hint-2"
+    ],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": false,
+    "notes": [
+     "目录命中仅用于定位原文，不作为答案依据"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "search_knowledge",
+    "read_document"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 2,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "I-002",
+   "category": "internal",
+   "split": "dev",
+   "source": "real",
+   "question": "验证码邮件为什么会重复发送给用户？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "验证码邮件为什么会重复发送给用户？",
+    "resolved_question": "验证码邮件为什么会重复发送给用户？",
+    "intent": "research",
+    "needs_knowledge": true,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": true,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [
+     "int 值来处理自增 ID",
+     "2,147,483,647",
+     "MyBatisSystemException",
+     "hint-1",
+     "hint-2",
+     "hint-3"
+    ],
+    "unresolved_terms": [],
+    "reason_summary": "查本工作区资料"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [
+     "int 值来处理自增 ID",
+     "2,147,483,647",
+     "MyBatisSystemException",
+     "hint-1",
+     "hint-2",
+     "hint-3"
+    ],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": false,
+    "notes": [
+     "目录命中仅用于定位原文，不作为答案依据"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "search_knowledge",
+    "read_document"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 3,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "I-003",
+   "category": "internal",
+   "split": "holdout",
+   "source": "real",
+   "question": "以图搜图功能消耗 token 过多这个问题是怎么被发现和处理的？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "以图搜图功能消耗 token 过多这个问题是怎么被发现和处理的？",
+    "resolved_question": "以图搜图功能消耗 token 过多这个问题是怎么被发现和处理的？",
+    "intent": "research",
+    "needs_knowledge": true,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": false,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [
+     "以图搜图",
+     "@刘江涛",
+     "注释",
+     "hint-1",
+     "hint-2",
+     "hint-3"
+    ],
+    "unresolved_terms": [],
+    "reason_summary": "查本工作区资料"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [
+     "以图搜图",
+     "@刘江涛",
+     "注释",
+     "hint-1",
+     "hint-2",
+     "hint-3"
+    ],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": false,
+    "notes": [
+     "目录命中仅用于定位原文，不作为答案依据"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "search_knowledge",
+    "read_document"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 3,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "I-004",
+   "category": "internal",
+   "split": "holdout",
+   "source": "real",
+   "question": "黑五期间用户侧的业务监控都覆盖了哪些模块？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "黑五期间用户侧的业务监控都覆盖了哪些模块？",
+    "resolved_question": "黑五期间用户侧的业务监控都覆盖了哪些模块？",
+    "intent": "research",
+    "needs_knowledge": true,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": false,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [
+     "用户礼品卡",
+     "用户心愿单",
+     "用户通知",
+     "hint-1",
+     "hint-2",
+     "hint-3"
+    ],
+    "unresolved_terms": [],
+    "reason_summary": "查本工作区资料"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [
+     "用户礼品卡",
+     "用户心愿单",
+     "用户通知",
+     "hint-1",
+     "hint-2",
+     "hint-3"
+    ],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": false,
+    "notes": [
+     "目录命中仅用于定位原文，不作为答案依据"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "search_knowledge",
+    "read_document"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 3,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "I-005",
+   "category": "internal",
+   "split": "dev",
+   "source": "real",
+   "question": "第一次黑五两封营销邮件的转化率和带来的 GMV 分别是多少？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "第一次黑五两封营销邮件的转化率和带来的 GMV 分别是多少？",
+    "resolved_question": "第一次黑五两封营销邮件的转化率和带来的 GMV 分别是多少？",
+    "intent": "research",
+    "needs_knowledge": true,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": false,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [
+     "0.19%",
+     "$2604",
+     "hint-1",
+     "hint-2"
+    ],
+    "unresolved_terms": [],
+    "reason_summary": "查本工作区资料"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [
+     "0.19%",
+     "$2604",
+     "hint-1",
+     "hint-2"
+    ],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": false,
+    "notes": [
+     "目录命中仅用于定位原文，不作为答案依据"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "search_knowledge",
+    "read_document"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 2,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "I-006",
+   "category": "internal",
+   "split": "holdout",
+   "source": "real",
+   "question": "为什么 CI 自动生成接口文档时禁止用 Map 或 JSONObject 作为接口返回值？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "为什么 CI 自动生成接口文档时禁止用 Map 或 JSONObject 作为接口返回值？",
+    "resolved_question": "为什么 CI 自动生成接口文档时禁止用 Map 或 JSONObject 作为接口返回值？",
+    "intent": "research",
+    "needs_knowledge": true,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": true,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [
+     "map 的键值无法分析",
+     "JSONObject",
+     "hint-1",
+     "hint-2"
+    ],
+    "unresolved_terms": [],
+    "reason_summary": "查本工作区资料"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [
+     "map 的键值无法分析",
+     "JSONObject",
+     "hint-1",
+     "hint-2"
+    ],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": false,
+    "notes": [
+     "目录命中仅用于定位原文，不作为答案依据"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "search_knowledge",
+    "read_document"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 2,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "I-007",
+   "category": "internal",
+   "split": "holdout",
+   "source": "real",
+   "question": "接入 yapidoc-maven-plugin 时 yapiUrl 要配置成什么地址？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "接入 yapidoc-maven-plugin 时 yapiUrl 要配置成什么地址？",
+    "resolved_question": "接入 yapidoc-maven-plugin 时 yapiUrl 要配置成什么地址？",
+    "intent": "research",
+    "needs_knowledge": true,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": false,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [
+     "yapidoc-maven-plugin",
+     "http://yapi.shopcider.cn/",
+     "hint-1",
+     "hint-2"
+    ],
+    "unresolved_terms": [],
+    "reason_summary": "查本工作区资料"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [
+     "yapidoc-maven-plugin",
+     "http://yapi.shopcider.cn/",
+     "hint-1",
+     "hint-2"
+    ],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": false,
+    "notes": [
+     "目录命中仅用于定位原文，不作为答案依据"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "search_knowledge",
+    "read_document"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 2,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "I-008",
+   "category": "internal",
+   "split": "dev",
+   "source": "real",
+   "question": "RocketMQ 批量消费消息时，一次最多消费多少条是怎么设置的？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "RocketMQ 批量消费消息时，一次最多消费多少条是怎么设置的？",
+    "resolved_question": "RocketMQ 批量消费消息时，一次最多消费多少条是怎么设置的？",
+    "intent": "research",
+    "needs_knowledge": true,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": false,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [
+     "setConsumeMessageBatchMaxSize(32)",
+     "MessageListenerConcurrently",
+     "hint-1",
+     "hint-2"
+    ],
+    "unresolved_terms": [],
+    "reason_summary": "查本工作区资料"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [
+     "setConsumeMessageBatchMaxSize(32)",
+     "MessageListenerConcurrently",
+     "hint-1",
+     "hint-2"
+    ],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": false,
+    "notes": [
+     "目录命中仅用于定位原文，不作为答案依据"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "search_knowledge",
+    "read_document"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 2,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "I-009",
+   "category": "internal",
+   "split": "dev",
+   "source": "real",
+   "question": "TikTokShop 商详自动填充功能上线后，累计给运营省了多少时间？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "TikTokShop 商详自动填充功能上线后，累计给运营省了多少时间？",
+    "resolved_question": "TikTokShop 商详自动填充功能上线后，累计给运营省了多少时间？",
+    "intent": "research",
+    "needs_knowledge": true,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": false,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [
+     "1500+ SPU",
+     "250 小时",
+     "hint-1",
+     "hint-2"
+    ],
+    "unresolved_terms": [],
+    "reason_summary": "查本工作区资料"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [
+     "1500+ SPU",
+     "250 小时",
+     "hint-1",
+     "hint-2"
+    ],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": false,
+    "notes": [
+     "目录命中仅用于定位原文，不作为答案依据"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "search_knowledge",
+    "read_document"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 2,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "I-010",
+   "category": "internal",
+   "split": "dev",
+   "source": "real",
+   "question": "对接 Amazon 时为什么最后改用 CSV 传品而不用 API？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "对接 Amazon 时为什么最后改用 CSV 传品而不用 API？",
+    "resolved_question": "对接 Amazon 时为什么最后改用 CSV 传品而不用 API？",
+    "intent": "research",
+    "needs_knowledge": true,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": true,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [
+     "edge case",
+     "csv",
+     "hint-1",
+     "hint-2"
+    ],
+    "unresolved_terms": [],
+    "reason_summary": "查本工作区资料"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [
+     "edge case",
+     "csv",
+     "hint-1",
+     "hint-2"
+    ],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": false,
+    "notes": [
+     "目录命中仅用于定位原文，不作为答案依据"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "search_knowledge",
+    "read_document"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 2,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "I-011",
+   "category": "internal",
+   "split": "holdout",
+   "source": "real",
+   "question": "chatbot 用户提问分析里，msg_analysis 类型返回的 json 包含哪些字段？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "chatbot 用户提问分析里，msg_analysis 类型返回的 json 包含哪些字段？",
+    "resolved_question": "chatbot 用户提问分析里，msg_analysis 类型返回的 json 包含哪些字段？",
+    "intent": "research",
+    "needs_knowledge": true,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": false,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [
+     "category_name",
+     "mood_point",
+     "hint-1",
+     "hint-2"
+    ],
+    "unresolved_terms": [],
+    "reason_summary": "查本工作区资料"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [
+     "category_name",
+     "mood_point",
+     "hint-1",
+     "hint-2"
+    ],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": false,
+    "notes": [
+     "目录命中仅用于定位原文，不作为答案依据"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "search_knowledge",
+    "read_document"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 2,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "I-012",
+   "category": "internal",
+   "split": "holdout",
+   "source": "real",
+   "question": "客服助手项目的前端仓库地址和开发分支名是什么？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "客服助手项目的前端仓库地址和开发分支名是什么？",
+    "resolved_question": "客服助手项目的前端仓库地址和开发分支名是什么？",
+    "intent": "research",
+    "needs_knowledge": true,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": true,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [
+     "phoebe-web",
+     "vain/feat_客服助手",
+     "hint-1",
+     "hint-2"
+    ],
+    "unresolved_terms": [],
+    "reason_summary": "查本工作区资料"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [
+     "phoebe-web",
+     "vain/feat_客服助手",
+     "hint-1",
+     "hint-2"
+    ],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": false,
+    "notes": [
+     "目录命中仅用于定位原文，不作为答案依据"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "search_knowledge",
+    "read_document"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 2,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "I-013",
+   "category": "internal",
+   "split": "holdout",
+   "source": "real",
+   "question": "obsidian-article skill 的验收标准里，成稿归档到哪个目录？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "obsidian-article skill 的验收标准里，成稿归档到哪个目录？",
+    "resolved_question": "obsidian-article skill 的验收标准里，成稿归档到哪个目录？",
+    "intent": "research",
+    "needs_knowledge": true,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": false,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [
+     "/article/{主题}/",
+     "素材不足时正确拒绝",
+     "hint-1",
+     "hint-2"
+    ],
+    "unresolved_terms": [],
+    "reason_summary": "查本工作区资料"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [
+     "/article/{主题}/",
+     "素材不足时正确拒绝",
+     "hint-1",
+     "hint-2"
+    ],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": false,
+    "notes": [
+     "目录命中仅用于定位原文，不作为答案依据"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "search_knowledge",
+    "read_document"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 2,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "I-014",
+   "category": "internal",
+   "split": "dev",
+   "source": "real",
+   "question": "obsidian-article skill 里哪些路径可以由用户配置、哪些是固定写死的？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "obsidian-article skill 里哪些路径可以由用户配置、哪些是固定写死的？",
+    "resolved_question": "obsidian-article skill 里哪些路径可以由用户配置、哪些是固定写死的？",
+    "intent": "research",
+    "needs_knowledge": true,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": false,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [
+     "article.config.yaml",
+     "输出目录固定为 /article",
+     "hint-1",
+     "hint-2"
+    ],
+    "unresolved_terms": [],
+    "reason_summary": "查本工作区资料"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [
+     "article.config.yaml",
+     "输出目录固定为 /article",
+     "hint-1",
+     "hint-2"
+    ],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": false,
+    "notes": [
+     "目录命中仅用于定位原文，不作为答案依据"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "search_knowledge",
+    "read_document"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 2,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "I-015",
+   "category": "internal",
+   "split": "dev",
+   "source": "real",
+   "question": "Agent-Sentinel 的根因定位准确率是多少？为什么能做到这么高？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "Agent-Sentinel 的根因定位准确率是多少？为什么能做到这么高？",
+    "resolved_question": "Agent-Sentinel 的根因定位准确率是多少？为什么能做到这么高？",
+    "intent": "research",
+    "needs_knowledge": true,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": true,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [
+     "90%",
+     "上下文足够丰富",
+     "提示词工程",
+     "hint-1",
+     "hint-2",
+     "hint-3"
+    ],
+    "unresolved_terms": [],
+    "reason_summary": "查本工作区资料"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [
+     "90%",
+     "上下文足够丰富",
+     "提示词工程",
+     "hint-1",
+     "hint-2",
+     "hint-3"
+    ],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": false,
+    "notes": [
+     "目录命中仅用于定位原文，不作为答案依据"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "search_knowledge",
+    "read_document"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 3,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "I-016",
+   "category": "internal",
+   "split": "dev",
+   "source": "real",
+   "question": "Agent-Sentinel 未来计划接入哪些办公软件和云厂商？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "Agent-Sentinel 未来计划接入哪些办公软件和云厂商？",
+    "resolved_question": "Agent-Sentinel 未来计划接入哪些办公软件和云厂商？",
+    "intent": "research",
+    "needs_knowledge": true,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": false,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [
+     "企微、钉钉、Slack",
+     "AWS、Azure",
+     "hint-1",
+     "hint-2"
+    ],
+    "unresolved_terms": [],
+    "reason_summary": "查本工作区资料"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [
+     "企微、钉钉、Slack",
+     "AWS、Azure",
+     "hint-1",
+     "hint-2"
+    ],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": false,
+    "notes": [
+     "目录命中仅用于定位原文，不作为答案依据"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "search_knowledge",
+    "read_document"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 2,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "I-017",
+   "category": "internal",
+   "split": "holdout",
+   "source": "real",
+   "question": "芒格说如果在赌桌上你不知道谁是傻瓜，这句话是什么意思？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "芒格说如果在赌桌上你不知道谁是傻瓜，这句话是什么意思？",
+    "resolved_question": "芒格说如果在赌桌上你不知道谁是傻瓜，这句话是什么意思？",
+    "intent": "research",
+    "needs_knowledge": true,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": true,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [
+     "不知道谁是傻瓜，那么你就是",
+     "hint-1"
+    ],
+    "unresolved_terms": [],
+    "reason_summary": "查本工作区资料"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [
+     "不知道谁是傻瓜，那么你就是",
+     "hint-1"
+    ],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": false,
+    "notes": [
+     "目录命中仅用于定位原文，不作为答案依据"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "search_knowledge",
+    "read_document"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 1,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "I-018",
+   "category": "internal",
+   "split": "dev",
+   "source": "real",
+   "question": "手里拿着铁锤的人看来世界就像一颗钉子，这句话在讲什么思维误区？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "手里拿着铁锤的人看来世界就像一颗钉子，这句话在讲什么思维误区？",
+    "resolved_question": "手里拿着铁锤的人看来世界就像一颗钉子，这句话在讲什么思维误区？",
+    "intent": "research",
+    "needs_knowledge": true,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": false,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [
+     "只使用学过的一个学科的思维模型",
+     "分科越细，思维越窄",
+     "hint-1",
+     "hint-2"
+    ],
+    "unresolved_terms": [],
+    "reason_summary": "查本工作区资料"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [
+     "只使用学过的一个学科的思维模型",
+     "分科越细，思维越窄",
+     "hint-1",
+     "hint-2"
+    ],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": false,
+    "notes": [
+     "目录命中仅用于定位原文，不作为答案依据"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "search_knowledge",
+    "read_document"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 2,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "I-019",
+   "category": "internal",
+   "split": "dev",
+   "source": "real",
+   "question": "广告策略引擎误操作事故中，bi_warehouse_dw_us_w2p_product_app_hourly 这张表出了什么问题？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "广告策略引擎误操作事故中，bi_warehouse_dw_us_w2p_product_app_hourly 这张表出了什么问题？",
+    "resolved_question": "广告策略引擎误操作事故中，bi_warehouse_dw_us_w2p_product_app_hourly 这张表出了什么问题？",
+    "intent": "research",
+    "needs_knowledge": true,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": false,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [
+     "bi_warehouse_dw_us_w2p_product_app_hourly",
+     "9号之后数据没了",
+     "hint-1",
+     "hint-2"
+    ],
+    "unresolved_terms": [],
+    "reason_summary": "查本工作区资料"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [
+     "bi_warehouse_dw_us_w2p_product_app_hourly",
+     "9号之后数据没了",
+     "hint-1",
+     "hint-2"
+    ],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": false,
+    "notes": [
+     "目录命中仅用于定位原文，不作为答案依据"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "search_knowledge",
+    "read_document"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 2,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "I-020",
+   "category": "internal",
+   "split": "holdout",
+   "source": "real",
+   "question": "广告策略引擎事故复盘后，apollo 配置发布流程加了什么约束？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "广告策略引擎事故复盘后，apollo 配置发布流程加了什么约束？",
+    "resolved_question": "广告策略引擎事故复盘后，apollo 配置发布流程加了什么约束？",
+    "intent": "research",
+    "needs_knowledge": true,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": false,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [
+     "给apollo里的每个配置加上注释",
+     "@赵凯 Kai approve",
+     "hint-1",
+     "hint-2"
+    ],
+    "unresolved_terms": [],
+    "reason_summary": "查本工作区资料"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [
+     "给apollo里的每个配置加上注释",
+     "@赵凯 Kai approve",
+     "hint-1",
+     "hint-2"
+    ],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": false,
+    "notes": [
+     "目录命中仅用于定位原文，不作为答案依据"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "search_knowledge",
+    "read_document"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 2,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "I-021",
+   "category": "internal",
+   "split": "dev",
+   "source": "real",
+   "question": "一般性转移支付和专项转移支付的区别是什么？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "一般性转移支付和专项转移支付的区别是什么？",
+    "resolved_question": "一般性转移支付和专项转移支付的区别是什么？",
+    "intent": "research",
+    "needs_knowledge": true,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": true,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [
+     "均衡性转移支付",
+     "专款专用",
+     "四成",
+     "hint-1",
+     "hint-2",
+     "hint-3"
+    ],
+    "unresolved_terms": [],
+    "reason_summary": "查本工作区资料"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [
+     "均衡性转移支付",
+     "专款专用",
+     "四成",
+     "hint-1",
+     "hint-2",
+     "hint-3"
+    ],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": false,
+    "notes": [
+     "目录命中仅用于定位原文，不作为答案依据"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "search_knowledge",
+    "read_document"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 3,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "I-022",
+   "category": "internal",
+   "split": "holdout",
+   "source": "real",
+   "question": "1994 年分税制改革的背景是什么，文章说的鞭打快牛核心矛盾指什么？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "1994 年分税制改革的背景是什么，文章说的鞭打快牛核心矛盾指什么？",
+    "resolved_question": "1994 年分税制改革的背景是什么，文章说的鞭打快牛核心矛盾指什么？",
+    "intent": "research",
+    "needs_knowledge": true,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": true,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [
+     "1994 年分税制改革",
+     "鞭打快牛",
+     "惩罚优秀，纵容平庸",
+     "hint-1",
+     "hint-2",
+     "hint-3"
+    ],
+    "unresolved_terms": [],
+    "reason_summary": "查本工作区资料"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [
+     "1994 年分税制改革",
+     "鞭打快牛",
+     "惩罚优秀，纵容平庸",
+     "hint-1",
+     "hint-2",
+     "hint-3"
+    ],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": false,
+    "notes": [
+     "目录命中仅用于定位原文，不作为答案依据"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "search_knowledge",
+    "read_document"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 3,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "I-023",
+   "category": "internal",
+   "split": "dev",
+   "source": "real",
+   "question": "弗洛伊德理论中，压抑、未被压抑和升华这三种情况分别导向什么心理结果？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "弗洛伊德理论中，压抑、未被压抑和升华这三种情况分别导向什么心理结果？",
+    "resolved_question": "弗洛伊德理论中，压抑、未被压抑和升华这三种情况分别导向什么心理结果？",
+    "intent": "research",
+    "needs_knowledge": true,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": false,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [
+     "神经官能症",
+     "性变态",
+     "正常",
+     "hint-1",
+     "hint-2",
+     "hint-3"
+    ],
+    "unresolved_terms": [],
+    "reason_summary": "查本工作区资料"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [
+     "神经官能症",
+     "性变态",
+     "正常",
+     "hint-1",
+     "hint-2",
+     "hint-3"
+    ],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": false,
+    "notes": [
+     "目录命中仅用于定位原文，不作为答案依据"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "search_knowledge",
+    "read_document"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 3,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "I-024",
+   "category": "internal",
+   "split": "holdout",
+   "source": "real",
+   "question": "弗洛伊德说的夸大（exaggeration）在性心理发展里具体指什么？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "弗洛伊德说的夸大（exaggeration）在性心理发展里具体指什么？",
+    "resolved_question": "弗洛伊德说的夸大（exaggeration）在性心理发展里具体指什么？",
+    "intent": "research",
+    "needs_knowledge": true,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": false,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [
+     "过度的力比多投注",
+     "hypercathexis",
+     "hint-1",
+     "hint-2"
+    ],
+    "unresolved_terms": [],
+    "reason_summary": "查本工作区资料"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [
+     "过度的力比多投注",
+     "hypercathexis",
+     "hint-1",
+     "hint-2"
+    ],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": false,
+    "notes": [
+     "目录命中仅用于定位原文，不作为答案依据"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "search_knowledge",
+    "read_document"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 2,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "I-025",
+   "category": "internal",
+   "split": "holdout",
+   "source": "real",
+   "question": "城投公司是什么，地方政府为什么要靠它来借钱？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "城投公司是什么，地方政府为什么要靠它来借钱？",
+    "resolved_question": "城投公司是什么，地方政府为什么要靠它来借钱？",
+    "intent": "research",
+    "needs_knowledge": true,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": true,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [
+     "城市建设投资公司",
+     "科斯",
+     "15 万亿",
+     "hint-1",
+     "hint-2",
+     "hint-3"
+    ],
+    "unresolved_terms": [],
+    "reason_summary": "查本工作区资料"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [
+     "城市建设投资公司",
+     "科斯",
+     "15 万亿",
+     "hint-1",
+     "hint-2",
+     "hint-3"
+    ],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": false,
+    "notes": [
+     "目录命中仅用于定位原文，不作为答案依据"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "search_knowledge",
+    "read_document"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 3,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "I-026",
+   "category": "internal",
+   "split": "dev",
+   "source": "real",
+   "question": "土地财政是怎么形成的，地方政府为什么没有动力压低地价？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "土地财政是怎么形成的，地方政府为什么没有动力压低地价？",
+    "resolved_question": "土地财政是怎么形成的，地方政府为什么没有动力压低地价？",
+    "intent": "research",
+    "needs_knowledge": true,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": true,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [
+     "压低工业用地价格招商",
+     "收紧商住用地指标",
+     "土地出让金",
+     "hint-1",
+     "hint-2",
+     "hint-3"
+    ],
+    "unresolved_terms": [],
+    "reason_summary": "查本工作区资料"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [
+     "压低工业用地价格招商",
+     "收紧商住用地指标",
+     "土地出让金",
+     "hint-1",
+     "hint-2",
+     "hint-3"
+    ],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": false,
+    "notes": [
+     "目录命中仅用于定位原文，不作为答案依据"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "search_knowledge",
+    "read_document"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 3,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "I-027",
+   "category": "internal",
+   "split": "dev",
+   "source": "real",
+   "question": "首单加深项目里 1.7 亿行的订单表造成了什么问题，优化后接口耗时降到多少？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "首单加深项目里 1.7 亿行的订单表造成了什么问题，优化后接口耗时降到多少？",
+    "resolved_question": "首单加深项目里 1.7 亿行的订单表造成了什么问题，优化后接口耗时降到多少？",
+    "intent": "research",
+    "needs_knowledge": true,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": false,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [
+     "1.7 亿行",
+     "物化视图",
+     "hint-1",
+     "hint-2"
+    ],
+    "unresolved_terms": [],
+    "reason_summary": "查本工作区资料"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [
+     "1.7 亿行",
+     "物化视图",
+     "hint-1",
+     "hint-2"
+    ],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": false,
+    "notes": [
+     "目录命中仅用于定位原文，不作为答案依据"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "search_knowledge",
+    "read_document"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 2,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "I-028",
+   "category": "internal",
+   "split": "dev",
+   "source": "real",
+   "question": "作者说先立口径基线再谈优化，这句话是什么意思？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "作者说先立口径基线再谈优化，这句话是什么意思？",
+    "resolved_question": "作者说先立口径基线再谈优化，这句话是什么意思？",
+    "intent": "research",
+    "needs_knowledge": true,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": true,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [
+     "先立口径基线，再谈优化",
+     "任何优化都在改变数据的投影方式",
+     "hint-1",
+     "hint-2"
+    ],
+    "unresolved_terms": [],
+    "reason_summary": "查本工作区资料"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [
+     "先立口径基线，再谈优化",
+     "任何优化都在改变数据的投影方式",
+     "hint-1",
+     "hint-2"
+    ],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": false,
+    "notes": [
+     "目录命中仅用于定位原文，不作为答案依据"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "search_knowledge",
+    "read_document"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 2,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "I-029",
+   "category": "internal",
+   "split": "dev",
+   "source": "real",
+   "question": "OMS 切面偶发失效的问题，当时的临时解决办法是什么？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "OMS 切面偶发失效的问题，当时的临时解决办法是什么？",
+    "resolved_question": "OMS 切面偶发失效的问题，当时的临时解决办法是什么？",
+    "intent": "research",
+    "needs_knowledge": true,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": true,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [
+     "把两个缓存都清除重跑",
+     "CHashMAP",
+     "hint-1",
+     "hint-2"
+    ],
+    "unresolved_terms": [],
+    "reason_summary": "查本工作区资料"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [
+     "把两个缓存都清除重跑",
+     "CHashMAP",
+     "hint-1",
+     "hint-2"
+    ],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": false,
+    "notes": [
+     "目录命中仅用于定位原文，不作为答案依据"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "search_knowledge",
+    "read_document"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 2,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "I-030",
+   "category": "internal",
+   "split": "dev",
+   "source": "real",
+   "question": "OMS 切面问题最终拿到堆栈后，报的是什么异常，涉及哪两个方法？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "OMS 切面问题最终拿到堆栈后，报的是什么异常，涉及哪两个方法？",
+    "resolved_question": "OMS 切面问题最终拿到堆栈后，报的是什么异常，涉及哪两个方法？",
+    "intent": "research",
+    "needs_knowledge": true,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": true,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [
+     "空指针",
+     "getDeclaredMethods",
+     "parameterizedWith",
+     "hint-1",
+     "hint-2",
+     "hint-3"
+    ],
+    "unresolved_terms": [],
+    "reason_summary": "查本工作区资料"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [
+     "空指针",
+     "getDeclaredMethods",
+     "parameterizedWith",
+     "hint-1",
+     "hint-2",
+     "hint-3"
+    ],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": false,
+    "notes": [
+     "目录命中仅用于定位原文，不作为答案依据"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "search_knowledge",
+    "read_document"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 3,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "I-031",
+   "category": "internal",
+   "split": "dev",
+   "source": "real",
+   "question": "使用 R8 混淆后 APK 体积从多少降到多少，有什么副作用？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "使用 R8 混淆后 APK 体积从多少降到多少，有什么副作用？",
+    "resolved_question": "使用 R8 混淆后 APK 体积从多少降到多少，有什么副作用？",
+    "intent": "research",
+    "needs_knowledge": true,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": false,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [
+     "70.1MB --> 63MB",
+     "Flutter相关的部份功能存在不可用",
+     "Firebase",
+     "hint-1",
+     "hint-2",
+     "hint-3"
+    ],
+    "unresolved_terms": [],
+    "reason_summary": "查本工作区资料"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [
+     "70.1MB --> 63MB",
+     "Flutter相关的部份功能存在不可用",
+     "Firebase",
+     "hint-1",
+     "hint-2",
+     "hint-3"
+    ],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": false,
+    "notes": [
+     "目录命中仅用于定位原文，不作为答案依据"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "search_knowledge",
+    "read_document"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 3,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "I-032",
+   "category": "internal",
+   "split": "dev",
+   "source": "real",
+   "question": "AAB（Android App Bundle）是什么，它怎么解决不同 ab 架构的包体积问题？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "AAB（Android App Bundle）是什么，它怎么解决不同 ab 架构的包体积问题？",
+    "resolved_question": "AAB（Android App Bundle）是什么，它怎么解决不同 ab 架构的包体积问题？",
+    "intent": "research",
+    "needs_knowledge": true,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": true,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [
+     "Android APP Bundle",
+     ".aab",
+     "Google Play会按照用户机型的ab架构",
+     "hint-1",
+     "hint-2",
+     "hint-3"
+    ],
+    "unresolved_terms": [],
+    "reason_summary": "查本工作区资料"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [
+     "Android APP Bundle",
+     ".aab",
+     "Google Play会按照用户机型的ab架构",
+     "hint-1",
+     "hint-2",
+     "hint-3"
+    ],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": false,
+    "notes": [
+     "目录命中仅用于定位原文，不作为答案依据"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "search_knowledge",
+    "read_document"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 3,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "I-033",
+   "category": "internal",
+   "split": "dev",
+   "source": "real",
+   "question": "星链系统是给哪个客户做的供应链项目，MPS 模块投入了多少人力？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "星链系统是给哪个客户做的供应链项目，MPS 模块投入了多少人力？",
+    "resolved_question": "星链系统是给哪个客户做的供应链项目，MPS 模块投入了多少人力？",
+    "intent": "research",
+    "needs_knowledge": true,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": false,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [
+     "百威",
+     "星链系统",
+     "4 个实习生",
+     "hint-1",
+     "hint-2",
+     "hint-3"
+    ],
+    "unresolved_terms": [],
+    "reason_summary": "查本工作区资料"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [
+     "百威",
+     "星链系统",
+     "4 个实习生",
+     "hint-1",
+     "hint-2",
+     "hint-3"
+    ],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": false,
+    "notes": [
+     "目录命中仅用于定位原文，不作为答案依据"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "search_knowledge",
+    "read_document"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 3,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "I-034",
+   "category": "internal",
+   "split": "dev",
+   "source": "real",
+   "question": "面试结尾反问环节，文档建议向面试官提哪些问题？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "面试结尾反问环节，文档建议向面试官提哪些问题？",
+    "resolved_question": "面试结尾反问环节，文档建议向面试官提哪些问题？",
+    "intent": "research",
+    "needs_knowledge": true,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": false,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [
+     "这个岗位需要招聘一个什么样的人",
+     "CTO 或者技术主管",
+     "hint-1",
+     "hint-2"
+    ],
+    "unresolved_terms": [],
+    "reason_summary": "查本工作区资料"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [
+     "这个岗位需要招聘一个什么样的人",
+     "CTO 或者技术主管",
+     "hint-1",
+     "hint-2"
+    ],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": false,
+    "notes": [
+     "目录命中仅用于定位原文，不作为答案依据"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "search_knowledge",
+    "read_document"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 2,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "I-035",
+   "category": "internal",
+   "split": "dev",
+   "source": "real",
+   "question": "文档里说的遗留代码重构中的鸡生蛋蛋生鸡问题指的是什么？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "文档里说的遗留代码重构中的鸡生蛋蛋生鸡问题指的是什么？",
+    "resolved_question": "文档里说的遗留代码重构中的鸡生蛋蛋生鸡问题指的是什么？",
+    "intent": "research",
+    "needs_knowledge": true,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": true,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [
+     "重构的时候，发现没有测试",
+     "代码不可测",
+     "hint-1",
+     "hint-2"
+    ],
+    "unresolved_terms": [],
+    "reason_summary": "查本工作区资料"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [
+     "重构的时候，发现没有测试",
+     "代码不可测",
+     "hint-1",
+     "hint-2"
+    ],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": false,
+    "notes": [
+     "目录命中仅用于定位原文，不作为答案依据"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "search_knowledge",
+    "read_document"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 2,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "I-036",
+   "category": "internal",
+   "split": "dev",
+   "source": "real",
+   "question": "SPM 的拼接规则是什么，举例说明 8.1005482.10003.2 各段代表什么？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "SPM 的拼接规则是什么，举例说明 8.1005482.10003.2 各段代表什么？",
+    "resolved_question": "SPM 的拼接规则是什么，举例说明 8.1005482.10003.2 各段代表什么？",
+    "intent": "research",
+    "needs_knowledge": true,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": true,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [
+     "${siteId}.${pageId}.${sectionId}.${clickPosition}",
+     "10003",
+     "第二个点位",
+     "hint-1",
+     "hint-2",
+     "hint-3"
+    ],
+    "unresolved_terms": [],
+    "reason_summary": "查本工作区资料"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [
+     "${siteId}.${pageId}.${sectionId}.${clickPosition}",
+     "10003",
+     "第二个点位",
+     "hint-1",
+     "hint-2",
+     "hint-3"
+    ],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": false,
+    "notes": [
+     "目录命中仅用于定位原文，不作为答案依据"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "search_knowledge",
+    "read_document"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 3,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "I-037",
+   "category": "internal",
+   "split": "dev",
+   "source": "real",
+   "question": "埋点后台创建事件时，事件需要定义哪些字段？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "埋点后台创建事件时，事件需要定义哪些字段？",
+    "resolved_question": "埋点后台创建事件时，事件需要定义哪些字段？",
+    "intent": "research",
+    "needs_knowledge": true,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": false,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [
+     "eventType",
+     "eventName",
+     "triggerTime",
+     "hint-1",
+     "hint-2",
+     "hint-3",
+     "hint-4"
+    ],
+    "unresolved_terms": [],
+    "reason_summary": "查本工作区资料"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [
+     "eventType",
+     "eventName",
+     "triggerTime",
+     "hint-1",
+     "hint-2",
+     "hint-3",
+     "hint-4"
+    ],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": false,
+    "notes": [
+     "目录命中仅用于定位原文，不作为答案依据"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "search_knowledge",
+    "read_document"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 4,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "I-038",
+   "category": "internal",
+   "split": "dev",
+   "source": "real",
+   "question": "PC 搜索异常事故中，key_word_type 参数上报存在什么问题？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "PC 搜索异常事故中，key_word_type 参数上报存在什么问题？",
+    "resolved_question": "PC 搜索异常事故中，key_word_type 参数上报存在什么问题？",
+    "intent": "research",
+    "needs_knowledge": true,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": false,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [
+     "key_word_type",
+     "上报存在多份",
+     "回滚",
+     "hint-1",
+     "hint-2",
+     "hint-3"
+    ],
+    "unresolved_terms": [],
+    "reason_summary": "查本工作区资料"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [
+     "key_word_type",
+     "上报存在多份",
+     "回滚",
+     "hint-1",
+     "hint-2",
+     "hint-3"
+    ],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": false,
+    "notes": [
+     "目录命中仅用于定位原文，不作为答案依据"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "search_knowledge",
+    "read_document"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 3,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "I-039",
+   "category": "internal",
+   "split": "dev",
+   "source": "real",
+   "question": "置身事内这本书里，中央和地方各自掌握哪些权力和优势？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "置身事内这本书里，中央和地方各自掌握哪些权力和优势？",
+    "resolved_question": "置身事内这本书里，中央和地方各自掌握哪些权力和优势？",
+    "intent": "research",
+    "needs_knowledge": true,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": false,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [
+     "任命权",
+     "信息优势",
+     "委托—代理问题",
+     "hint-1",
+     "hint-2",
+     "hint-3"
+    ],
+    "unresolved_terms": [],
+    "reason_summary": "查本工作区资料"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [
+     "任命权",
+     "信息优势",
+     "委托—代理问题",
+     "hint-1",
+     "hint-2",
+     "hint-3"
+    ],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": false,
+    "notes": [
+     "目录命中仅用于定位原文，不作为答案依据"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "search_knowledge",
+    "read_document"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 3,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "I-040",
+   "category": "internal",
+   "split": "holdout",
+   "source": "real",
+   "question": "cider 仓库的 CLAUDE.md 里提到自研系统包含哪些？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "cider 仓库的 CLAUDE.md 里提到自研系统包含哪些？",
+    "resolved_question": "cider 仓库的 CLAUDE.md 里提到自研系统包含哪些？",
+    "intent": "research",
+    "needs_knowledge": true,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": false,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [
+     "LiveChat platform replacing Twilio",
+     "custom recommendation engines",
+     "hint-1",
+     "hint-2"
+    ],
+    "unresolved_terms": [],
+    "reason_summary": "查本工作区资料"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [
+     "LiveChat platform replacing Twilio",
+     "custom recommendation engines",
+     "hint-1",
+     "hint-2"
+    ],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": false,
+    "notes": [
+     "目录命中仅用于定位原文，不作为答案依据"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "search_knowledge",
+    "read_document"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 2,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "I-041",
+   "category": "internal",
+   "split": "holdout",
+   "source": "real",
+   "question": "购物车分表分了多少张表，用的是什么哈希算法？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "购物车分表分了多少张表，用的是什么哈希算法？",
+    "resolved_question": "购物车分表分了多少张表，用的是什么哈希算法？",
+    "intent": "research",
+    "needs_knowledge": true,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": true,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [
+     "32 tables",
+     "MurmurHash",
+     "hint-1",
+     "hint-2"
+    ],
+    "unresolved_terms": [],
+    "reason_summary": "查本工作区资料"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [
+     "32 tables",
+     "MurmurHash",
+     "hint-1",
+     "hint-2"
+    ],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": false,
+    "notes": [
+     "目录命中仅用于定位原文，不作为答案依据"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "search_knowledge",
+    "read_document"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 2,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "I-042",
+   "category": "internal",
+   "split": "dev",
+   "source": "real",
+   "question": "WMS 后段入库拆分二期独立部署上线时，是怎么控制上线风险的？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "WMS 后段入库拆分二期独立部署上线时，是怎么控制上线风险的？",
+    "resolved_question": "WMS 后段入库拆分二期独立部署上线时，是怎么控制上线风险的？",
+    "intent": "research",
+    "needs_knowledge": true,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": false,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [
+     "先把 在库稽查 独立上线",
+     "权限网关",
+     "10分钟内的回滚",
+     "hint-1",
+     "hint-2",
+     "hint-3"
+    ],
+    "unresolved_terms": [],
+    "reason_summary": "查本工作区资料"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [
+     "先把 在库稽查 独立上线",
+     "权限网关",
+     "10分钟内的回滚",
+     "hint-1",
+     "hint-2",
+     "hint-3"
+    ],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": false,
+    "notes": [
+     "目录命中仅用于定位原文，不作为答案依据"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "search_knowledge",
+    "read_document"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 3,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "I-043",
+   "category": "internal",
+   "split": "dev",
+   "source": "real",
+   "question": "影响力这本书里讲的拒绝后撤策略是什么？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "影响力这本书里讲的拒绝后撤策略是什么？",
+    "resolved_question": "影响力这本书里讲的拒绝后撤策略是什么？",
+    "intent": "research",
+    "needs_knowledge": true,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": true,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [
+     "拒绝回撤策略",
+     "提一个大些的要求",
+     "退而其次的较小要求",
+     "hint-1",
+     "hint-2",
+     "hint-3"
+    ],
+    "unresolved_terms": [],
+    "reason_summary": "查本工作区资料"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [
+     "拒绝回撤策略",
+     "提一个大些的要求",
+     "退而其次的较小要求",
+     "hint-1",
+     "hint-2",
+     "hint-3"
+    ],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": false,
+    "notes": [
+     "目录命中仅用于定位原文，不作为答案依据"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "search_knowledge",
+    "read_document"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 3,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "I-044",
+   "category": "internal",
+   "split": "dev",
+   "source": "real",
+   "question": "影响力里提到的认知吝啬、锚定效应，还列举了哪些思维惯式？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "影响力里提到的认知吝啬、锚定效应，还列举了哪些思维惯式？",
+    "resolved_question": "影响力里提到的认知吝啬、锚定效应，还列举了哪些思维惯式？",
+    "intent": "research",
+    "needs_knowledge": true,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": false,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [
+     "贵就是好",
+     "拆屋效应",
+     "社会认同原则",
+     "hint-1",
+     "hint-2",
+     "hint-3"
+    ],
+    "unresolved_terms": [],
+    "reason_summary": "查本工作区资料"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [
+     "贵就是好",
+     "拆屋效应",
+     "社会认同原则",
+     "hint-1",
+     "hint-2",
+     "hint-3"
+    ],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": false,
+    "notes": [
+     "目录命中仅用于定位原文，不作为答案依据"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "search_knowledge",
+    "read_document"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 3,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "I-045",
+   "category": "internal",
+   "split": "dev",
+   "source": "real",
+   "question": "针对新加坡爬虫调小接口阈值后，ctr 和 session 分别降到多少？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "针对新加坡爬虫调小接口阈值后，ctr 和 session 分别降到多少？",
+    "resolved_question": "针对新加坡爬虫调小接口阈值后，ctr 和 session 分别降到多少？",
+    "intent": "research",
+    "needs_knowledge": true,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": false,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [
+     "358%",
+     "30+%",
+     "2k+",
+     "hint-1",
+     "hint-2",
+     "hint-3",
+     "hint-4"
+    ],
+    "unresolved_terms": [],
+    "reason_summary": "查本工作区资料"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [
+     "358%",
+     "30+%",
+     "2k+",
+     "hint-1",
+     "hint-2",
+     "hint-3",
+     "hint-4"
+    ],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": false,
+    "notes": [
+     "目录命中仅用于定位原文，不作为答案依据"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "search_knowledge",
+    "read_document"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 4,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "I-046",
+   "category": "internal",
+   "split": "dev",
+   "source": "real",
+   "question": "人机识别 v3 给出风险分 0.7 但没有被拉黑的用户，用的是什么机型？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "人机识别 v3 给出风险分 0.7 但没有被拉黑的用户，用的是什么机型？",
+    "resolved_question": "人机识别 v3 给出风险分 0.7 但没有被拉黑的用户，用的是什么机型？",
+    "intent": "research",
+    "needs_knowledge": true,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": true,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [
+     "vivo 1920",
+     "Android 11",
+     "CiderAPP(Android/2.26.1)",
+     "hint-1",
+     "hint-2",
+     "hint-3"
+    ],
+    "unresolved_terms": [],
+    "reason_summary": "查本工作区资料"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [
+     "vivo 1920",
+     "Android 11",
+     "CiderAPP(Android/2.26.1)",
+     "hint-1",
+     "hint-2",
+     "hint-3"
+    ],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": false,
+    "notes": [
+     "目录命中仅用于定位原文，不作为答案依据"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "search_knowledge",
+    "read_document"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 3,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "I-047",
+   "category": "internal",
+   "split": "holdout",
+   "source": "real",
+   "question": "客服 Agent 的会话工作空间隔离是怎么实现的？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "客服 Agent 的会话工作空间隔离是怎么实现的？",
+    "resolved_question": "客服 Agent 的会话工作空间隔离是怎么实现的？",
+    "intent": "research",
+    "needs_knowledge": true,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": false,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [
+     "/workspace/session_123/",
+     "chat_history:session_123",
+     "hint-1",
+     "hint-2"
+    ],
+    "unresolved_terms": [],
+    "reason_summary": "查本工作区资料"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [
+     "/workspace/session_123/",
+     "chat_history:session_123",
+     "hint-1",
+     "hint-2"
+    ],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": false,
+    "notes": [
+     "目录命中仅用于定位原文，不作为答案依据"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "search_knowledge",
+    "read_document"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 2,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "I-048",
+   "category": "internal",
+   "split": "dev",
+   "source": "real",
+   "question": "客服 Agent 怎么防止用户查到别人的订单信息？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "客服 Agent 怎么防止用户查到别人的订单信息？",
+    "resolved_question": "客服 Agent 怎么防止用户查到别人的订单信息？",
+    "intent": "research",
+    "needs_knowledge": true,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": false,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [
+     "订单查询工具会自动验证订单所有权",
+     "用户 A 不能查用户 B 的订单",
+     "hint-1",
+     "hint-2"
+    ],
+    "unresolved_terms": [],
+    "reason_summary": "查本工作区资料"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [
+     "订单查询工具会自动验证订单所有权",
+     "用户 A 不能查用户 B 的订单",
+     "hint-1",
+     "hint-2"
+    ],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": false,
+    "notes": [
+     "目录命中仅用于定位原文，不作为答案依据"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "search_knowledge",
+    "read_document"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 2,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "I-049",
+   "category": "internal",
+   "split": "holdout",
+   "source": "real",
+   "question": "SKU 上架时间在五年前甚至十年前，首 30 天总销量统计不到该怎么处理？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "SKU 上架时间在五年前甚至十年前，首 30 天总销量统计不到该怎么处理？",
+    "resolved_question": "SKU 上架时间在五年前甚至十年前，首 30 天总销量统计不到该怎么处理？",
+    "intent": "research",
+    "needs_knowledge": true,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": false,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [
+     "shelf_date",
+     "兜底：基表计算",
+     "mv_sku_daily_sales",
+     "hint-1",
+     "hint-2",
+     "hint-3"
+    ],
+    "unresolved_terms": [],
+    "reason_summary": "查本工作区资料"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [
+     "shelf_date",
+     "兜底：基表计算",
+     "mv_sku_daily_sales",
+     "hint-1",
+     "hint-2",
+     "hint-3"
+    ],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": false,
+    "notes": [
+     "目录命中仅用于定位原文，不作为答案依据"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "search_knowledge",
+    "read_document"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 3,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "I-050",
+   "category": "internal",
+   "split": "dev",
+   "source": "real",
+   "question": "物化视图跑出来的结果和原 SQL 有细微数据差异，可能是什么原因？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "物化视图跑出来的结果和原 SQL 有细微数据差异，可能是什么原因？",
+    "resolved_question": "物化视图跑出来的结果和原 SQL 有细微数据差异，可能是什么原因？",
+    "intent": "research",
+    "needs_knowledge": true,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": true,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [
+     "inner join 造成丢单",
+     "时区问题",
+     "asia/shanghai",
+     "hint-1",
+     "hint-2",
+     "hint-3"
+    ],
+    "unresolved_terms": [],
+    "reason_summary": "查本工作区资料"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [
+     "inner join 造成丢单",
+     "时区问题",
+     "asia/shanghai",
+     "hint-1",
+     "hint-2",
+     "hint-3"
+    ],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": false,
+    "notes": [
+     "目录命中仅用于定位原文，不作为答案依据"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "search_knowledge",
+    "read_document"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 3,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "I-051",
+   "category": "internal",
+   "split": "dev",
+   "source": "real",
+   "question": "Windows 上配置 claude 使用国产大模型，请求地址和主模型要填什么？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "Windows 上配置 claude 使用国产大模型，请求地址和主模型要填什么？",
+    "resolved_question": "Windows 上配置 claude 使用国产大模型，请求地址和主模型要填什么？",
+    "intent": "research",
+    "needs_knowledge": true,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": false,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [
+     "cc-switch",
+     "https://api.deepseek.com/anthropic",
+     "deepseek-v4-pro[1M]",
+     "hint-1",
+     "hint-2",
+     "hint-3"
+    ],
+    "unresolved_terms": [],
+    "reason_summary": "查本工作区资料"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [
+     "cc-switch",
+     "https://api.deepseek.com/anthropic",
+     "deepseek-v4-pro[1M]",
+     "hint-1",
+     "hint-2",
+     "hint-3"
+    ],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": false,
+    "notes": [
+     "目录命中仅用于定位原文，不作为答案依据"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "search_knowledge",
+    "read_document"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 3,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "I-052",
+   "category": "internal",
+   "split": "dev",
+   "source": "real",
+   "question": "电商为什么要用坑位归因，而不是靠单因素 AB 测试来评估改版效果？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "电商为什么要用坑位归因，而不是靠单因素 AB 测试来评估改版效果？",
+    "resolved_question": "电商为什么要用坑位归因，而不是靠单因素 AB 测试来评估改版效果？",
+    "intent": "research",
+    "needs_knowledge": true,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": true,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [
+     "单因素变量控制并不容易做到完全可控",
+     "评估 20 个坑位内容改变就需要 40 天",
+     "hint-1",
+     "hint-2"
+    ],
+    "unresolved_terms": [],
+    "reason_summary": "查本工作区资料"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [
+     "单因素变量控制并不容易做到完全可控",
+     "评估 20 个坑位内容改变就需要 40 天",
+     "hint-1",
+     "hint-2"
+    ],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": false,
+    "notes": [
+     "目录命中仅用于定位原文，不作为答案依据"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "search_knowledge",
+    "read_document"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 2,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "I-053",
+   "category": "internal",
+   "split": "holdout",
+   "source": "real",
+   "question": "只根据坑位归因的转化价值来评判坑位会有什么问题？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "只根据坑位归因的转化价值来评判坑位会有什么问题？",
+    "resolved_question": "只根据坑位归因的转化价值来评判坑位会有什么问题？",
+    "intent": "research",
+    "needs_knowledge": true,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": false,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [
+     "短期偏见",
+     "产品价值定位",
+     "hint-1",
+     "hint-2"
+    ],
+    "unresolved_terms": [],
+    "reason_summary": "查本工作区资料"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [
+     "短期偏见",
+     "产品价值定位",
+     "hint-1",
+     "hint-2"
+    ],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": false,
+    "notes": [
+     "目录命中仅用于定位原文，不作为答案依据"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "search_knowledge",
+    "read_document"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 2,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "I-054",
+   "category": "internal",
+   "split": "dev",
+   "source": "real",
+   "question": "PageHelper 为什么会带来数据安全问题，怎么避免？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "PageHelper 为什么会带来数据安全问题，怎么避免？",
+    "resolved_question": "PageHelper 为什么会带来数据安全问题，怎么避免？",
+    "intent": "research",
+    "needs_knowledge": true,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": true,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [
+     "ThreadLocal",
+     "finally代码段中自动清除",
+     "紧跟MyBatis查询方法",
+     "hint-1",
+     "hint-2",
+     "hint-3"
+    ],
+    "unresolved_terms": [],
+    "reason_summary": "查本工作区资料"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [
+     "ThreadLocal",
+     "finally代码段中自动清除",
+     "紧跟MyBatis查询方法",
+     "hint-1",
+     "hint-2",
+     "hint-3"
+    ],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": false,
+    "notes": [
+     "目录命中仅用于定位原文，不作为答案依据"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "search_knowledge",
+    "read_document"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 3,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "I-055",
+   "category": "internal",
+   "split": "dev",
+   "source": "real",
+   "question": "K8S 路由异常导致商品服务 503 的最终根因是什么？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "K8S 路由异常导致商品服务 503 的最终根因是什么？",
+    "resolved_question": "K8S 路由异常导致商品服务 503 的最终根因是什么？",
+    "intent": "research",
+    "needs_knowledge": true,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": true,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [
+     "pod 的label丢失",
+     "k8s的生产标签丢失",
+     "17:34",
+     "hint-1",
+     "hint-2",
+     "hint-3"
+    ],
+    "unresolved_terms": [],
+    "reason_summary": "查本工作区资料"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [
+     "pod 的label丢失",
+     "k8s的生产标签丢失",
+     "17:34",
+     "hint-1",
+     "hint-2",
+     "hint-3"
+    ],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": false,
+    "notes": [
+     "目录命中仅用于定位原文，不作为答案依据"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "search_knowledge",
+    "read_document"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 3,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "I-056",
+   "category": "internal",
+   "split": "dev",
+   "source": "real",
+   "question": "星链系统里手动完成节点任务时，后端需要更新哪些字段？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "星链系统里手动完成节点任务时，后端需要更新哪些字段？",
+    "resolved_question": "星链系统里手动完成节点任务时，后端需要更新哪些字段？",
+    "intent": "research",
+    "needs_knowledge": true,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": false,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [
+     "实际完成人",
+     "任务状态",
+     "耗时",
+     "hint-1",
+     "hint-2",
+     "hint-3",
+     "hint-4"
+    ],
+    "unresolved_terms": [],
+    "reason_summary": "查本工作区资料"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [
+     "实际完成人",
+     "任务状态",
+     "耗时",
+     "hint-1",
+     "hint-2",
+     "hint-3",
+     "hint-4"
+    ],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": false,
+    "notes": [
+     "目录命中仅用于定位原文，不作为答案依据"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "search_knowledge",
+    "read_document"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 4,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "I-057",
+   "category": "internal",
+   "split": "dev",
+   "source": "real",
+   "question": "青浦工厂原料排产时，原料和待包品混排的优先级是怎么定的？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "青浦工厂原料排产时，原料和待包品混排的优先级是怎么定的？",
+    "resolved_question": "青浦工厂原料排产时，原料和待包品混排的优先级是怎么定的？",
+    "intent": "research",
+    "needs_knowledge": true,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": false,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [
+     "优先满足各个月的待包品",
+     "青浦复合物",
+     "SRM",
+     "hint-1",
+     "hint-2",
+     "hint-3"
+    ],
+    "unresolved_terms": [],
+    "reason_summary": "查本工作区资料"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [
+     "优先满足各个月的待包品",
+     "青浦复合物",
+     "SRM",
+     "hint-1",
+     "hint-2",
+     "hint-3"
+    ],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": false,
+    "notes": [
+     "目录命中仅用于定位原文，不作为答案依据"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "search_knowledge",
+    "read_document"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 3,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "I-058",
+   "category": "internal",
+   "split": "dev",
+   "source": "real",
+   "question": "黑五期间 Redis reco 集群 0007 分片异常的原因是什么？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "黑五期间 Redis reco 集群 0007 分片异常的原因是什么？",
+    "resolved_question": "黑五期间 Redis reco 集群 0007 分片异常的原因是什么？",
+    "intent": "research",
+    "needs_knowledge": true,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": true,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [
+     "0007分片",
+     "网络带宽被打满",
+     "纵向扩容",
+     "hint-1",
+     "hint-2",
+     "hint-3"
+    ],
+    "unresolved_terms": [],
+    "reason_summary": "查本工作区资料"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [
+     "0007分片",
+     "网络带宽被打满",
+     "纵向扩容",
+     "hint-1",
+     "hint-2",
+     "hint-3"
+    ],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": false,
+    "notes": [
+     "目录命中仅用于定位原文，不作为答案依据"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "search_knowledge",
+    "read_document"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 3,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "I-059",
+   "category": "internal",
+   "split": "dev",
+   "source": "real",
+   "question": "弗洛伊德说的自恋式地选择对象是什么意思？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "弗洛伊德说的自恋式地选择对象是什么意思？",
+    "resolved_question": "弗洛伊德说的自恋式地选择对象是什么意思？",
+    "intent": "research",
+    "needs_knowledge": true,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": true,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [
+     "人会爱上与自己有关的东西",
+     "理想中的自己",
+     "自我价值崩塌",
+     "hint-1",
+     "hint-2",
+     "hint-3"
+    ],
+    "unresolved_terms": [],
+    "reason_summary": "查本工作区资料"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [
+     "人会爱上与自己有关的东西",
+     "理想中的自己",
+     "自我价值崩塌",
+     "hint-1",
+     "hint-2",
+     "hint-3"
+    ],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": false,
+    "notes": [
+     "目录命中仅用于定位原文，不作为答案依据"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "search_knowledge",
+    "read_document"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 3,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "I-060",
+   "category": "internal",
+   "split": "dev",
+   "source": "real",
+   "question": "chatbot 接入 Livechat 需要调用哪些第三方接口？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "chatbot 接入 Livechat 需要调用哪些第三方接口？",
+    "resolved_question": "chatbot 接入 Livechat 需要调用哪些第三方接口？",
+    "intent": "research",
+    "needs_knowledge": true,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": false,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [
+     "/ms/oms/front/order-list/search",
+     "/ms/hades/logistics/v1/tracking/list",
+     "robot/transfer",
+     "hint-1",
+     "hint-2",
+     "hint-3"
+    ],
+    "unresolved_terms": [],
+    "reason_summary": "查本工作区资料"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [
+     "/ms/oms/front/order-list/search",
+     "/ms/hades/logistics/v1/tracking/list",
+     "robot/transfer",
+     "hint-1",
+     "hint-2",
+     "hint-3"
+    ],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": false,
+    "notes": [
+     "目录命中仅用于定位原文，不作为答案依据"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "search_knowledge",
+    "read_document"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 3,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "I-061",
+   "category": "internal",
+   "split": "dev",
+   "source": "real",
+   "question": "我想问一下哈，就那个验证码邮件重复发的问题，到底是啥原因来着？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "我想问一下哈，就那个验证码邮件重复发的问题，到底是啥原因来着？",
+    "resolved_question": "我想问一下哈，就那个验证码邮件重复发的问题，到底是啥原因来着？",
+    "intent": "research",
+    "needs_knowledge": true,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": false,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [
+     "int 值来处理自增 ID",
+     "MyBatisSystemException",
+     "hint-1",
+     "hint-2"
+    ],
+    "unresolved_terms": [],
+    "reason_summary": "查本工作区资料"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [
+     "int 值来处理自增 ID",
+     "MyBatisSystemException",
+     "hint-1",
+     "hint-2"
+    ],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": false,
+    "notes": [
+     "目录命中仅用于定位原文，不作为答案依据"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "search_knowledge",
+    "read_document"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 2,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "I-062",
+   "category": "internal",
+   "split": "dev",
+   "source": "real",
+   "question": "请问一下 AAB 是什么？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "请问一下 AAB 是什么？",
+    "resolved_question": "请问一下 AAB 是什么？",
+    "intent": "research",
+    "needs_knowledge": true,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": true,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [
+     "Android APP Bundle",
+     "hint-1"
+    ],
+    "unresolved_terms": [],
+    "reason_summary": "查本工作区资料"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [
+     "Android APP Bundle",
+     "hint-1"
+    ],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": false,
+    "notes": [
+     "目录命中仅用于定位原文，不作为答案依据"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "search_knowledge",
+    "read_document"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 1,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "I-063",
+   "category": "internal",
+   "split": "dev",
+   "source": "real",
+   "question": "什么是 MVCC？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "什么是 MVCC？",
+    "resolved_question": "什么是 MVCC？",
+    "intent": "research",
+    "needs_knowledge": true,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": false,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [
+     "多版本并发控制",
+     "hint-1"
+    ],
+    "unresolved_terms": [],
+    "reason_summary": "查本工作区资料"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [
+     "多版本并发控制",
+     "hint-1"
+    ],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": false,
+    "notes": [
+     "目录命中仅用于定位原文，不作为答案依据"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "search_knowledge",
+    "read_document"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 1,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "I-064",
+   "category": "internal",
+   "split": "dev",
+   "source": "real",
+   "question": "我记得好像有个商品服务 503 的事故，是不是 k8s 的问题来着，最后怎么定位的？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "我记得好像有个商品服务 503 的事故，是不是 k8s 的问题来着，最后怎么定位的？",
+    "resolved_question": "我记得好像有个商品服务 503 的事故，是不是 k8s 的问题来着，最后怎么定位的？",
+    "intent": "research",
+    "needs_knowledge": true,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": false,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [
+     "pod 的label丢失",
+     "灰度",
+     "hint-1",
+     "hint-2"
+    ],
+    "unresolved_terms": [],
+    "reason_summary": "查本工作区资料"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [
+     "pod 的label丢失",
+     "灰度",
+     "hint-1",
+     "hint-2"
+    ],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": false,
+    "notes": [
+     "目录命中仅用于定位原文，不作为答案依据"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "search_knowledge",
+    "read_document"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 2,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "I-065",
+   "category": "internal",
+   "split": "dev",
+   "source": "real",
+   "question": "PageHelper 是什么，它的原理是什么？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "PageHelper 是什么，它的原理是什么？",
+    "resolved_question": "PageHelper 是什么，它的原理是什么？",
+    "intent": "research",
+    "needs_knowledge": true,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": true,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [
+     "ThreadLocal",
+     "分页参数",
+     "hint-1",
+     "hint-2"
+    ],
+    "unresolved_terms": [],
+    "reason_summary": "查本工作区资料"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [
+     "ThreadLocal",
+     "分页参数",
+     "hint-1",
+     "hint-2"
+    ],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": false,
+    "notes": [
+     "目录命中仅用于定位原文，不作为答案依据"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "search_knowledge",
+    "read_document"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 2,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "M-001",
+   "category": "multi_source",
+   "split": "holdout",
+   "source": "real",
+   "question": "OMS 切面偶发失效问题从 5 月 26 日排查到 5 月 29 日拿到堆栈，整个过程是怎样的？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "OMS 切面偶发失效问题从 5 月 26 日排查到 5 月 29 日拿到堆栈，整个过程是怎样的？",
+    "resolved_question": "OMS 切面偶发失效问题从 5 月 26 日排查到 5 月 29 日拿到堆栈，整个过程是怎样的？",
+    "intent": "research",
+    "needs_knowledge": true,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": false,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [
+     "CHashMAP",
+     "空指针",
+     "getDeclaredMethods",
+     "hint-1",
+     "hint-2",
+     "hint-3"
+    ],
+    "unresolved_terms": [],
+    "reason_summary": "查本工作区资料"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [
+     "CHashMAP",
+     "空指针",
+     "getDeclaredMethods",
+     "hint-1",
+     "hint-2",
+     "hint-3"
+    ],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": false,
+    "notes": [
+     "目录命中仅用于定位原文，不作为答案依据"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "search_knowledge",
+    "read_document"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 3,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "M-002",
+   "category": "multi_source",
+   "split": "holdout",
+   "source": "real",
+   "question": "电商坑位归因方案的目的是什么，它又有什么局限性？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "电商坑位归因方案的目的是什么，它又有什么局限性？",
+    "resolved_question": "电商坑位归因方案的目的是什么，它又有什么局限性？",
+    "intent": "research",
+    "needs_knowledge": true,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": true,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [
+     "坑位",
+     "短期偏见",
+     "hint-1",
+     "hint-2"
+    ],
+    "unresolved_terms": [],
+    "reason_summary": "查本工作区资料"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [
+     "坑位",
+     "短期偏见",
+     "hint-1",
+     "hint-2"
+    ],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": false,
+    "notes": [
+     "目录命中仅用于定位原文，不作为答案依据"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "search_knowledge",
+    "read_document"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 2,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "M-003",
+   "category": "multi_source",
+   "split": "dev",
+   "source": "real",
+   "question": "Cider Android 包体积优化针对资源和处理架构分别采取了什么手段？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "Cider Android 包体积优化针对资源和处理架构分别采取了什么手段？",
+    "resolved_question": "Cider Android 包体积优化针对资源和处理架构分别采取了什么手段？",
+    "intent": "research",
+    "needs_knowledge": true,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": false,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [
+     "R8混淆技术",
+     "AAB",
+     "hint-1",
+     "hint-2"
+    ],
+    "unresolved_terms": [],
+    "reason_summary": "查本工作区资料"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [
+     "R8混淆技术",
+     "AAB",
+     "hint-1",
+     "hint-2"
+    ],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": false,
+    "notes": [
+     "目录命中仅用于定位原文，不作为答案依据"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "search_knowledge",
+    "read_document"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 2,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "M-004",
+   "category": "multi_source",
+   "split": "dev",
+   "source": "real",
+   "question": "土地财政和城投平台分别是怎样把地方政府债务滚起来的？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "土地财政和城投平台分别是怎样把地方政府债务滚起来的？",
+    "resolved_question": "土地财政和城投平台分别是怎样把地方政府债务滚起来的？",
+    "intent": "research",
+    "needs_knowledge": true,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": false,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [
+     "土地出让金",
+     "城投公司",
+     "hint-1",
+     "hint-2"
+    ],
+    "unresolved_terms": [],
+    "reason_summary": "查本工作区资料"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [
+     "土地出让金",
+     "城投公司",
+     "hint-1",
+     "hint-2"
+    ],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": false,
+    "notes": [
+     "目录命中仅用于定位原文，不作为答案依据"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "search_knowledge",
+    "read_document"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 2,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "M-005",
+   "category": "multi_source",
+   "split": "dev",
+   "source": "real",
+   "question": "Agent-Sentinel 的准确率、可观测监控项以及未来演进方向分别是什么？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "Agent-Sentinel 的准确率、可观测监控项以及未来演进方向分别是什么？",
+    "resolved_question": "Agent-Sentinel 的准确率、可观测监控项以及未来演进方向分别是什么？",
+    "intent": "research",
+    "needs_knowledge": true,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": true,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [
+     "90%",
+     "LangGraph",
+     "根因知识库",
+     "hint-1",
+     "hint-2",
+     "hint-3"
+    ],
+    "unresolved_terms": [],
+    "reason_summary": "查本工作区资料"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [
+     "90%",
+     "LangGraph",
+     "根因知识库",
+     "hint-1",
+     "hint-2",
+     "hint-3"
+    ],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": false,
+    "notes": [
+     "目录命中仅用于定位原文，不作为答案依据"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "search_knowledge",
+    "read_document"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 3,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "M-006",
+   "category": "multi_source",
+   "split": "dev",
+   "source": "real",
+   "question": "黑五期间用户侧监控完善到了什么程度，第一次做黑五又暴露了哪些不足？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "黑五期间用户侧监控完善到了什么程度，第一次做黑五又暴露了哪些不足？",
+    "resolved_question": "黑五期间用户侧监控完善到了什么程度，第一次做黑五又暴露了哪些不足？",
+    "intent": "research",
+    "needs_knowledge": true,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": false,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [
+     "用户心愿单",
+     "0.19%",
+     "hint-1",
+     "hint-2"
+    ],
+    "unresolved_terms": [],
+    "reason_summary": "查本工作区资料"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [
+     "用户心愿单",
+     "0.19%",
+     "hint-1",
+     "hint-2"
+    ],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": false,
+    "notes": [
+     "目录命中仅用于定位原文，不作为答案依据"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "search_knowledge",
+    "read_document"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 2,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "M-007",
+   "category": "multi_source",
+   "split": "holdout",
+   "source": "real",
+   "question": "PG 数据库加字段导致锁表的排查过程中，隔离级别和表级锁分别查到了什么结论？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "PG 数据库加字段导致锁表的排查过程中，隔离级别和表级锁分别查到了什么结论？",
+    "resolved_question": "PG 数据库加字段导致锁表的排查过程中，隔离级别和表级锁分别查到了什么结论？",
+    "intent": "research",
+    "needs_knowledge": true,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": false,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [
+     "读已提交",
+     "表级锁共有八种模式",
+     "pg_locks",
+     "hint-1",
+     "hint-2",
+     "hint-3"
+    ],
+    "unresolved_terms": [],
+    "reason_summary": "查本工作区资料"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [
+     "读已提交",
+     "表级锁共有八种模式",
+     "pg_locks",
+     "hint-1",
+     "hint-2",
+     "hint-3"
+    ],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": false,
+    "notes": [
+     "目录命中仅用于定位原文，不作为答案依据"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "search_knowledge",
+    "read_document"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 3,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "M-008",
+   "category": "multi_source",
+   "split": "dev",
+   "source": "real",
+   "question": "弗洛伊德理论里，子本能被夸大但未被压抑，和自恋式地选择对象，分别解释了什么现象？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "弗洛伊德理论里，子本能被夸大但未被压抑，和自恋式地选择对象，分别解释了什么现象？",
+    "resolved_question": "弗洛伊德理论里，子本能被夸大但未被压抑，和自恋式地选择对象，分别解释了什么现象？",
+    "intent": "research",
+    "needs_knowledge": true,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": false,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [
+     "hypercathexis",
+     "自我价值崩塌",
+     "hint-1",
+     "hint-2"
+    ],
+    "unresolved_terms": [],
+    "reason_summary": "查本工作区资料"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [
+     "hypercathexis",
+     "自我价值崩塌",
+     "hint-1",
+     "hint-2"
+    ],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": false,
+    "notes": [
+     "目录命中仅用于定位原文，不作为答案依据"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "search_knowledge",
+    "read_document"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 2,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "M-009",
+   "category": "multi_source",
+   "split": "holdout",
+   "source": "real",
+   "question": "影响力这本书里，互惠原则和影响力的武器分别列举了哪些说服心理机制？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "影响力这本书里，互惠原则和影响力的武器分别列举了哪些说服心理机制？",
+    "resolved_question": "影响力这本书里，互惠原则和影响力的武器分别列举了哪些说服心理机制？",
+    "intent": "research",
+    "needs_knowledge": true,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": false,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [
+     "拒绝回撤策略",
+     "锚定效应",
+     "社会认同原则",
+     "hint-1",
+     "hint-2",
+     "hint-3"
+    ],
+    "unresolved_terms": [],
+    "reason_summary": "查本工作区资料"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [
+     "拒绝回撤策略",
+     "锚定效应",
+     "社会认同原则",
+     "hint-1",
+     "hint-2",
+     "hint-3"
+    ],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": false,
+    "notes": [
+     "目录命中仅用于定位原文，不作为答案依据"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "search_knowledge",
+    "read_document"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 3,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "M-010",
+   "category": "multi_source",
+   "split": "dev",
+   "source": "real",
+   "question": "首单加深项目里，销量数据对不上的根因有哪些，时区问题具体是怎么统一解决的？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "首单加深项目里，销量数据对不上的根因有哪些，时区问题具体是怎么统一解决的？",
+    "resolved_question": "首单加深项目里，销量数据对不上的根因有哪些，时区问题具体是怎么统一解决的？",
+    "intent": "research",
+    "needs_knowledge": true,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": false,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [
+     "1.7 亿行",
+     "asia/shanghai",
+     "hint-1",
+     "hint-2"
+    ],
+    "unresolved_terms": [],
+    "reason_summary": "查本工作区资料"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [
+     "1.7 亿行",
+     "asia/shanghai",
+     "hint-1",
+     "hint-2"
+    ],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": false,
+    "notes": [
+     "目录命中仅用于定位原文，不作为答案依据"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "search_knowledge",
+    "read_document"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 2,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "M-011",
+   "category": "multi_source",
+   "split": "dev",
+   "source": "constructed",
+   "question": "结合我们内部的 P99 限流方案和业界最新的限流实践，这套方案还有哪些可改进的地方？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "结合我们内部的 P99 限流方案和业界最新的限流实践，这套方案还有哪些可改进的地方？",
+    "resolved_question": "结合我们内部的 P99 限流方案和业界最新的限流实践，这套方案还有哪些可改进的地方？",
+    "intent": "research",
+    "needs_knowledge": true,
+    "needs_web": true,
+    "needs_history": false,
+    "needs_general": false,
+    "freshness": "current",
+    "entities": [],
+    "scope_evidence_ids": [],
+    "unresolved_terms": [],
+    "reason_summary": "查本工作区资料；联网核实最新信息"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": true,
+    "notes": [
+     "本区知识目录为空"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "search_knowledge",
+    "read_document",
+    "web_search",
+    "read_web_page"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 0,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "M-012",
+   "category": "multi_source",
+   "split": "holdout",
+   "source": "constructed",
+   "question": "我们内部的坑位归因方案和行业通用的投放归因模型相比，一般该怎么取舍？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "我们内部的坑位归因方案和行业通用的投放归因模型相比，一般该怎么取舍？",
+    "resolved_question": "我们内部的坑位归因方案和行业通用的投放归因模型相比，一般该怎么取舍？",
+    "intent": "research",
+    "needs_knowledge": true,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": true,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [],
+    "unresolved_terms": [],
+    "reason_summary": "查本工作区资料"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": true,
+    "notes": [
+     "本区知识目录为空"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "search_knowledge",
+    "read_document"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 0,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "M-013",
+   "category": "multi_source",
+   "split": "holdout",
+   "source": "constructed",
+   "question": "我笔记里记的向量库选型结论，和现在最新的向量库能力对比还成立吗？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "我笔记里记的向量库选型结论，和现在最新的向量库能力对比还成立吗？",
+    "resolved_question": "我笔记里记的向量库选型结论，和现在最新的向量库能力对比还成立吗？",
+    "intent": "research",
+    "needs_knowledge": true,
+    "needs_web": true,
+    "needs_history": false,
+    "needs_general": false,
+    "freshness": "current",
+    "entities": [],
+    "scope_evidence_ids": [],
+    "unresolved_terms": [],
+    "reason_summary": "查本工作区资料；联网核实最新信息"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": true,
+    "notes": [
+     "本区知识目录为空"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "search_knowledge",
+    "read_document",
+    "web_search",
+    "read_web_page"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 0,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "M-014",
+   "category": "multi_source",
+   "split": "dev",
+   "source": "constructed",
+   "question": "我们之前讨论过的那套缓存方案，和一般的最佳实践相比有哪些取舍？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "我们之前讨论过的那套缓存方案，和一般的最佳实践相比有哪些取舍？",
+    "resolved_question": "我们之前讨论过的我们之前的缓存方案缓存方案，和一般的最佳实践相比有哪些取舍？",
+    "intent": "memory",
+    "needs_knowledge": true,
+    "needs_web": false,
+    "needs_history": true,
+    "needs_general": true,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [],
+    "unresolved_terms": [],
+    "reason_summary": "查本工作区资料；查历史讨论"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": true,
+    "notes": [
+     "本区知识目录为空"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "search_knowledge",
+    "read_document",
+    "search_history",
+    "read_history"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 0,
+    "history_turns": 1,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "M-015",
+   "category": "multi_source",
+   "split": "holdout",
+   "source": "constructed",
+   "question": "我们内部事故复盘文档里的排查思路，一般能用到通用的慢查询排查上吗？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "我们内部事故复盘文档里的排查思路，一般能用到通用的慢查询排查上吗？",
+    "resolved_question": "我们内部事故复盘文档里的排查思路，一般能用到通用的慢查询排查上吗？",
+    "intent": "research",
+    "needs_knowledge": true,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": true,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [],
+    "unresolved_terms": [],
+    "reason_summary": "查本工作区资料"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": true,
+    "notes": [
+     "本区知识目录为空"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "search_knowledge",
+    "read_document"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 0,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "T-001",
+   "category": "multi_turn",
+   "split": "holdout",
+   "source": "constructed",
+   "question": "这个方案在高并发下会有什么问题？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "这个方案在高并发下会有什么问题？",
+    "resolved_question": "内部风控 P99 方案在高并发下会有什么问题？",
+    "intent": "research",
+    "needs_knowledge": true,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": false,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [],
+    "unresolved_terms": [],
+    "reason_summary": "查本工作区资料"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": true,
+    "notes": [
+     "本区知识目录为空"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "search_knowledge",
+    "read_document"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 0,
+    "history_turns": 2,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "T-002",
+   "category": "multi_turn",
+   "split": "dev",
+   "source": "constructed",
+   "question": "它的局限性主要体现在哪？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "它的局限性主要体现在哪？",
+    "resolved_question": "坑位归因方案解决了什么问题的局限性主要体现在哪？",
+    "intent": "research",
+    "needs_knowledge": true,
+    "needs_web": true,
+    "needs_history": false,
+    "needs_general": false,
+    "freshness": "current",
+    "entities": [],
+    "scope_evidence_ids": [],
+    "unresolved_terms": [],
+    "reason_summary": "查本工作区资料；联网核实最新信息"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": true,
+    "notes": [
+     "本区知识目录为空"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "search_knowledge",
+    "read_document",
+    "web_search",
+    "read_web_page"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 0,
+    "history_turns": 2,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "T-003",
+   "category": "multi_turn",
+   "split": "holdout",
+   "source": "constructed",
+   "question": "第二种方式在什么场景下更合适？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "第二种方式在什么场景下更合适？",
+    "resolved_question": "我们上次讨论的慢查询排查流程在什么场景下更合适？",
+    "intent": "research",
+    "needs_knowledge": true,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": false,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [],
+    "unresolved_terms": [],
+    "reason_summary": "查本工作区资料"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": true,
+    "notes": [
+     "本区知识目录为空"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "search_knowledge",
+    "read_document"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 0,
+    "history_turns": 2,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "T-004",
+   "category": "multi_turn",
+   "split": "dev",
+   "source": "constructed",
+   "question": "那个修复方式后来上线了吗？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "那个修复方式后来上线了吗？",
+    "resolved_question": "验证码邮件重复发送的原因修复方式后来上线了吗？",
+    "intent": "research",
+    "needs_knowledge": true,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": false,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [],
+    "unresolved_terms": [],
+    "reason_summary": "查本工作区资料"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": true,
+    "notes": [
+     "本区知识目录为空"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "search_knowledge",
+    "read_document"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 0,
+    "history_turns": 2,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "T-005",
+   "category": "multi_turn",
+   "split": "dev",
+   "source": "constructed",
+   "question": "这个处理方式有没有副作用？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "这个处理方式有没有副作用？",
+    "resolved_question": "以图搜图 token 消耗过高处理方式有没有副作用？",
+    "intent": "research",
+    "needs_knowledge": true,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": false,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [],
+    "unresolved_terms": [],
+    "reason_summary": "查本工作区资料"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": true,
+    "notes": [
+     "本区知识目录为空"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "search_knowledge",
+    "read_document"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 0,
+    "history_turns": 2,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "T-006",
+   "category": "multi_turn",
+   "split": "dev",
+   "source": "constructed",
+   "question": "这个规范里 JSONObject 的情况一样吗？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "这个规范里 JSONObject 的情况一样吗？",
+    "resolved_question": "CI 接口文档规范里 JSONObject 的情况一样吗？",
+    "intent": "research",
+    "needs_knowledge": true,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": false,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [],
+    "unresolved_terms": [],
+    "reason_summary": "查本工作区资料"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": true,
+    "notes": [
+     "本区知识目录为空"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "search_knowledge",
+    "read_document"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 0,
+    "history_turns": 2,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "T-007",
+   "category": "multi_turn",
+   "split": "dev",
+   "source": "constructed",
+   "question": "我们之前讨论过的那个定位过程有记录吗？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "我们之前讨论过的那个定位过程有记录吗？",
+    "resolved_question": "我们之前讨论过的上次事故定位过程有记录吗？",
+    "intent": "memory",
+    "needs_knowledge": true,
+    "needs_web": false,
+    "needs_history": true,
+    "needs_general": false,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [],
+    "unresolved_terms": [],
+    "reason_summary": "查本工作区资料；查历史讨论"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": true,
+    "notes": [
+     "本区知识目录为空"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "search_knowledge",
+    "read_document",
+    "search_history",
+    "read_history"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 0,
+    "history_turns": 2,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "T-008",
+   "category": "multi_turn",
+   "split": "holdout",
+   "source": "constructed",
+   "question": "那这个转化率对应的 GMV 呢？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "那这个转化率对应的 GMV 呢？",
+    "resolved_question": "那黑五两封营销邮件的转化率分别转化率对应的 GMV 呢？",
+    "intent": "research",
+    "needs_knowledge": true,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": false,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [],
+    "unresolved_terms": [],
+    "reason_summary": "查本工作区资料"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": true,
+    "notes": [
+     "本区知识目录为空"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "search_knowledge",
+    "read_document"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 0,
+    "history_turns": 2,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "T-009",
+   "category": "multi_turn",
+   "split": "dev",
+   "source": "constructed",
+   "question": "这个功能覆盖了多少 SPU？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "这个功能覆盖了多少 SPU？",
+    "resolved_question": "TikTokShop 商详自动填充省了功能覆盖了多少 SPU？",
+    "intent": "research",
+    "needs_knowledge": true,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": false,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [],
+    "unresolved_terms": [],
+    "reason_summary": "查本工作区资料"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": true,
+    "notes": [
+     "本区知识目录为空"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "search_knowledge",
+    "read_document"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 0,
+    "history_turns": 2,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "T-010",
+   "category": "multi_turn",
+   "split": "dev",
+   "source": "constructed",
+   "question": "这个映射在新增标签时会自动更新吗？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "这个映射在新增标签时会自动更新吗？",
+    "resolved_question": "二级风格线和产品标签的映射映射在新增标签时会自动更新吗？",
+    "intent": "research",
+    "needs_knowledge": true,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": false,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [],
+    "unresolved_terms": [],
+    "reason_summary": "查本工作区资料"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": true,
+    "notes": [
+     "本区知识目录为空"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "search_knowledge",
+    "read_document"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 0,
+    "history_turns": 2,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "T-011",
+   "category": "multi_turn",
+   "split": "dev",
+   "source": "constructed",
+   "question": "那种排查方式为什么没找到？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "那种排查方式为什么没找到？",
+    "resolved_question": "OMS 切面偶发失效最后排查方式为什么没找到？",
+    "intent": "research",
+    "needs_knowledge": true,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": true,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [],
+    "unresolved_terms": [],
+    "reason_summary": "查本工作区资料"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": true,
+    "notes": [
+     "本区知识目录为空"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "search_knowledge",
+    "read_document"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 0,
+    "history_turns": 2,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "T-012",
+   "category": "multi_turn",
+   "split": "dev",
+   "source": "constructed",
+   "question": "这些方案里有关于限流的吗？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "这些方案里有关于限流的吗？",
+    "resolved_question": "我们内部知识库里的技术方案都方案里有关于限流的吗？",
+    "intent": "research",
+    "needs_knowledge": true,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": false,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [],
+    "unresolved_terms": [],
+    "reason_summary": "查本工作区资料"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": true,
+    "notes": [
+     "本区知识目录为空"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "search_knowledge",
+    "read_document"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 0,
+    "history_turns": 2,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "T-013",
+   "category": "multi_turn",
+   "split": "holdout",
+   "source": "constructed",
+   "question": "我们之前聊过的那个快照机制在会话移动时会怎样？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "我们之前聊过的那个快照机制在会话移动时会怎样？",
+    "resolved_question": "我们之前聊过的之前聊过的工作区记忆快照机制快照机制在会话移动时会怎样？",
+    "intent": "memory",
+    "needs_knowledge": true,
+    "needs_web": false,
+    "needs_history": true,
+    "needs_general": false,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [],
+    "unresolved_terms": [],
+    "reason_summary": "查本工作区资料；查历史讨论"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": true,
+    "notes": [
+     "本区知识目录为空"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "search_knowledge",
+    "read_document",
+    "search_history",
+    "read_history"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 0,
+    "history_turns": 2,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "T-014",
+   "category": "multi_turn",
+   "split": "dev",
+   "source": "constructed",
+   "question": "那它对长尾延迟的影响呢？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "那它对长尾延迟的影响呢？",
+    "resolved_question": "那我笔记里关于分层限流的结论对长尾延迟的影响呢？",
+    "intent": "research",
+    "needs_knowledge": true,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": false,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [],
+    "unresolved_terms": [],
+    "reason_summary": "查本工作区资料"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": true,
+    "notes": [
+     "本区知识目录为空"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "search_knowledge",
+    "read_document"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 0,
+    "history_turns": 2,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "T-015",
+   "category": "multi_turn",
+   "split": "holdout",
+   "source": "constructed",
+   "question": "那些记录里提到过本地模型吗？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "那些记录里提到过本地模型吗？",
+    "resolved_question": "导入的文档里有关于图片识别的记录吗记录里提到过本地模型吗？",
+    "intent": "research",
+    "needs_knowledge": true,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": false,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [],
+    "unresolved_terms": [],
+    "reason_summary": "查本工作区资料"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": true,
+    "notes": [
+     "本区知识目录为空"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "search_knowledge",
+    "read_document"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 0,
+    "history_turns": 2,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "P-001",
+   "category": "product",
+   "split": "holdout",
+   "source": "constructed",
+   "question": "Everything RAG 是做什么的？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "Everything RAG 是做什么的？",
+    "resolved_question": "Everything RAG 是做什么的？",
+    "intent": "product",
+    "needs_knowledge": false,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": false,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [],
+    "unresolved_terms": [],
+    "reason_summary": "询问产品功能，使用产品说明回答"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": true,
+    "notes": [
+     "本区知识目录为空"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "get_workspace_overview",
+    "lookup_catalog"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 0,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "P-002",
+   "category": "product",
+   "split": "holdout",
+   "source": "constructed",
+   "question": "你能做什么？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "你能做什么？",
+    "resolved_question": "你能做什么？",
+    "intent": "product",
+    "needs_knowledge": false,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": false,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [],
+    "unresolved_terms": [],
+    "reason_summary": "询问产品功能，使用产品说明回答"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": true,
+    "notes": [
+     "本区知识目录为空"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "get_workspace_overview",
+    "lookup_catalog"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 0,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "P-003",
+   "category": "product",
+   "split": "holdout",
+   "source": "constructed",
+   "question": "Everything RAG 怎么用？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "Everything RAG 怎么用？",
+    "resolved_question": "Everything RAG 怎么用？",
+    "intent": "product",
+    "needs_knowledge": false,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": false,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [],
+    "unresolved_terms": [],
+    "reason_summary": "询问产品功能，使用产品说明回答"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": true,
+    "notes": [
+     "本区知识目录为空"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "get_workspace_overview",
+    "lookup_catalog"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 0,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "P-004",
+   "category": "product",
+   "split": "dev",
+   "source": "constructed",
+   "question": "这个项目支持联网搜索吗？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "这个项目支持联网搜索吗？",
+    "resolved_question": "这个项目支持联网搜索吗？",
+    "intent": "product",
+    "needs_knowledge": false,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": false,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [],
+    "unresolved_terms": [],
+    "reason_summary": "询问产品功能，使用产品说明回答"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": true,
+    "notes": [
+     "本区知识目录为空"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "get_workspace_overview",
+    "lookup_catalog"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 0,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "P-005",
+   "category": "product",
+   "split": "dev",
+   "source": "constructed",
+   "question": "Everything RAG 会把我的资料上传到云端吗？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "Everything RAG 会把我的资料上传到云端吗？",
+    "resolved_question": "Everything RAG 会把我的资料上传到云端吗？",
+    "intent": "product",
+    "needs_knowledge": false,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": false,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [],
+    "unresolved_terms": [],
+    "reason_summary": "询问产品功能，使用产品说明回答"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": true,
+    "notes": [
+     "本区知识目录为空"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "get_workspace_overview",
+    "lookup_catalog"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 0,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "P-006",
+   "category": "product",
+   "split": "dev",
+   "source": "constructed",
+   "question": "你能帮我识图吗？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "你能帮我识图吗？",
+    "resolved_question": "你能帮我识图吗？",
+    "intent": "product",
+    "needs_knowledge": false,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": false,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [],
+    "unresolved_terms": [],
+    "reason_summary": "询问产品功能，使用产品说明回答"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": true,
+    "notes": [
+     "本区知识目录为空"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "get_workspace_overview",
+    "lookup_catalog"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 0,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "P-007",
+   "category": "product",
+   "split": "dev",
+   "source": "constructed",
+   "question": "Everything RAG 支持哪些模型？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "Everything RAG 支持哪些模型？",
+    "resolved_question": "Everything RAG 支持哪些模型？",
+    "intent": "product",
+    "needs_knowledge": false,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": false,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [],
+    "unresolved_terms": [],
+    "reason_summary": "询问产品功能，使用产品说明回答"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": true,
+    "notes": [
+     "本区知识目录为空"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "get_workspace_overview",
+    "lookup_catalog"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 0,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "P-008",
+   "category": "product",
+   "split": "dev",
+   "source": "constructed",
+   "question": "这个助手有几种权限模式？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "这个助手有几种权限模式？",
+    "resolved_question": "这个助手有几种权限模式？",
+    "intent": "product",
+    "needs_knowledge": false,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": false,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [],
+    "unresolved_terms": [],
+    "reason_summary": "询问产品功能，使用产品说明回答"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": true,
+    "notes": [
+     "本区知识目录为空"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "get_workspace_overview",
+    "lookup_catalog"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 0,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "P-009",
+   "category": "product",
+   "split": "holdout",
+   "source": "constructed",
+   "question": "知识库里有哪些文档？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "知识库里有哪些文档？",
+    "resolved_question": "知识库里有哪些文档？",
+    "intent": "catalog",
+    "needs_knowledge": false,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": false,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [],
+    "unresolved_terms": [],
+    "reason_summary": "询问工作区资料概览，使用结构化统计回答"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": true,
+    "notes": [
+     "本区知识目录为空"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "get_workspace_overview",
+    "lookup_catalog"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 0,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  },
+  {
+   "id": "P-010",
+   "category": "product",
+   "split": "dev",
+   "source": "constructed",
+   "question": "我的资料库一共有多少个切片？",
+   "accepted": true,
+   "reasons": [],
+   "routing_rules_version": "routing-rules-v1",
+   "decision": {
+    "question": "我的资料库一共有多少个切片？",
+    "resolved_question": "我的资料库一共有多少个切片？",
+    "intent": "catalog",
+    "needs_knowledge": false,
+    "needs_web": false,
+    "needs_history": false,
+    "needs_general": false,
+    "freshness": "none",
+    "entities": [],
+    "scope_evidence_ids": [],
+    "unresolved_terms": [],
+    "reason_summary": "询问工作区资料概览，使用结构化统计回答"
+   },
+   "scope_check": {
+    "scope_evidence_ids": [],
+    "resolved_terms": [],
+    "unresolved_terms": [],
+    "definition_unknown_terms": [],
+    "catalog_empty": true,
+    "notes": [
+     "本区知识目录为空"
+    ]
+   },
+   "planned_tools_not_executed": [
+    "get_workspace_overview",
+    "lookup_catalog"
+   ],
+   "prompt_evidence": {
+    "model_used": false,
+    "catalog_clues": 0,
+    "history_turns": 0,
+    "memory_snapshot_chars": 0,
+    "note": "离线模式不组装提示、不发模型请求；真实运行由 T_verify 执行"
+   }
+  }
+ ],
+ "dataset": {
+  "path": "C:\\Users\\22331\\Desktop\\everything-rag\\backend\\tests\\data\\routing_eval_cases.json",
+  "sha256": "672bd53ffdbcd7ba9d21e8d7fa944d13943f1c494ebc1c0872157ac57b2c0dd4",
+  "total": 155,
+  "real": 87,
+  "constructed": 68,
+  "by_category": {
+   "internal": 65,
+   "general": 30,
+   "freshness": 20,
+   "product": 10,
+   "multi_source": 15,
+   "multi_turn": 15
+  },
+  "quota": {
+   "internal": 30,
+   "general": 30,
+   "freshness": 20,
+   "product": 10,
+   "multi_source": 15,
+   "multi_turn": 15
+  },
+  "real_by_category": {
+   "internal": 65,
+   "general": 11,
+   "freshness": 1,
+   "product": 0,
+   "multi_source": 10,
+   "multi_turn": 0
+  },
+  "constructed_by_category": {
+   "internal": 0,
+   "general": 19,
+   "freshness": 19,
+   "product": 10,
+   "multi_source": 5,
+   "multi_turn": 15
+  },
+  "by_split": {
+   "dev": 104,
+   "holdout": 51
+  },
+  "catalog_hint_origin": {
+   "none": 80,
+   "cases_evidence": 75
+  },
+  "label_origin": "authored_by_t6_from_PRD_6.3_and_16.3",
+  "label_disclaimer": "真实条目的 gold / evidence 来自真实语料，但 required_sources 等标注由 t6 按 PRD 6.3 / 16.3 编写，未经用户逐条确认；离线评测只覆盖规则层，端到端指标需 T_verify 在真实工作区执行。"
+ }
+}
