@@ -34,6 +34,7 @@ from app.memory.invalidation import (
     revoked_requirement_message_ids,
     user_history_view,
 )
+from app.memory.workspace_memory import WorkspaceMemory
 from tests.fakes_agent import seed_run
 from tests.fakes_memory import RecordingChatModel, memory_for
 
@@ -284,20 +285,22 @@ async def test_a31_compaction_bumps_only_its_own_agent_context_epoch(
 async def test_invalidation_only_touches_affected_conversations(
     tmp_path: Path, store: AppStore
 ) -> None:
-    """只递增**受影响**会话的 epoch：另一个会话不受牵连。"""
+    """工作区内全部会话读取更新记忆，其他工作区保持原有版本。"""
 
-    seeded = await seed_run(
-        store, workspace_id="default", storage_key="default", conversation_id="conv-1", run_id="run-1"
-    )
-    # 同一工作区的第二个会话：``seed_run`` 会重复建工作区（storage_key 唯一），所以这里
-    # 只补会话本身。
+    await store.create_workspace("default", "default")
+    await store.create_workspace("other", "other")
+    await store.create_conversation("conv-1", "default")
     await store.create_conversation("conv-2", "default")
-    memory = memory_for(tmp_path)
+    await store.create_conversation("conv-other", "other")
+    message = await store.append_message(
+        conversation_id="conv-1", role="user", content="回答一律用中文"
+    )
+    memory = WorkspaceMemory(tmp_path / "memory.json", storage_key="default")
     entry = memory.add_entry(
         "回答一律用中文",
         MemoryKind.RESPONSE_PREFERENCE,
-        source_conversation_id=seeded.conversation_id,
-        source_message_ids=[seeded.user_message_id],
+        source_conversation_id="conv-1",
+        source_message_ids=[message.id],
     ).entry
 
     outcome = await apply_invalidation_to_runtime(
@@ -307,8 +310,12 @@ async def test_invalidation_only_touches_affected_conversations(
         reason="用户遗忘记忆",
     )
 
-    assert outcome.affected_conversations == (seeded.conversation_id,)
-    untouched = await store.get_conversation("conv-2")
+    assert outcome.affected_conversations == ("conv-1", "conv-2")
+    for conversation_id in outcome.affected_conversations:
+        current = await store.get_conversation(conversation_id)
+        assert current is not None
+        assert current.context_epoch == 2
+    untouched = await store.get_conversation("conv-other")
     assert untouched is not None
     assert untouched.context_epoch == 1
 

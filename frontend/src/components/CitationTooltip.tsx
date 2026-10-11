@@ -27,13 +27,14 @@ export function CitationTooltip({ source, anchor }: CitationTooltipProps) {
 
   const isWeb = source.source_type === "web";
   const similarity = vectorSimilarityLabel(source);
+  const displayTitle = source.document_title || (isWeb ? source.source_file : basename(source.source_file));
 
   return (
     <div className="citation-tooltip" role="tooltip" style={{ left, top, width: TOOLTIP_WIDTH }}>
       <div className="citation-tooltip-file" title={source.source_file}>
-        {isWeb ? source.source_file : basename(source.source_file)}
+        {displayTitle}
       </div>
-      {!isWeb && source.heading_path !== null && source.heading_path !== "" && (
+      {source.heading_path !== null && source.heading_path !== "" && (
         <div className="citation-tooltip-heading">{source.heading_path}</div>
       )}
       {isWeb && source.url !== null && source.url !== undefined && source.url !== "" && (

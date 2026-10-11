@@ -60,6 +60,43 @@ async def test_cancel_during_run_is_recorded_and_resumable(app_store, tmp_path: 
         await manager.aclose()
 
 
+async def test_cancel_returns_without_waiting_for_slow_task_exit(app_store, tmp_path: Path) -> None:
+    await seed_conversation(app_store)
+    manager = build_manager(
+        app_store,
+        services=FakeServices(task_count=1),
+        root=tmp_path,
+    )
+    release = asyncio.Event()
+    started = asyncio.Event()
+
+    async def slow_exit() -> None:
+        started.set()
+        try:
+            await asyncio.Event().wait()
+        except asyncio.CancelledError:
+            await release.wait()
+
+    try:
+        run = await manager.create_run(
+            workspace_id="ws-1", conversation_id="conv-1", question="问题"
+        )
+        await manager.store.update_run_status(run.id, RunStatus.RUNNING)
+        task = asyncio.create_task(slow_exit())
+        manager._tasks[run.id] = task
+        await started.wait()
+
+        cancelled = await asyncio.wait_for(manager.cancel(run.id), timeout=0.5)
+
+        assert cancelled.status is RunStatus.CANCELLED
+        assert task.done() is False
+        release.set()
+        await task
+    finally:
+        release.set()
+        await manager.aclose()
+
+
 async def test_cancel_is_idempotent(manager) -> None:
     run = await manager.create_run(
         workspace_id="ws-1", conversation_id="conv-1", question="问题"
@@ -96,6 +133,52 @@ async def test_resume_after_failure_reuses_completed_tasks(app_store, tmp_path: 
         assert services.research_tasks_seen.count("t1") == 2
     finally:
         await manager.aclose()
+
+
+async def test_resume_after_restart_uses_research_checkpoint(app_store, tmp_path: Path) -> None:
+    """生成异常并重启服务后，从检查点继续，已完成研究不再执行。"""
+
+    await seed_conversation(app_store)
+    services = FakeServices(task_count=2)
+    fail_synthesis = True
+    base_factory = services.factory
+
+    def factory(manager, run, state):
+        graph_services = base_factory(manager, run, state)
+        original_synthesize = graph_services.synthesize
+
+        def synthesize(current, results, requirements):
+            nonlocal fail_synthesis
+            if fail_synthesis:
+                fail_synthesis = False
+                raise RuntimeError("生成阶段暂时失败")
+            return original_synthesize(current, results, requirements)
+
+        graph_services.synthesize = synthesize
+        return graph_services
+
+    first = build_manager(app_store, services=services, root=tmp_path)
+    first._services_factory = factory
+    first.enable_checkpoints()
+    run = await first.create_run(
+        workspace_id="ws-1", conversation_id="conv-1", question="问题"
+    )
+    await first.run_to_completion(run.id)
+    assert (await first.require_run(run.id)).status is RunStatus.FAILED
+    assert sorted(services.research_tasks_seen) == ["t1", "t2"]
+    await first.aclose()
+
+    second = build_manager(app_store, services=services, root=tmp_path)
+    second._services_factory = factory
+    second.enable_checkpoints()
+    try:
+        await second.resume(run.id)
+        await second.wait(run.id)
+        assert (await second.require_run(run.id)).status is RunStatus.COMPLETED
+        assert sorted(services.research_tasks_seen) == ["t1", "t2"]
+        assert services.calls["synthesize"] == 1
+    finally:
+        await second.aclose()
 
 
 async def test_resume_rejects_completed_run(manager) -> None:

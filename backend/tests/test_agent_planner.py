@@ -18,6 +18,7 @@ from app.agent.contracts import (
     ResearchTask,
     RouteDecision,
     TaskStatus,
+    validate_task_graph,
 )
 from app.agent.planner import (
     LONG_INPUT_MIN_CHARS,
@@ -30,6 +31,8 @@ from app.agent.planner import (
     PlanValidationError,
     TaskResultCache,
     TaskSource,
+    _apply_retrieval_queries,
+    _build_tasks,
     build_plan,
     build_web_subtask,
     dependency_order,
@@ -569,6 +572,102 @@ def test_existing_result_is_not_reused_across_knowledge_revision() -> None:
 
     assert plan.tasks[0].status is TaskStatus.QUEUED
     assert plan.tasks[0].result_ref is None
+
+
+# =====================================================================
+# 7b. 整理后的检索查询（用户实测缺陷 C02/C03）
+# =====================================================================
+
+
+def test_retrieval_queries_replace_per_clause_tasks_and_keep_coverage() -> None:
+    question = "有一个经典面试题：如果让你设计一个 Agent，你会考虑哪些因素？有哪些维度值得考虑？"
+    decision = _decision(question)
+
+    plain = build_plan(question, decision)
+    assert [task.question for task in plain.tasks] == [
+        "有一个经典面试题：如果让你设计一个 Agent，你会考虑哪些因素",
+        "有哪些维度值得考虑",
+    ]
+
+    merged = build_plan(
+        question,
+        decision,
+        retrieval_queries=["设计一个 Agent 需要考虑哪些因素和设计维度？"],
+    )
+
+    assert [task.task_id for task in merged.tasks] == ["t-q1-knowledge"]
+    assert merged.tasks[0].question == "设计一个 Agent 需要考虑哪些因素和设计维度？"
+    # 两项要求仍被覆盖（每条要求映射到至少一个任务，PRD 6.4）
+    assert merged.tasks[0].requirement_ids == ["R1", "R2"]
+    assert merged.coverage().uncovered == []
+    assert any("整理后的 1 条查询" in note for note in merged.notes)
+
+
+def test_retrieval_queries_keep_combine_dependency() -> None:
+    question = "结合业界最佳实践，我们的内部风控方案应该怎么设计？"
+    decision = _decision(question, needs_general=True)
+
+    merged = build_plan(question, decision, retrieval_queries=["内部风控方案的设计要点"])
+
+    knowledge = [task for task in merged.tasks if task.agent_kind is AgentKind.RAG]
+    general = [task for task in merged.tasks if task.agent_kind is AgentKind.GENERAL]
+    assert knowledge and general
+    assert general[0].depends_on == [knowledge[0].task_id]
+    validate_plan(merged)
+
+
+def test_retrieval_queries_redirect_dependencies_of_every_replaced_task() -> None:
+    """F01：多要求场景下，**后续旧任务被合并成空列表**时依赖也必须重定向。
+
+    报告 T01—T05 的真实问题：R1/R2 各建一条知识任务与一条 general 任务，其中
+    ``t-r2-general`` 依赖 ``t-r2-knowledge``（结合类要求）。把两条知识任务合并成一条
+    查询任务后，旧实现只给第一项旧任务登记新目标，``t-r2-general`` 继续依赖已被删除的
+    ``t-r2-knowledge`` ⇒ ``validate_task_graph`` 直接拒绝整个计划（浏览器四个等级都失败）。
+    """
+
+    question = (
+        "为什么用了 AI 以后个人开发快了，人却更累？"
+        "结合知识库中的实践，Harness、AI Native 建设和 Spec 能做哪些基础工作来减少这种负担？"
+    )
+    decision = _decision(question, needs_general=True)
+
+    tasks, notes, sources = _build_tasks(extract_requirements(question), decision)
+    assert "t-r2-general" in {task.task_id for task in tasks}
+    assert build_plan(question, decision).tasks  # 合并前：依赖存在，计划可用
+
+    merged = _apply_retrieval_queries(tasks, sources, [question], notes)
+    ids = {task.task_id for task in merged}
+    general = next(task for task in merged if task.task_id == "t-r2-general")
+    assert general.depends_on, "结合类要求的 general 任务必须仍然依赖知识检索任务"
+    assert set(general.depends_on) <= ids, "依赖必须指向仍然存在的任务"
+    assert all(dep.endswith("-knowledge") for dep in general.depends_on)
+    validate_task_graph(merged)
+    # 端到端：走真实 build_plan 入口也不得抛 PlanValidationError。
+    plan = build_plan(question, decision, retrieval_queries=[question])
+    validate_plan(plan)
+
+
+def test_retrieval_queries_drop_dependency_that_no_longer_exists() -> None:
+    """查询条数被裁剪到上限时，不得留下指向已裁剪任务的不存在依赖。"""
+
+    question = "结合知识库中的实践，Harness 与 Spec 能做哪些基础工作？另外 AI Native 建设呢？"
+    decision = _decision(question, needs_general=True)
+    queries = [f"查询 {index}" for index in range(1, 12)]
+
+    plan = build_plan(question, decision, retrieval_queries=queries)
+
+    ids = {task.task_id for task in plan.tasks}
+    for task in plan.tasks:
+        assert set(task.depends_on) <= ids
+    validate_plan(plan)
+
+
+def test_retrieval_queries_without_knowledge_tasks_change_nothing() -> None:
+    decision = _decision("什么是 Agent？", needs_knowledge=False, needs_general=True)
+
+    plan = build_plan("什么是 Agent？", decision, retrieval_queries=["Agent 概念"])
+
+    assert [task.task_id for task in plan.tasks] == ["t-r1-general"]
 
 
 def test_result_key_normalizes_punctuation_but_not_workspace() -> None:

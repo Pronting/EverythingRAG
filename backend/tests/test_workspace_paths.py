@@ -1,10 +1,12 @@
-"""PRD 5.1 目录树与 ``storage_key`` 解析（T01）。
+"""共享知识库的路径解析与 ``storage_key``（D-KB）。
 
 覆盖：
-- ``storage_key`` 服务端生成、稳定、唯一；历史数据确定性回填；
-- ``data_dir/workspaces/<storage_key>/`` 的完整目录形状；
-- 迁移前（旧根布局）与迁移后（每工作区布局）的解析切换只由 ``storage.json`` 决定，
-  **不会因为某次写入而自动翻转**。
+- ``storage_key`` 服务端生成、稳定、唯一；历史数据确定性回填（私有目录不得相撞）；
+- **知识路径全局共享**：任何工作区解析出的 ``documents_dir`` / ``state_db`` /
+  ``image_state_db`` / ``chroma_dir`` 逐字段相同，且都在 ``data_dir`` 根；
+- **私有路径按区**：``memory.json`` / ``checkpoints.db`` / ``artifacts`` / jieba 缓存
+  落在 ``data_dir/workspaces/<storage_key>/``；
+- ``storage.json`` 只表达「工作区记录迁移状态」（D25/D29），**改不动知识库布局**。
 """
 
 from __future__ import annotations
@@ -14,11 +16,13 @@ from pathlib import Path
 import pytest
 
 from app.core.workspace_context import (
+    SHARED_KNOWLEDGE_DIRS,
     LayoutMode,
     WorkspaceContextFactory,
     WorkspaceNotFoundError,
     commit_storage_version,
     committed_storage_version,
+    ensure_layout_dirs,
     read_storage_marker,
 )
 from app.core.workspace_store import (
@@ -30,19 +34,15 @@ from app.core.workspace_store import (
 )
 
 
-def _legacy_data_dir(tmp_path: Path) -> Path:
-    """造一个迁移前的旧布局数据目录（V1.1.0：知识数据在 data_dir 根）。
-
-    目录名刻意不用 ``erag-data``：conftest 会为 ``settings.data_dir`` 的默认 tmp 路径
-    提交 ``storage.json``，同名目录会让「未迁移」的前提失效。
-    """
+def _data_dir_with_knownledge(tmp_path: Path) -> Path:
+    """造一个「根下已有知识数据」的数据目录（D-KB 里的常规形态）。"""
 
     data_dir = tmp_path / "legacy-data"
     data_dir.mkdir(parents=True, exist_ok=True)
-    (data_dir / "chroma.sqlite3").write_bytes(b"legacy-chroma")
-    (data_dir / "state.db").write_bytes(b"legacy-state")
+    (data_dir / "chroma.sqlite3").write_bytes(b"chroma")
+    (data_dir / "state.db").write_bytes(b"state")
     (data_dir / "documents").mkdir(exist_ok=True)
-    (data_dir / "documents" / "a.md").write_text("旧上传", encoding="utf-8")
+    (data_dir / "documents" / "a.md").write_text("既有资料", encoding="utf-8")
     return data_dir
 
 
@@ -55,11 +55,10 @@ def test_storage_key_is_generated_stable_and_unique(tmp_path: Path) -> None:
     first = store.create("研究")
     second = store.create("工作")
     assert first.storage_key and second.storage_key
-    assert first.storage_key != second.storage_key
-    # 不同工作区绝不能指向同一目录
+    # 不同工作区的**私有**目录绝不能相撞（知识目录是共享的，不在此列）
     assert len({first.storage_key, second.storage_key, default.storage_key}) == 3
 
-    # 重新加载后 key 不变（稳定 = 目录不会漂移）
+    # 重新加载后 key 不变（稳定 = 私有目录不会漂移）
     reloaded = WorkspaceStore(tmp_path)
     assert reloaded.get(first.id).storage_key == first.storage_key  # type: ignore[union-attr]
     assert reloaded.get_by_storage_key(first.storage_key).id == first.id  # type: ignore[union-attr]
@@ -83,7 +82,7 @@ def test_legacy_rows_without_storage_key_get_deterministic_backfill(tmp_path: Pa
 
 
 def test_colliding_storage_keys_are_repaired(tmp_path: Path) -> None:
-    """手工把两条记录写成同一个 key 时重新派生，绝不让两区共用目录。"""
+    """手工把两条记录写成同一个 key 时重新派生，绝不让两区共用私有目录。"""
 
     (tmp_path / "workspaces.json").write_text(
         '[{"id": "a", "name": "A", "storage_key": "same"},'
@@ -96,7 +95,9 @@ def test_colliding_storage_keys_are_repaired(tmp_path: Path) -> None:
     assert {"a", "b"} <= {item.id for item in store.list()}
 
 
-def test_workspace_directory_tree_matches_prd_5_1(tmp_path: Path) -> None:
+def test_paths_split_shared_knowledge_from_workspace_private(tmp_path: Path) -> None:
+    """知识路径共享（所有区相同）＋私有件按区。"""
+
     data_dir = tmp_path / "erag-data"
     store = WorkspaceStore(data_dir)
     workspace = store.create("研究")
@@ -106,46 +107,70 @@ def test_workspace_directory_tree_matches_prd_5_1(tmp_path: Path) -> None:
     for relative in WORKSPACE_SUBDIRS:
         assert (root / relative).is_dir(), relative
 
-    # PRD 5.1 的七个路径都能由 storage_key 推出（文件由各自拥有者首次写入时创建）
     factory = WorkspaceContextFactory(data_dir, store)
     paths = factory.paths_for(workspace.id)
+    assert paths.layout is LayoutMode.SHARED
     assert paths.root_dir == root
-    assert paths.documents_dir == root / "documents"
-    assert paths.state_db == root / "state.db"
-    assert paths.image_state_db == root / "image_state.db"
-    assert paths.chroma_dir == root / "chroma"
+
+    # 知识：全部在 data_dir 根（共享）
+    assert paths.documents_dir == data_dir / "documents"
+    assert paths.state_db == data_dir / "state.db"
+    assert paths.image_state_db == data_dir / "image_state.db"
+    assert paths.chroma_dir == data_dir
+    # 私有：全部在本区根下
     assert paths.memory_json == root / "memory.json"
     assert paths.checkpoints_db == root / "checkpoints.db"
     assert paths.artifacts_dir == root / "artifacts"
+    assert paths.jieba_cache_dir == root / "cache" / "jieba"
+
+    # 建目录：共享知识目录在 data_dir 根、私有目录在本区根（幂等）
+    ensure_layout_dirs(paths)
+    assert (data_dir / "documents").is_dir()
+    assert (data_dir / "cache" / "jieba").is_dir()
+    assert (root / "artifacts").is_dir()
+    assert set(SHARED_KNOWLEDGE_DIRS) == {"documents", "cache/jieba"}
 
 
-def test_legacy_layout_is_used_before_migration_and_never_flips_on_write(
-    tmp_path: Path,
-) -> None:
-    data_dir = _legacy_data_dir(tmp_path)
+def test_every_workspace_resolves_the_same_shared_knowledge_paths(tmp_path: Path) -> None:
+    """核心断言：三个工作区的知识路径逐字段相同，私有路径互不相同。"""
+
+    data_dir = _data_dir_with_knownledge(tmp_path)
     store = WorkspaceStore(data_dir)
     factory = WorkspaceContextFactory(data_dir, store)
+    contexts = [factory.resolve(store.create(name).id) for name in ("甲区", "乙区", "丙区")]
 
-    assert factory.layout_mode(DEFAULT_WORKSPACE_ID) is LayoutMode.LEGACY
-    legacy = factory.paths_for(DEFAULT_WORKSPACE_ID)
-    # 旧布局：Chroma persist 根就是 data_dir 本身（chroma.sqlite3 与分段目录同层）
-    assert legacy.chroma_dir == data_dir
-    assert legacy.state_db == data_dir / "state.db"
+    for attribute in ("documents_dir", "state_db", "image_state_db", "chroma_dir"):
+        values = {str(getattr(context, attribute)) for context in contexts}
+        assert len(values) == 1, attribute
+        assert next(iter(values)).startswith(str(data_dir)), attribute
 
-    # 写入新目录树**不会**让解析翻转：判定只依据 storage.json（PRD 15.2 第 10 步）
-    store.ensure_dirs(data_dir, DEFAULT_WORKSPACE_ID)
-    assert factory.layout_mode(DEFAULT_WORKSPACE_ID) is LayoutMode.LEGACY
-    assert factory.paths_for(DEFAULT_WORKSPACE_ID).layout is LayoutMode.LEGACY
+    for attribute in ("memory_json", "checkpoints_db", "artifacts_dir"):
+        values = {str(getattr(context, attribute)) for context in contexts}
+        assert len(values) == len(contexts), attribute
+    assert len({str(context.paths.jieba_cache_dir) for context in contexts}) == len(contexts)
+
+    # 布局判定与工作区无关，且**不再**受 storage.json 影响
+    assert {factory.layout_mode(context.workspace_id) for context in contexts} == {
+        LayoutMode.SHARED
+    }
 
 
-def test_committing_storage_version_switches_to_workspace_layout(tmp_path: Path) -> None:
-    data_dir = _legacy_data_dir(tmp_path)
+def test_knowledge_paths_ignore_the_migration_marker(tmp_path: Path) -> None:
+    """提交 ``storage_schema_version`` 前后，知识路径**完全不变**（D-KB）。"""
+
+    data_dir = _data_dir_with_knownledge(tmp_path)
     store = WorkspaceStore(data_dir)
     factory = WorkspaceContextFactory(data_dir, store)
-    workspace = factory.resolve(DEFAULT_WORKSPACE_ID)
-    assert workspace.layout is LayoutMode.LEGACY
+    workspace = store.create("研究")
 
+    before = factory.paths_for(workspace.id)
     assert committed_storage_version(data_dir) == 0
+    assert before.layout is LayoutMode.SHARED
+    assert before.chroma_dir == data_dir
+    assert before.state_db == data_dir / "state.db"
+
+    # 写入新目录树、提交迁移标记都不改变解析结果
+    store.ensure_dirs(data_dir, workspace.id)
     commit_storage_version(
         data_dir,
         version=WORKSPACE_LAYOUT_VERSION,
@@ -153,23 +178,27 @@ def test_committing_storage_version_switches_to_workspace_layout(tmp_path: Path)
     )
     assert committed_storage_version(data_dir) == WORKSPACE_LAYOUT_VERSION
     marker = read_storage_marker(data_dir)
-    assert marker["layout"] == "workspace"
+    assert marker["layout"] == "shared"
     assert marker["migration_version"] == "v1.2.0"
 
-    after = factory.paths_for(DEFAULT_WORKSPACE_ID)
-    assert after.layout is LayoutMode.WORKSPACE
-    assert after.chroma_dir == data_dir / "workspaces" / DEFAULT_STORAGE_KEY / "chroma"
+    after = factory.paths_for(workspace.id)
+    assert after == before
+    assert factory.layout_mode(workspace.id) is LayoutMode.SHARED
 
 
-def test_fresh_install_without_legacy_artifacts_uses_workspace_layout(tmp_path: Path) -> None:
-    """全新安装里 ``workspaces.json`` 会立刻出现，但它不是旧布局的判据。"""
+def test_fresh_install_uses_shared_knowledge_paths(tmp_path: Path) -> None:
+    """全新安装（无任何既有产物）同样用共享知识路径。"""
 
     data_dir = tmp_path / "fresh"
     store = WorkspaceStore(data_dir)
     assert (data_dir / "workspaces.json").is_file()
 
     factory = WorkspaceContextFactory(data_dir, store)
-    assert factory.layout_mode(DEFAULT_WORKSPACE_ID) is LayoutMode.WORKSPACE
+    paths = factory.paths_for(DEFAULT_WORKSPACE_ID)
+    assert factory.layout_mode(DEFAULT_WORKSPACE_ID) is LayoutMode.SHARED
+    assert paths.chroma_dir == data_dir
+    assert paths.documents_dir == data_dir / "documents"
+    assert paths.memory_json == data_dir / "workspaces" / DEFAULT_STORAGE_KEY / "memory.json"
 
 
 def test_loading_a_legacy_file_does_not_rewrite_it(tmp_path: Path) -> None:

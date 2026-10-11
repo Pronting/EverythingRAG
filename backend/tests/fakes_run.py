@@ -35,13 +35,12 @@ from app.agent.contracts import (
     RouteDecision,
     SourceType,
     TaskStatus,
-    VerifierVerdict,
 )
 from app.agent.models import AgentState, GraphServices
 from app.agent.planner import Plan, PlanSettings, UserRequirement
 from app.agent.research import ResearchConclusion, ResearchProgress, ResearchResult
 from app.agent.runtime import ApprovalGate, RunManager
-from app.agent.verification import CandidateAnswer, VerificationResult
+from app.agent.verification import CandidateAnswer
 from app.agent.verification import publish_answer as _publish_answer
 
 __all__ = [
@@ -221,7 +220,6 @@ class FakeServices:
     task_count: int = 2
     approve_tool: str | None = None
     fail_tasks: tuple[int, ...] = ()
-    verdict: VerifierVerdict = VerifierVerdict.PASS
     calls: dict[str, int] = field(default_factory=dict)
     research_tasks_seen: list[str] = field(default_factory=list)
     emitted: list[str] = field(default_factory=list)
@@ -354,18 +352,11 @@ class FakeServices:
                 basis_components=[SourceType.KNOWLEDGE],
             )
 
-        async def verify(current: Mapping[str, Any]) -> VerificationResult:
-            del current
-            self._bump("verify")
-            return VerificationResult(verdict=self.verdict, checked_at="2026-09-19T08:00:00Z")
-
         async def publish(current: Mapping[str, Any]) -> Any:
             self._bump("publish")
             candidate = CandidateAnswer.model_validate(current.get("candidate") or {})
-            verification = VerificationResult.model_validate(current.get("verification") or {})
             artifact = _publish_answer(
                 candidate,
-                verification,
                 requirements=dict(current.get("requirement_texts") or {}),
             )
             await manager.store.commit_answer(artifact=artifact, deltas=[artifact.content])
@@ -419,7 +410,6 @@ class FakeServices:
             plan=plan,
             research=research,
             synthesize=synthesize,
-            verify=verify,
             publish=publish,
             save_task=save_task,
             load_approval=load_approval,

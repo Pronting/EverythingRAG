@@ -1,0 +1,37 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { expect, test } from "@playwright/test";
+
+test("真实长引用支持查找、循环跳转和清空且保持原文", async ({ page }) => {
+  const item = JSON.parse(readFileSync(resolve(process.cwd(), "../.tmp_probe/agent-eval40-20260930/results-10002/Q15.json"), "utf8"));
+  const errors: string[] = [];
+  page.on("pageerror", error => errors.push(error.message));
+  await page.addInitScript(id => sessionStorage.setItem("everything-rag-conversation", id), item.conversation_id);
+  await page.goto("http://127.0.0.1:10002/", { waitUntil: "domcontentloaded" });
+  const message = page.locator(`.message-assistant[data-run-id="${item.run_id}"]`);
+  await expect(message.locator(".source-chip").first()).toBeVisible({ timeout: 30000 });
+  await message.locator(".source-chip").first().click();
+  const panel = page.getByRole("complementary", { name: "来源详情" });
+  const body = panel.locator(".citation-panel-text");
+  const original = await body.textContent();
+  expect(original!.length).toBeGreaterThan(2000);
+  const input = panel.getByRole("textbox", { name: "查找来源文字" });
+  await input.fill("AI");
+  const count = await body.locator("mark").count();
+  expect(count).toBeGreaterThan(1);
+  await expect(panel.getByRole("status")).toHaveText(`1 / ${count}`);
+  await input.press("Enter");
+  await expect(panel.getByRole("status")).toHaveText(`2 / ${count}`);
+  await expect(body.locator("mark").nth(1)).toHaveClass("citation-match-active");
+  await input.press("Shift+Enter");
+  await panel.getByRole("button", { name: "上一个匹配" }).click();
+  await expect(panel.getByRole("status")).toHaveText(`${count} / ${count}`);
+  expect(await body.textContent()).toBe(original);
+  await input.fill("[.*]");
+  await expect(panel.getByRole("status")).toHaveText("0 / 0");
+  await expect(panel.getByRole("button", { name: "下一个匹配" })).toBeDisabled();
+  await input.press("Escape");
+  await expect(input).toHaveValue("");
+  expect(await body.textContent()).toBe(original);
+  expect(errors).toEqual([]);
+});

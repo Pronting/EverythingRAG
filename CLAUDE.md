@@ -33,6 +33,9 @@
 7. 诚实定位（见上）
 8. MVP 个人 → 开源
 
+### 追加决策
+9. **知识库全局共享（D-KB，2026-09-20 用户拍板，取代 V1.2.0 的「每工作区知识库」）**：工作区只划分**对话**，不划分知识库 —— 所有工作区共享同一份 `data_dir/documents` + Chroma + `state.db` + `image_state.db`；工作区私有件仅 `memory.json` / `checkpoints.db` / `artifacts/` / `cache/jieba/`。布局解析**不再**看 `storage.json`（该标记只管工作区记录的 JSON↔app.db 权威）；「根布局 → 每工作区布局」迁移已停用（代码保留、不可达）。动这块前先读 `docs/tech/v1.2.0-architecture.md` §6 的 **D-KB** 行。
+
 ### 4 项待拍板（PRD 12.2，不阻塞 MVP 关键路径）
 ① 识图本地 vs 云端（技术推荐：本地默认）② 对话边界/去重键规范 ③ Dashboard 形态（技术推荐：本地 Web）④ 开源许可（技术推荐：Apache-2.0）
 

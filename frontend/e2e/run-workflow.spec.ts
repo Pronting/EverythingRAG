@@ -8,6 +8,7 @@ import {
   approvalResolved,
   encodeV2Events,
   evidenceAdded,
+  expandProcessArea,
   expectRunOnlyTraffic,
   inputRequested,
   inputResolved,
@@ -64,14 +65,17 @@ test("并行任务分别显示状态，父任务展示整体完成情况", async
   await page.getByRole("button", { name: "发送", exact: true }).click();
   await expect(page.getByText("综合结论。")).toBeVisible();
 
-  await page.getByTestId("process-toggle").click();
+  // 正文出来之后过程区域默认折叠：断言环节 / 任务前先展开
+  await expandProcessArea(page);
+
+  // 过程时间线没有容器开关之外的分组：任务行默认可见（每行各自折叠）
   // 父任务整体完成情况
   await expect(page.getByTestId("process-task-progress")).toContainText("2/3 已完成");
   await expect(page.getByTestId("process-task-progress")).toContainText("1 等待处理");
-  // 并行任务分别显示状态
-  await expect(page.getByTestId("process-task-state-t1")).toHaveText("completed");
-  await expect(page.getByTestId("process-task-state-t2")).toHaveText("completed");
-  await expect(page.getByTestId("process-task-state-t3")).toHaveText("waiting_approval");
+  // 并行任务分别显示状态（状态按用户可读文案显示，不是内部枚举值）
+  await expect(page.getByTestId("process-task-state-t1")).toHaveText("已完成");
+  await expect(page.getByTestId("process-task-state-t2")).toHaveText("已完成");
+  await expect(page.getByTestId("process-task-state-t3")).toHaveText("等待你的批准");
   expectRunOnlyTraffic(stub);
 });
 
@@ -96,8 +100,9 @@ test("研究任务可展开看子问题、读过的来源与结果摘要", async
   await page.getByRole("textbox", { name: "消息输入框" }).fill("展开测试");
   await page.getByRole("button", { name: "发送", exact: true }).click();
   await expect(page.getByText("答案。")).toBeVisible();
+  await expandProcessArea(page);
 
-  await page.getByTestId("process-toggle").click();
+  // 研究任务行默认可见，细节仍默认折叠
   const detail = page.getByTestId("process-task-detail-t1");
   await expect(detail).not.toBeVisible();
 
@@ -233,7 +238,7 @@ test("过程区域显示核对发现与继续研究说明", async ({ page }) => 
   await page.getByRole("textbox", { name: "消息输入框" }).fill("核对测试");
   await page.getByRole("button", { name: "发送", exact: true }).click();
 
-  await page.getByTestId("process-toggle").click();
+  await expandProcessArea(page);
   const entries = page.getByTestId("process-entries");
   await expect(entries).toContainText("发现资料差异，继续查阅发布说明");
   await expect(entries).toContainText("发现版本差异：口径 v1.2 与 v1.1 不一致");
@@ -281,11 +286,15 @@ test("failed 保留已完成研究记录并给出继续入口", async ({ page })
   await page.getByRole("textbox", { name: "消息输入框" }).fill("失败测试");
   await page.getByRole("button", { name: "发送", exact: true }).click();
 
-  await expect(page.getByText(/检索服务暂时不可用/)).toBeVisible();
-  await expect(page.getByText(/可以点击继续从此处重试/)).toBeVisible();
+  // 同一句失败说明也会出现在过程时间线的错误环节里（环节行默认可见），
+  // 因此断言错误块本身，避免严格模式命中两个元素。
+  await expect(page.locator(".message-error", { hasText: "检索服务暂时不可用" })).toBeVisible();
+  await expect(
+    page.locator(".message-error", { hasText: "可以点击继续从此处重试" }),
+  ).toBeVisible();
   await expect(page.getByTestId("failed-note")).toBeVisible();
-  // 已完成研究记录仍可查看
-  await page.getByTestId("process-toggle").click();
+  // 已完成研究记录仍可查看（过程区域默认折叠 ⇒ 先展开）
+  await expandProcessArea(page);
   await expect(page.getByTestId("process-entries")).toContainText("本地已确认的部分");
   expectRunOnlyTraffic(stub);
 });

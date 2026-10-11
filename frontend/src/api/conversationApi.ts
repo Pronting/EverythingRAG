@@ -1,4 +1,6 @@
 import type { Conversation, ConversationMessage, ConversationSummary } from "../types";
+import type { PermissionMode, ReasoningLevel } from "../types";
+import { citationsToSources } from "../run/answerState";
 
 /** 会话 API 客户端：列表 / 新建 / 读取 / 追加消息 / AI 标题。 */
 
@@ -188,19 +190,21 @@ async function postMove(url: string, body: unknown): Promise<MoveOutcome> {
 }
 
 /**
- * 侧边栏拖拽落点：把会话移到目标工作区（缺省原地）的第 targetIndex 位。
+ * 侧边栏拖拽落点：把会话放进目标工作区。
  *
  * 跨区 == 归属变更，与 `moveConversationToWorkspace` 是同一条状态机（`t35` 收敛），
- * 因此同样需要 `confirm` / `expected_context_epoch`；同区排序不需要确认。
+ * 因此同样需要 `confirm` / `expected_context_epoch`。
+ *
+ * 2026-09-22（需求 2）起**不再有 `target_index`**：侧边栏一律「最近活动优先」，
+ * 工作区内手工排序已取消，服务端也不再接受落点位次。
  */
 export async function moveConversationInSidebar(
   id: string,
-  target: { workspaceId?: string; targetIndex?: number },
+  target: { workspaceId?: string },
   options: MoveOptions = {},
 ): Promise<MoveOutcome> {
   return postMove(`${CONVERSATIONS_ENDPOINT}/${encodeURIComponent(id)}/move`, {
     workspace_id: target.workspaceId ?? null,
-    target_index: target.targetIndex ?? null,
     confirm: options.confirm ?? false,
     expected_context_epoch: options.expectedContextEpoch ?? null,
   });
@@ -227,7 +231,23 @@ export async function moveConversationToWorkspace(
 export async function getConversation(id: string): Promise<Conversation> {
   const response = await fetch(`${CONVERSATIONS_ENDPOINT}/${encodeURIComponent(id)}`);
   if (!response.ok) throw new Error(await readErrorDetail(response));
-  return (await response.json()) as Conversation;
+  const conversation = (await response.json()) as Conversation;
+  conversation.messages = conversation.messages.map((message) => ({
+    ...message,
+    sources: message.citations ? citationsToSources(message.citations) : message.sources,
+  }));
+  return conversation;
+}
+
+export async function updateConversationSettings(
+  id: string, settings: { permission_mode?: PermissionMode; reasoning_level?: ReasoningLevel },
+): Promise<void> {
+  const response = await fetch(`${CONVERSATIONS_ENDPOINT}/${encodeURIComponent(id)}/settings`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(settings),
+  });
+  if (!response.ok) throw new Error(await readErrorDetail(response));
 }
 
 /** 从第 index 条消息起截断会话（「编辑重发」：该条及其之后的轮次作废）。 */

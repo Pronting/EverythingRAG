@@ -28,6 +28,7 @@ class BlockMetadata(BaseModel):
     heading_path: str | None = None  # 非标量 -> state.db 双写
     heading_aliases: str | None = None  # JSON 字符串；聚合短节的全部原始标题路径
     anchor: str | None = None
+    document_order: int | None = None  # Markdown 文档中的块顺序，供原文续读使用
     chunk_type: str = "text"  # text / code / table / image_description
     image_path: str | None = None  # 图片原图路径 / 图床 URL（仅展示溯源）
     image_content_hash: str | None = None  # 图片降采样后内容哈希（同图去重键）

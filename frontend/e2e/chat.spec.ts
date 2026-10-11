@@ -4,6 +4,7 @@ import {
   answerMeta,
   encodeV2Events,
   evidenceAdded,
+  expandProcessArea,
   agentCompleted,
   agentStarted,
   expectRunOnlyTraffic,
@@ -116,8 +117,8 @@ test("发消息后流式渲染完整回答与来源脚注", async ({ page }) => 
   await expect(page.getByText("词法命中").first()).toBeVisible();
   await expect(page.getByText("0%")).not.toBeVisible();
 
-  // 4. 过程区域由真实事件生成（不是预置文案）
-  await page.getByTestId("process-toggle").click();
+  // 4. 过程时间线由真实事件生成（不是预置文案）；正文在场 ⇒ 先展开折叠的过程区域
+  await expandProcessArea(page);
   const entries = page.getByTestId("process-entries");
   await expect(entries).toContainText("正在理解问题");
   await expect(entries).toContainText("先查本地知识，不足再联网");
@@ -125,8 +126,7 @@ test("发消息后流式渲染完整回答与来源脚注", async ({ page }) => 
   await expect(entries).toContainText("本地文档确认了标题与架构决策");
   await expect(entries).toContainText("检索知识库：命中 2 条资料");
   await expect(entries).toContainText("找到 2 条资料");
-  await expect(entries).toContainText("核对通过");
-  await expect(entries).toContainText("已完成并核对通过");
+  await expect(entries).toContainText("已完成");
 
   // 5. 点击来源 chip -> 右侧详情面板展示该片段全文
   await page.getByRole("button", { name: /notes\.md/ }).click();
@@ -212,7 +212,9 @@ test("run.failed 渲染错误消息且不白屏", async ({ page }) => {
   await input.fill("测试错误路径");
   await page.getByRole("button", { name: "发送" }).click();
 
-  await expect(page.getByText(/知识库尚未建立索引/)).toBeVisible();
+  // 同一句失败说明会同时出现在正文错误块与过程时间线的错误环节里（环节行默认可见），
+  // 因此断言错误块本身，避免严格模式命中两个元素。
+  await expect(page.locator(".message-error", { hasText: "知识库尚未建立索引" })).toBeVisible();
   await expect(input).toBeEnabled();
   expectRunOnlyTraffic(stub);
 });
@@ -239,9 +241,9 @@ test("连续两轮对话的用户问题与回答都完整显示（自动滚动�
   expectRunOnlyTraffic(stub);
 });
 
-test("处理过程默认折叠，点击可展开逐步说明", async ({ page }) => {
+test("处理过程逐行折叠：默认只显示单行摘要，点开某行才看该环节细节", async ({ page }) => {
   // V1.2 起模型的思维链不再越过 SSE 边界（20 类事件里没有 reasoning），
-  // 逐步过程由 PRD 14.2 的过程区域承载，条目全部来自真实事件。
+  // 逐步过程由 PRD 14.2 的过程时间线承载，条目全部来自真实事件。
   const stub = await stubRunBackend(page, {
     frames: [
       runStatus("running", "route", "正在理解问题"),
@@ -261,25 +263,86 @@ test("处理过程默认折叠，点击可展开逐步说明", async ({ page }) 
 
   await expect(page.getByText("答案是42")).toBeVisible();
 
-  // 默认折叠：条目不可见
-  const toggle = page.getByTestId("process-toggle");
-  await expect(toggle).toHaveAttribute("aria-expanded", "false");
-  await expect(page.getByTestId("process-entries")).not.toBeVisible();
+  // 正文出现后过程区域收起成一行摘要 —— 断言环节前先展开（用户实测反馈的期望形态）
+  await expandProcessArea(page);
 
-  // 展开：逐步说明可见（行动句来自真实事件负载）
-  await toggle.click();
-  await expect(toggle).toHaveAttribute("aria-expanded", "true");
+  // 默认折叠的是**每个环节的细节**：环节行只显示单行摘要，细节块不渲染
+  const rowToggle = page.getByTestId("process-row-toggle").first();
+  await expect(rowToggle).toHaveAttribute("aria-expanded", "false");
+  await expect(page.getByTestId("process-row-detail")).toHaveCount(0);
+
+  // 点开某一行：该环节的说明可见（行动句来自真实事件负载）
+  await rowToggle.click();
+  await expect(rowToggle).toHaveAttribute("aria-expanded", "true");
+  await expect(page.getByTestId("process-row-detail").first()).toBeVisible();
   const entries = page.getByTestId("process-entries");
   await expect(entries).toContainText("正在理解问题");
   await expect(entries).toContainText("正在本地知识中查证：风控指标定义是什么？");
   // 工具条目在完成后收口为「动作：结果」，不残留 running 文案
   await expect(entries).toContainText("读取对应章节：命中 1 条资料");
-  await expect(entries).toContainText("已完成并核对通过");
+  await expect(entries).toContainText("已完成");
 
   // 研究任务可展开看子问题与结果摘要
   await expect(page.getByTestId("process-tasks")).toContainText("风控指标定义是什么？");
   await page.getByTestId("process-task-t1").getByRole("button").first().click();
   await expect(page.getByTestId("process-task-detail-t1")).toContainText("子问题");
+  expectRunOnlyTraffic(stub);
+});
+
+test("每个工具调用各占一行环节：逐行独立折叠，行内说明按真实计数收口", async ({ page }) => {
+  // 运行层在 ApprovalGate.execute 这个唯一收口点给**每次**工具调用发一对
+  // tool.started / tool.completed（含唯一 operation_id），界面据此让每次调用独占一行；
+  // 没有「条数」概念的工具不得因为 result_count 缺省为 0 就说成「未找到可用资料」。
+  const stub = await stubRunBackend(page, {
+    frames: [
+      runStatus("running", "research", "正在理解问题"),
+      toolStarted("get_workspace_overview", { operationId: "op-ov", argsSummary: "categories=knowledge" }),
+      toolCompleted("get_workspace_overview", { operationId: "op-ov", resultCount: 0, sourceCount: 0 }),
+      toolStarted("search_knowledge", { operationId: "op-s1", argsSummary: "query=限流, top_k=5" }),
+      toolCompleted("search_knowledge", { operationId: "op-s1", resultCount: 2, sourceCount: 1 }),
+      // 同一工具的第二次调用：operation_id 不同 ⇒ 必须是**另一行**，不能并成一行
+      toolStarted("search_knowledge", { operationId: "op-s2", argsSummary: "query=令牌桶, top_k=5" }),
+      toolCompleted("search_knowledge", { operationId: "op-s2", resultCount: 0, sourceCount: 0 }),
+      answerDelta("答案在这里。"),
+      runCompleted(),
+    ],
+  });
+
+  await page.goto("/");
+  await page.getByRole("textbox", { name: "消息输入框" }).fill("工具行测试");
+  await page.getByRole("button", { name: "发送", exact: true }).click();
+  await expect(page.getByText("答案在这里。")).toBeVisible();
+  await expandProcessArea(page);
+
+  const entries = page.getByTestId("process-entries");
+  const toolRows = entries.getByTestId("process-entry-tool");
+  // 三次调用 = 三行（没有合并、没有丢失）
+  await expect(toolRows).toHaveCount(3);
+  // 行内说明：两条真实命中/未命中 + 一条「没有条数概念」的工具如实收口成「已完成」
+  await expect(entries).toContainText("检索知识库：命中 2 条资料，来自 1 个来源");
+  await expect(entries).toContainText("检索知识库：未找到可用资料");
+  await expect(entries).toContainText("获取工作区概览：已完成");
+
+  // 逐行独立折叠：只展开第一行工具环节，另外两行仍是收起的
+  await toolRows.nth(0).getByTestId("process-row-toggle").click();
+  await expect(toolRows.nth(0).getByTestId("process-row-toggle")).toHaveAttribute(
+    "aria-expanded",
+    "true",
+  );
+  await expect(toolRows.nth(1).getByTestId("process-row-toggle")).toHaveAttribute(
+    "aria-expanded",
+    "false",
+  );
+  await expect(toolRows.nth(2).getByTestId("process-row-toggle")).toHaveAttribute(
+    "aria-expanded",
+    "false",
+  );
+  await expect(page.getByTestId("process-row-detail")).toHaveCount(1);
+
+  // 展开的细节里带脱敏后的参数摘要（与批准卡片同一套规则）
+  await expect(toolRows.nth(0).getByTestId("process-row-detail")).toContainText(
+    "参数：categories=knowledge",
+  );
   expectRunOnlyTraffic(stub);
 });
 
@@ -311,6 +374,33 @@ test("生成中可点击「停止生成」中断真流式输出并保留已生�
   await expect(page.locator(".markdown-body")).toContainText("已经生成的前半");
   // 取消走的是新任务接口（本用例不 stub run 端点，由 dev server 夹具应答）
   expect(stub.paths.some((path) => path.endsWith("/cancel"))).toBe(true);
+  expectRunOnlyTraffic(stub);
+});
+
+test("运行中「用时」每秒走表：静默期不再停住（虚拟时钟 + 真实慢速流）", async ({ page }) => {
+  // 慢速夹具的事件时间戳固定在 2026-09-19T10:00:00Z（见 vite.config.ts）。把页面时钟定在
+  // 它之后 5 秒，「用时」就落在「N秒」档；再用虚拟时钟推进 3 秒 —— 断言数字真的在走。
+  // 之所以要虚拟时钟：小时档只显示「H小时M分钟」，秒级变化看不出来。
+  await page.clock.install({ time: new Date("2026-09-19T10:00:05Z") });
+  // 与「停止生成」同一个真流式夹具：吐完前半段后**长时间不吐字** —— 正是旧实现里
+  // 「数字停住」的那个静默期（旧实现只在收到事件时才重算）。
+  const stub = await stubRunBackend(page, { skipRuns: true });
+
+  await page.goto("/");
+  await page.getByRole("textbox", { name: "消息输入框" }).fill("计时测试");
+  await page.getByRole("button", { name: "发送", exact: true }).click();
+
+  const head = page.getByTestId("process-head");
+  await expect(head).toContainText("用时");
+  const seconds = async (): Promise<number> => {
+    const match = /用时 (\d+)秒/.exec((await head.textContent()) ?? "");
+    expect(match, "静默期里应当持续显示「用时 N秒」").not.toBeNull();
+    return Number(match?.[1] ?? "-1");
+  };
+  const before = await seconds();
+  // 静默期里推进 3 秒：数字必须跟着走（旧实现只在收到事件时才重算 ⇒ 冻住不动）
+  await page.clock.fastForward(3000);
+  await expect.poll(seconds, { timeout: 4000 }).toBeGreaterThanOrEqual(before + 3);
   expectRunOnlyTraffic(stub);
 });
 

@@ -90,6 +90,24 @@ def test_rule_r1_explicit_internal_reference() -> None:
     assert result.decision.intent is IntentKind.RESEARCH
 
 
+def test_official_api_lookup_does_not_add_local_research() -> None:
+    result = _decide(
+        "请仅查 AWS 官方文档，确认 CreateMemory 的 eventExpiryDuration 参数范围和单位"
+    )
+
+    assert result.decision.needs_web is True
+    assert result.decision.needs_knowledge is False
+
+
+def test_python_official_lookup_does_not_add_local_research() -> None:
+    result = _decide(
+        "请联网查 Python 官方文档，说明 asyncio.TaskGroup 的用途并给出来源。"
+    )
+
+    assert result.decision.needs_web is True
+    assert result.decision.needs_knowledge is False
+
+
 def test_rule_r1_fires_on_catalog_document_clue() -> None:
     matches = [
         CatalogMatch(
@@ -245,9 +263,98 @@ def test_knowledge_and_web_can_be_required_together() -> None:
     assert result.decision.freshness is Freshness.CURRENT
 
 
+def test_rule_r1_fires_on_document_lookup_question() -> None:
+    """「某份文档在哪里 / 有没有」：先真的检索一次，再决定怎么回答。"""
+
+    result = _decide("我们团队的火星运维手册在哪里？")
+
+    assert "R1" in result.scope.rules
+    assert result.decision.needs_knowledge is True
+    # 证据文案统一为「指定资料的内容问法」：文档寻址与「某篇文章里的依据」同属一类
+    # （问的是知识库里某一篇具体资料的内容，必须先真的检索再回答）。
+    assert any("指定资料的内容问法" in hit.evidence for hit in result.rules)
+
+
+def test_rule_r1_document_lookup_needs_both_intent_and_object() -> None:
+    assert _decide("怎么写一份用户手册？").decision.needs_knowledge is False
+
+
 def test_rule_descriptions_cover_nine_rules() -> None:
     assert sorted(RULE_DESCRIPTIONS) == [f"R{index}" for index in range(1, 10)]
     assert ROUTING_RULES_VERSION.startswith("routing-rules-v")
+
+
+# ---------------------------------------------------------------------
+# 术语理解参与检索（用户实测缺陷 C01）
+# ---------------------------------------------------------------------
+
+
+def test_rule_r6_term_with_concept_intent_also_searches_knowledge() -> None:
+    """术语 + 概念/场景意图：既用一般知识解释，也把术语作为线索去查资料。"""
+
+    result = _decide("有什么 AI Native 的使用场景吗？")
+
+    assert "R6" in result.scope.rules
+    assert result.decision.needs_general is True
+    assert result.decision.needs_knowledge is True
+    assert result.decision.entities == ["AI Native"]
+    assert any("只是检索线索" in note for note in result.diagnostics.notes)
+
+
+def test_rule_r6_term_branch_keeps_only_the_specific_expression() -> None:
+    """「AI」只是「AI Native」的前缀 → 只保留更具体的术语，不把超泛词当查询。"""
+
+    result = _decide("你知道 AI Native 是什么意思吗？就是 AI 原生，类似云原生的意思，再去找一下。")
+
+    assert result.decision.entities == ["AI Native"]
+
+
+def test_rule_r6_term_branch_needs_concept_intent_and_non_empty_workspace() -> None:
+    # 没有概念 / 场景意图时，不因为出现英文术语就强行检索资料
+    plain = _decide("K8s 集群昨天扩容了")
+    assert plain.decision.needs_knowledge is False
+    # 空知识库时不产生知识任务（R9 口径不变）
+    empty = _decide("有什么 AI Native 的使用场景吗？", file_count=0, chunk_count=0)
+    assert empty.decision.needs_knowledge is False
+
+
+def test_rule_r6_keeps_plain_general_questions_general() -> None:
+    result = _decide("数据库慢查询一般要怎么排查？")
+    assert result.decision.needs_general is True
+    assert result.decision.needs_knowledge is False
+
+
+# ---------------------------------------------------------------------
+# 指代补全（用户实测缺陷 C04/C05）
+# ---------------------------------------------------------------------
+
+
+def test_phrase_pronoun_is_replaced_in_place_with_previous_object() -> None:
+    history = [RoutingHistoryTurn(role="user", content="内部风控 P99 方案是怎么设计的？")]
+
+    resolved, note = resolve_reference("这个方案在高并发下会有什么问题？", history)
+
+    assert resolved == "内部风控 P99 方案在高并发下会有什么问题？"
+    assert "指代补全" in note
+
+
+def test_bare_pronoun_prepends_history_topic_without_rewriting_question() -> None:
+    history = [RoutingHistoryTurn(role="user", content="如果面试要求设计一个 Agent，需要考虑哪些因素？")]
+    question = "所以关于记忆和成本来说，你有什么比较好的思路吗？如果让你回答这个面试题的话。"
+
+    resolved, note = resolve_reference(question, history)
+
+    # 用户本轮原话一字不改，上文主题前置；不会出现「回答⋯面试题面试题」这类重复表达
+    assert question in resolved
+    assert resolved.startswith("面试要求设计一个 Agent")
+    assert "面试题面试题" not in resolved
+    assert note.startswith("指代补全")
+
+
+def test_reference_completion_ignores_assistant_turns() -> None:
+    history = [RoutingHistoryTurn(role="assistant", content="好的，我来解释一下这个方案")]
+    resolved, _note = resolve_reference("这个方案怎么落地？", history)
+    assert resolved == "这个方案怎么落地？"
 
 
 def test_route_question_returns_decision() -> None:
@@ -381,3 +488,59 @@ def test_intent_agent_enriches_input_from_catalog() -> None:
     enriched = agent.enrich(RoutingInput(question="P99 方案是怎么设计的？", file_count=2))
     assert enriched.catalog_hits
     assert enriched.catalog_hits[0].document_id
+
+
+# ---------------------------------------------------------------------
+# C21：泛指文档指向 -> 本地资料研究（不再 general-only）
+# ---------------------------------------------------------------------
+
+
+DOC_SCOPE_QUESTION = "关于文档中，他们是怎么设计agent的？应该有好几个维度吧"
+
+
+def test_generic_document_question_requires_local_knowledge() -> None:
+    result = _decide(DOC_SCOPE_QUESTION)
+
+    assert "R1" in result.scope.rules
+    assert result.decision.needs_knowledge is True
+    assert result.decision.needs_general is False, "明确问文档内容时不能只用通用解释顶替"
+    assert any("泛指文档" in hit.evidence for hit in result.rules)
+
+
+def test_generic_document_question_without_article_name_searches_many_docs() -> None:
+    """没有唯一文章名：不得要求用户先给出文章，也不得单独检索「文档中」。"""
+
+    result = _decide(DOC_SCOPE_QUESTION)
+    assert result.decision.needs_knowledge is True
+    # 证据文案是「泛指文档」，不把用户当成已经点名了某篇文章
+    r1_evidence = [hit.evidence for hit in result.rules if hit.rule_id == "R1"]
+    assert r1_evidence and all("泛指文档" in item for item in r1_evidence)
+
+
+def test_action_on_document_does_not_trigger_document_research() -> None:
+    result = _decide("帮我把这段总结写进文档中")
+
+    assert result.decision.needs_knowledge is False
+
+
+def test_follow_up_keeps_agent_object_when_previous_turn_is_generic_scope() -> None:
+    history = [
+        RoutingHistoryTurn(role="user", content="rag 有需要什么值得了解的知识吗"),
+        RoutingHistoryTurn(role="user", content="那agent有什么特别值得了解的知识吗"),
+        RoutingHistoryTurn(role="user", content=DOC_SCOPE_QUESTION),
+    ]
+
+    resolved, note = resolve_reference("比如记忆，成本这些维度。都是怎么样设计的？", history)
+
+    # 研究对象来自更早一轮，而不是上一轮的「文档中」
+    assert "agent" in resolved.casefold()
+    assert "文档中" not in resolved
+    assert note.startswith("指代补全")
+
+
+def test_follow_up_without_reference_marker_keeps_object_from_history() -> None:
+    history = [RoutingHistoryTurn(role="user", content="关于文档中，他们是怎么设计agent的？")]
+
+    resolved, _note = resolve_reference("比如记忆，成本这些维度。都是怎么样设计的？", history)
+
+    assert "agent" in resolved.casefold()

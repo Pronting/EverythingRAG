@@ -80,8 +80,10 @@ def test_vector_store_wrapper_rotates_with_provider_client(
     settings_store = MutableSettingsStore(_config())
     created: list[SimpleNamespace] = []
 
-    def fake_create_vector_store(*, persist_dir: object, embedder: object) -> SimpleNamespace:
-        del persist_dir
+    def fake_create_vector_store(
+        *, persist_dir: object, collection_name: object, embedder: object
+    ) -> SimpleNamespace:
+        del persist_dir, collection_name
         vector_store = SimpleNamespace(embedder=embedder)
         created.append(vector_store)
         return vector_store

@@ -19,7 +19,9 @@ from collections.abc import Awaitable, Callable, Mapping, Sequence
 from typing import Any
 
 from app.agent.app_store import AppStore
+from app.agent.memory import compose_agent_memory_context, ensure_conversation_snapshot
 from app.agent.runtime import RunManager
+from app.agent.tools import build_default_registry
 from app.api import deps
 from app.api.run_images import LocalImageFetcher, persist_run_images
 from app.core.outbound import outbound_client
@@ -167,11 +169,40 @@ def build_run_manager(store: AppStore) -> RunManager:
     manager = RunManager(
         store=store,
         context_factory=deps.get_workspace_context_factory(),
+        registry=build_default_registry(),
         tool_services=tool_services_for,
+        memory_enabled=lambda: get_settings_store().load().memory_enabled,
+        memory_context=lambda context, conversation_id: memory_context_for(
+            store, context, conversation_id
+        ),
+        memory_composer=lambda context, conversation_id, history: compose_agent_memory_context(
+            app_store=store,
+            memory=deps.workspace_memory(context),
+            conversation_id=conversation_id,
+            history=history,
+        ),
+        memory_for_context=deps.workspace_memory,
         image_ingest=image_ingest_for,
     )
     manager.enable_checkpoints()
     return manager
+
+
+async def memory_context_for(
+    store: AppStore, context: Any, conversation_id: str
+) -> str:
+    """读取当前工作区的会话记忆，不初始化检索与模型服务。"""
+
+    settings = get_settings_store().load()
+    if not settings.memory_enabled:
+        return ""
+    memory = deps.workspace_memory(context)
+    _conversation, snapshot = await ensure_conversation_snapshot(
+        app_store=store,
+        memory=memory,
+        conversation_id=conversation_id,
+    )
+    return snapshot.text
 
 
 async def image_ingest_for(context: Any, images: Sequence[str]) -> list[dict[str, Any]]:

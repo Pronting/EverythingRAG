@@ -201,3 +201,131 @@ def test_lifespan_assembly_uses_default_services_factory() -> None:
     )
     assert "context_factory=deps.get_workspace_context_factory()" in source
     assert "tool_services=tool_services_for" in source
+
+
+# ---------------------------------------------------------------------
+# 目录线索真的交到了路由层手里（真实缺陷回归：`_catalog_for` 读错内部键）
+#
+# 现象：用户在知识库里**确实有**的资料上提问，真实应用恒为
+# `intent=general / needs_knowledge=false`（记录在案的 run 事件可复核），而把目录显式
+# 传进 `IntentAgent` 离线跑同一句话却是 `needs_knowledge=true`。
+# 真因：装配层写内部键 `"_catalog"`，运行层却读 `"catalog"` ⇒ 意图层恒为 None ⇒
+# `IntentAgent.enrich` 直接返回，R1/R3 的目录线索（文档 / 术语命中）全线失效，
+# 只剩显式内部标记或带历史的指代（R2）能走进知识路径。
+# ---------------------------------------------------------------------
+
+KNOWLEDGE_DOC_TITLE = "货拉拉大模型记忆系统（一）：从提取到召回的工程实践"
+KNOWLEDGE_QUESTION = "货拉拉的记忆系统有淘汰策略吗。类似openclaw的那种方案"
+
+
+@pytest.fixture
+def fake_embedder(monkeypatch: pytest.MonkeyPatch) -> Any:
+    """把装配层的嵌入器换成 4 维假嵌入器。
+
+    ``deps`` 在模块顶层绑定了 ``get_settings_store`` / 用了 ``_get_embedder_and_cache_key``，
+    只 monkeypatch ``settings_store.get_settings_store`` 换不掉它们 —— 真实
+    ``CloudEmbedder`` 一旦被要求算 dim 就会出网（PRD 11 隐私红线）。这里直接替换
+    装配层的嵌入器来源，向量库 / 工具 / 检索因此共用同一个零出网实例。
+    """
+
+    from app.api import deps
+    from tests.fakes import FakeEmbedder
+
+    embedder = FakeEmbedder()
+    monkeypatch.setattr(
+        deps, "_get_embedder_and_cache_key", lambda: (embedder, "fake-runtime-digest")
+    )
+    return embedder
+
+
+def _seed_shared_knowledge(workspace_id: str) -> str:
+    """向**共享知识库**写一份真实块（与提问的工作区无关，D-KB）。"""
+
+    from app.api import deps
+    from app.models.schemas import BlockMetadata, SourceType
+
+    context = deps.get_workspace_context_factory().resolve(workspace_id)
+    store = deps.get_workspace_vector_store(context)
+    store.upsert(
+        [
+            (
+                "block-mem-1",
+                "记忆提取：把会话消息变成可独立理解的事实；离线让记忆可维护。",
+                [1.0, 0.0, 0.0, 0.0],
+                BlockMetadata(
+                    block_id="block-mem-1",
+                    doc_id="doc-mem-1",
+                    source_type=SourceType.DOCUMENT,
+                    source_file=str(context.documents_dir / f"{KNOWLEDGE_DOC_TITLE}.md"),
+                    heading_path=f"{KNOWLEDGE_DOC_TITLE} > 二、总体设计",
+                    chunk_type="text",
+                ),
+            )
+        ]
+    )
+    return str(context.chroma_dir)
+
+
+def test_route_seam_hands_the_catalog_to_the_intent_agent(fake_embedder: Any) -> None:
+    """装配层产出的目录必须被运行层按**同一个键**取到（`_catalog`）。"""
+
+    with TestClient(app) as client:
+        workspace = client.post("/api/workspaces", json={"name": "目录线索区"})
+        assert workspace.status_code == 201, workspace.text
+        workspace_id = workspace.json()["id"]
+
+        from app.api import deps
+
+        manager = agent_runtime.get_run_manager()
+        assert manager is not None, "lifespan 必须注册 RunManager"
+        context = deps.get_workspace_context_factory().resolve(workspace_id)
+        extras = dict(manager.tool_services(context))  # type: ignore[arg-type]
+        assert "_catalog" in extras, "装配层必须提供内部键 _catalog（约定见 run_services）"
+        assert agent_runtime._catalog_for(manager, context) is extras["_catalog"]
+
+
+def test_knowledge_question_routes_to_the_knowledge_path_through_the_real_seam(
+    monkeypatch: pytest.MonkeyPatch,
+    failure_tracebacks: list[str],
+    fake_embedder: Any,
+) -> None:
+    """真实 lifespan：知识库里有这份资料时，这个问题必须走知识检索（端到端）。"""
+
+    _configured_provider(monkeypatch)
+    with TestClient(app) as client:
+        workspace = client.post("/api/workspaces", json={"name": "线索区"})
+        assert workspace.status_code == 201, workspace.text
+        workspace_id = workspace.json()["id"]
+        _seed_shared_knowledge(workspace_id)
+
+        conversation = client.post("/api/conversations", params={"workspace": workspace_id})
+        assert conversation.status_code == 201, conversation.text
+        conversation_id = conversation.json()["id"]
+
+        created = client.post(
+            f"/api/workspaces/{workspace_id}/runs",
+            json={"conversation_id": conversation_id, "message": KNOWLEDGE_QUESTION},
+        )
+        assert created.status_code == 202, created.text
+        run_id = created.json()["run_id"]
+
+        detail: dict[str, Any] = {}
+        for _ in range(200):
+            detail = client.get(f"/api/workspaces/{workspace_id}/runs/{run_id}").json()
+            if detail["status"] in {"completed", "completed_with_gaps", "failed", "cancelled"}:
+                break
+            time.sleep(0.05)
+
+        events = client.get(f"/api/workspaces/{workspace_id}/runs/{run_id}/event-log")
+        assert events.status_code == 200, events.text
+        payload = events.json()
+        rows = payload.get("events", payload)
+        decided = next(row for row in rows if row["type"] == "route.decided")
+        decision = decided["payload"]["decision"]
+        planned = next(row for row in rows if row["type"] == "plan.updated")
+        kinds = {task["agent_kind"] for task in planned["payload"]["tasks"]}
+
+    assert decision["needs_knowledge"] is True, decision
+    assert decision["intent"] != "general", decision
+    assert kinds == {"rag"}, kinds
+    assert not failure_tracebacks, "\n".join(failure_tracebacks)

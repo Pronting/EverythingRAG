@@ -29,6 +29,7 @@ T00b 交付 schema 与访问层；运行期使用归 approval-privacy（见架�
 
 from __future__ import annotations
 
+import asyncio
 import json
 import sqlite3
 import uuid
@@ -144,7 +145,7 @@ CREATE TABLE IF NOT EXISTS workspaces (
     name TEXT NOT NULL DEFAULT '',
     status TEXT NOT NULL DEFAULT 'active',
     default_permission_mode TEXT NOT NULL DEFAULT 'ask',
-    default_reasoning_level TEXT NOT NULL DEFAULT 'high',
+    default_reasoning_level TEXT NOT NULL DEFAULT 'off',
     knowledge_revision INTEGER NOT NULL DEFAULT 0,
     pinned INTEGER NOT NULL DEFAULT 0,
     order_index REAL,
@@ -162,7 +163,7 @@ CREATE TABLE IF NOT EXISTS conversations (
     parent_conversation_id TEXT REFERENCES conversations(id),
     branch_from_message_id TEXT,
     permission_mode TEXT NOT NULL DEFAULT 'ask',
-    reasoning_level TEXT NOT NULL DEFAULT 'high',
+    reasoning_level TEXT NOT NULL DEFAULT 'off',
     context_epoch INTEGER NOT NULL DEFAULT 1,
     memory_revision INTEGER NOT NULL DEFAULT 0,
     memory_invalidation_revision INTEGER NOT NULL DEFAULT 0,
@@ -199,7 +200,7 @@ CREATE TABLE IF NOT EXISTS runs (
     input_message_id TEXT REFERENCES messages(id) DEFERRABLE INITIALLY DEFERRED,
     status TEXT NOT NULL DEFAULT 'queued',
     permission_mode TEXT NOT NULL DEFAULT 'ask',
-    reasoning_level TEXT NOT NULL DEFAULT 'high',
+    reasoning_level TEXT NOT NULL DEFAULT 'off',
     context_epoch INTEGER NOT NULL DEFAULT 1,
     stop_reason TEXT,
     resumable INTEGER NOT NULL DEFAULT 0,
@@ -754,9 +755,31 @@ def _dump(value: Any) -> str:
 class AppStore:
     """`app.db` 的异步访问层（一个连接一个实例；测试用 ``:memory:``）。"""
 
-    def __init__(self, conn: aiosqlite.Connection) -> None:
+    def __init__(self, conn: aiosqlite.Connection, *, data_dir: Path | None = None) -> None:
         self._conn = conn
         self._in_transaction = False
+        self._connection_lock = asyncio.Lock()
+        self._connection_owner: asyncio.Task[Any] | None = None
+        self._history_data_dir = data_dir
+        self._history_index_factory: Any = None
+
+    def configure_history_index(self, factory: Any) -> None:
+        self._history_index_factory = factory
+
+    async def _history_index_for(self, workspace_id: str) -> Any:
+        if self._history_index_factory is not None:
+            return self._history_index_factory(workspace_id)
+        if self._history_data_dir is None:
+            return None
+        from app.core.workspace_context import _shared_paths
+        from app.memory.history import WorkspaceHistoryIndex, load_terms_dictionary
+
+        workspace = await self._require_workspace(workspace_id)
+        paths = _shared_paths(self._history_data_dir, workspace.storage_key)
+        return WorkspaceHistoryIndex(
+            self, workspace_id=workspace_id, paths=paths,
+            terms=load_terms_dictionary(paths),
+        )
 
     # ---- 生命周期 ----
 
@@ -787,7 +810,7 @@ class AppStore:
             wal = db_path is not None
         if wal:
             await conn.execute("PRAGMA journal_mode = WAL")
-        store = cls(conn)
+        store = cls(conn, data_dir=None if db_path is None else Path(db_path).parent)
         await store.ensure_schema()
         return store
 
@@ -801,10 +824,25 @@ class AppStore:
         await ensure_schema(self._conn)
 
     async def close(self) -> None:
-        if self._in_transaction:
-            self._in_transaction = False
-            await self._rollback_quietly()
-        await self._conn.close()
+        async with self.connection_scope():
+            if self._in_transaction:
+                self._in_transaction = False
+                await self._rollback_quietly()
+            await self._conn.close()
+
+    @asynccontextmanager
+    async def connection_scope(self) -> AsyncIterator[aiosqlite.Connection]:
+        """同一任务可重入；其他任务等待连接的当前操作或事务完成。"""
+        task = asyncio.current_task()
+        if task is not None and self._connection_owner is task:
+            yield self._conn
+            return
+        async with self._connection_lock:
+            self._connection_owner = task
+            try:
+                yield self._conn
+            finally:
+                self._connection_owner = None
 
     async def _rollback_quietly(self) -> None:
         """回滚；事务已经结束时 SQLite 会报错，这里静默忽略（调用方在抛原异常）。"""
@@ -822,38 +860,47 @@ class AppStore:
         因此**提交失败时同样回滚**，不会留下半开事务。
         """
 
-        if self._in_transaction:
-            yield self._conn
-            return
-        await self._conn.execute("BEGIN IMMEDIATE")
-        self._in_transaction = True
-        try:
-            yield self._conn
-        except BaseException:
-            self._in_transaction = False
-            await self._rollback_quietly()
-            raise
-        self._in_transaction = False
-        try:
-            await self._conn.execute("COMMIT")
-        except BaseException:
-            await self._rollback_quietly()
-            raise
+        async with self.connection_scope():
+            if self._in_transaction:
+                yield self._conn
+                return
+            try:
+                await self._execute("BEGIN IMMEDIATE")
+                self._in_transaction = True
+                yield self._conn
+                await self._execute("COMMIT")
+            except BaseException:
+                await self._rollback_quietly()
+                raise
+            finally:
+                self._in_transaction = False
 
     # ---- 低层查询 ----
 
     async def _fetch_one(self, sql: str, params: Sequence[Any] = ()) -> dict[str, Any] | None:
-        async with self._conn.execute(sql, tuple(params)) as cursor:
-            row = await cursor.fetchone()
+        async with self.connection_scope():
+            async with self._conn.execute(sql, tuple(params)) as cursor:
+                row = await cursor.fetchone()
         return None if row is None else _row_to_dict(row)
 
     async def _fetch_all(self, sql: str, params: Sequence[Any] = ()) -> list[dict[str, Any]]:
-        async with self._conn.execute(sql, tuple(params)) as cursor:
-            rows = await cursor.fetchall()
+        async with self.connection_scope():
+            async with self._conn.execute(sql, tuple(params)) as cursor:
+                rows = await cursor.fetchall()
         return [_row_to_dict(row) for row in rows]
 
     async def _execute(self, sql: str, params: Sequence[Any] = ()) -> None:
-        await self._conn.execute(sql, tuple(params))
+        async with self.connection_scope():
+            try:
+                async with self._conn.execute(sql, tuple(params)):
+                    pass
+            except sqlite3.Error as exc:
+                exc.add_note(
+                    f"SQLite error_code={getattr(exc, 'sqlite_errorcode', None)} "
+                    f"error_name={getattr(exc, 'sqlite_errorname', None)} "
+                    f"in_transaction={self._conn.in_transaction}"
+                )
+                raise
 
     async def _scalar(self, sql: str, params: Sequence[Any] = ()) -> Any:
         row = await self._fetch_one(sql, params)
@@ -966,6 +1013,36 @@ class AppStore:
                 f"UPDATE workspaces SET {', '.join(assignments)} WHERE id = ?", params
             )
         return await self._require_workspace(workspace_id)
+
+    async def reconcile_default_reasoning_level(
+        self, replacements: Mapping[str, ReasoningLevel]
+    ) -> tuple[int, list[WorkspaceRecord]]:
+        """把仍是**旧程序默认档位**的工作区批量改写为新默认档位（一次性对账用）。
+
+        语义边界（见 :mod:`app.core.reasoning_defaults`）：只改写**精确等于**给定旧值的工作区，
+        其它取值（``off`` / ``low`` / ``max``）一字不动。返回（改写条数, 改写后的权威行），
+        调用方据此把存档（``workspaces.json``）镜像成权威值。
+
+        这是 workspaces 表的**正规写路径**：D19/A3 要求任何模块都不得绕过本类直写该表，
+        因此对账的 SQL 落在这里，而不是落在 ``core`` 的迁移代码里。
+        """
+
+        pending: list[tuple[str, ReasoningLevel]] = []
+        for record in await self.list_workspaces():
+            target = replacements.get(str(record.default_reasoning_level))
+            if target is not None and str(target) != str(record.default_reasoning_level):
+                pending.append((record.id, target))
+        if not pending:
+            return 0, []
+
+        updated: list[WorkspaceRecord] = []
+        for workspace_id, target in pending:
+            updated.append(
+                await self.update_workspace(
+                    workspace_id, default_reasoning_level=target
+                )
+            )
+        return len(updated), updated
 
     async def reorder_workspaces(self, ordered_ids: Sequence[str]) -> list[WorkspaceRecord]:
         """按给定顺序重写手工位次（只认已存在的 id，未列出的保持原位次）。
@@ -1166,18 +1243,28 @@ class AppStore:
                 f"会话上下文版本已变化：期望 {expected_context_epoch}，实际 {current.context_epoch}"
             )
         target = await self._require_workspace(target_workspace_id)
-        await self._execute(
-            "UPDATE conversations SET workspace_id = ?, moved_from_workspace_id = ?,"
-            " context_epoch = context_epoch + 1, memory_revision = 0,"
-            " memory_invalidation_revision = 0, memory_snapshot_text = '',"
-            " memory_snapshot_hash = '', memory_snapshot_at = '', updated_at = ? WHERE id = ?",
-            (
-                target.id,
-                current.workspace_id,
-                utc_now_iso(),
-                conversation_id,
-            ),
-        )
+        async with self.transaction():
+            await self._execute(
+                "UPDATE conversations SET workspace_id = ?, moved_from_workspace_id = ?,"
+                " context_epoch = context_epoch + 1, memory_revision = 0,"
+                " memory_invalidation_revision = 0, memory_snapshot_text = '',"
+                " memory_snapshot_hash = '', memory_snapshot_at = '', updated_at = ? WHERE id = ?",
+                (
+                    target.id,
+                    current.workspace_id,
+                    utc_now_iso(),
+                    conversation_id,
+                ),
+            )
+            history_index = await self._history_index_for(target.id)
+            for message in await self.list_messages(conversation_id):
+                await self.delete_history_message(message.id)
+                if history_index is not None:
+                    await history_index.index_message(
+                        message_id=message.id,
+                        conversation_id=conversation_id,
+                        content=message.content,
+                    )
         return await self._require_conversation(conversation_id)
 
     async def _require_conversation(self, conversation_id: str) -> ConversationRecord:
@@ -1257,6 +1344,14 @@ class AppStore:
                 record.created_at,
             ),
         )
+        conversation = await self._require_conversation(conversation_id)
+        history_index = await self._history_index_for(conversation.workspace_id)
+        if history_index is not None:
+            await history_index.index_message(
+                message_id=record.id,
+                conversation_id=conversation_id,
+                content=content,
+            )
         await self._execute(
             "UPDATE conversations SET updated_at = ? WHERE id = ?",
             (utc_now_iso(), conversation_id),
@@ -1290,6 +1385,41 @@ class AppStore:
                 "SELECT COUNT(*) FROM messages WHERE conversation_id = ?", (conversation_id,)
             )
         )
+
+    async def update_run_settings(
+        self, run_id: str, permission_mode: PermissionMode, reasoning_level: ReasoningLevel
+    ) -> None:
+        await self._execute(
+            "UPDATE runs SET permission_mode = ?, reasoning_level = ?, updated_at = ? WHERE id = ?",
+            (str(permission_mode), str(reasoning_level), utc_now_iso(), run_id),
+        )
+
+    async def truncate_messages(self, conversation_id: str, index: int) -> None:
+        if index < 0:
+            raise ValueError("消息位置必须大于或等于零")
+        if await self.list_active_runs(conversation_id):
+            raise ConflictError("请停止当前任务后编辑消息")
+        messages = await self.list_messages(conversation_id)
+        if index >= len(messages):
+            return
+        sequence = messages[index].sequence
+        async with self.transaction():
+            await self._execute(
+                "UPDATE runs SET input_message_id = NULL, resumable = 0"
+                " WHERE input_message_id IN (SELECT id FROM messages"
+                " WHERE conversation_id = ? AND sequence >= ?)",
+                (conversation_id, sequence),
+            )
+            await self._execute(
+                "DELETE FROM history_fts WHERE conversation_id = ? AND message_id IN"
+                " (SELECT id FROM messages WHERE conversation_id = ? AND sequence >= ?)",
+                (conversation_id, conversation_id, sequence),
+            )
+            await self._execute(
+                "DELETE FROM messages WHERE conversation_id = ? AND sequence >= ?",
+                (conversation_id, sequence),
+            )
+            await self.bump_context_epoch(conversation_id)
 
     # =================================================================
     # runs（PRD 13.1 / 12.1 / 13.2）
@@ -1415,6 +1545,15 @@ class AppStore:
         )
         return [RunRecord.model_validate(row) for row in rows]
 
+    async def list_restartable_runs(self) -> list[RunRecord]:
+        """读取服务启动时需要继续执行的 run。"""
+
+        rows = await self._fetch_all(
+            "SELECT * FROM runs WHERE status IN"
+            " ('queued','running','waiting_children') ORDER BY created_at, id"
+        )
+        return [RunRecord.model_validate(row) for row in rows]
+
     async def update_run_status(
         self,
         run_id: str,
@@ -1449,6 +1588,11 @@ class AppStore:
     ) -> RunRecord:
         assignments = ["status = ?", "updated_at = ?"]
         params: list[Any] = [str(status), utc_now_iso()]
+        if status in {RunStatus.RUNNING, RunStatus.COMPLETED, RunStatus.COMPLETED_WITH_GAPS}:
+            if stop_reason is None:
+                assignments.append("stop_reason = NULL")
+            if error_code is None:
+                assignments.append("error_code = NULL")
         for column, value in (
             ("stop_reason", stop_reason),
             ("resumable", None if resumable is None else int(resumable)),
@@ -1702,6 +1846,15 @@ class AppStore:
             "SELECT * FROM operations WHERE operation_id = ?", (operation_id,)
         )
         return None if row is None else _operation_from_row(row)
+
+    async def list_operations(self, run_id: str) -> list[OperationRecord]:
+        """按创建顺序读取一次 run 的工具操作。"""
+
+        rows = await self._fetch_all(
+            "SELECT * FROM operations WHERE run_id = ? ORDER BY created_at, operation_id",
+            (run_id,),
+        )
+        return [_operation_from_row(row) for row in rows]
 
     async def start_operation_attempt(self, operation_id: str) -> OperationRecord:
         """开始一次尝试：``attempts += 1``，状态置 ``running``（PRD 12.4）。"""

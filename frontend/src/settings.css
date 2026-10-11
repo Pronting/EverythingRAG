@@ -103,9 +103,9 @@
   .settings-modal { height: calc(100dvh - 20px); max-height: calc(100dvh - 20px); border-radius: 16px; }
   .settings-header { padding: 17px 18px; }
   .settings-layout { flex-direction: column; }
-  .settings-nav { flex: 0 0 auto; flex-direction: row; padding: 10px; gap: 4px; border-right: none; border-bottom: 1px solid var(--border); }
+  .settings-nav { flex: 0 0 auto; flex-direction: row; padding: 10px; gap: 4px; border-right: none; border-bottom: 1px solid var(--border); overflow-x: auto; }
   .settings-nav-caption, .settings-nav-note { display: none; }
-  .settings-nav-item { flex: 1; padding: 10px 4px; justify-content: center; font-size: 11px; gap: 5px; white-space: nowrap; }
+  .settings-nav-item { flex: 0 0 auto; padding: 10px 8px; justify-content: center; font-size: 11px; gap: 5px; white-space: nowrap; }
   .settings-nav-item svg { display: none; }
   .settings-body { padding: 22px 16px; }
   .settings-page-intro { margin-bottom: 18px; }

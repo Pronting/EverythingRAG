@@ -42,6 +42,8 @@ class Settings(BaseSettings):
     # 有界导入并发；设为 1 可回退串行，避免触发服务商限流。
     ingest_embed_workers: int = Field(default=4, ge=1, le=16)
     ingest_parse_workers: int = Field(default=4, ge=1, le=16)
+    # 查询嵌入的排队与网络等待期限。
+    query_embed_timeout_seconds: float = Field(default=30.0, gt=0, le=600)
     # 对话 provider（OpenAI 兼容云端；API key 仅运行期从环境读取，绝不落本类值）
     chat_provider_type: str = "openai_compatible"
     chat_base_url: str | None = None  # env: EVERYTHING_RAG_CHAT_BASE_URL

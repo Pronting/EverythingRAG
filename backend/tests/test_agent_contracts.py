@@ -223,7 +223,7 @@ def test_permission_and_reasoning_levels() -> None:
     assert {s.value for s in c.PermissionMode} == {"ask", "auto", "full"}
     assert {s.value for s in c.ReasoningLevel} == {"off", "low", "high", "max"}
     assert c.DEFAULT_PERMISSION_MODE is c.PermissionMode.ASK
-    assert c.DEFAULT_REASONING_LEVEL is c.ReasoningLevel.HIGH
+    assert c.DEFAULT_REASONING_LEVEL is c.ReasoningLevel.OFF
 
 
 def test_route_and_agent_enums() -> None:
@@ -257,15 +257,16 @@ def test_route_and_agent_enums() -> None:
 
 
 def test_event_types_match_prd_13_3() -> None:
-    """PRD 13.3 表 13 行、其中 7 行为成对事件，展开为 20 个 ``type`` 取值。"""
+    """事件类型包括处理过程中的模型思考增量。"""
 
-    assert len(list(c.EventType)) == 20
+    assert len(list(c.EventType)) == 21
     assert {e.value for e in c.EventType} == {
         "run.status",
         "route.decided",
         "plan.updated",
         "agent.started",
         "agent.completed",
+        "model.reasoning",
         "tool.started",
         "tool.completed",
         "approval.requested",
@@ -389,12 +390,19 @@ def test_research_task_covers_prd_6_4() -> None:
         "depends_on",
         "expected_evidence",
         "status",
-        "result_ref",
-    }
+            "result_ref",
+            "query_identity",
+            "query_reuse_reason",
+        }
 
 
 def test_evidence_covers_prd_8_1() -> None:
-    """PRD 8.1 实际 12 个字段（任务描述写 11，见 D16）。"""
+    """PRD 8.1 实际 12 个字段（任务描述写 11，见 D16）+ 纯追加的 ``document_title``。
+
+    ``document_title`` 是为修复「文档身份在证据传递中丢失」（报告 F13：引用面板与模型
+    只看到章节名，答案把 A 文章的章节归给 B 文章）而追加的字段；带默认值 ⇒ 既有构造与
+    序列化不变，因此这里显式列出，避免再有人误删。
+    """
 
     assert _fields(Evidence) == {
         "evidence_id",
@@ -409,7 +417,12 @@ def test_evidence_covers_prd_8_1() -> None:
         "retrieved_at",
         "supported_requirements",
         "limitations",
-    }
+            "heading_path",
+            "document_title",
+            "source_start",
+            "source_end",
+            "member_evidence_ids",
+        }
 
 
 def test_model_capabilities_covers_prd_9_2() -> None:
@@ -668,20 +681,33 @@ def test_prd_18_1_defaults_are_centralized() -> None:
 # ---------------------------------------------------------------------
 
 
-def test_workspace_context_paths_follow_prd_5_1(tmp_path) -> None:
+def test_workspace_context_paths_split_shared_knowledge_and_private(tmp_path) -> None:
+    """D-KB：视图的路径派生与 ``WorkspacePaths`` 一致 —— 知识共享、私有件按区。"""
+
     context = WorkspaceContext.build(
         workspace_id="w1", storage_key="sk1", data_dir=tmp_path, name="风控组"
     )
+    # 知识：共享（data_dir 根），任何工作区相同
+    assert context.documents_dir == tmp_path / "documents"
+    assert context.state_db == tmp_path / "state.db"
+    assert context.image_state_db == tmp_path / "image_state.db"
+    assert context.chroma_dir == tmp_path
+    # 私有：本区根
     assert context.root_dir == tmp_path / "workspaces" / "sk1"
-    assert context.documents_dir == context.root_dir / "documents"
-    assert context.state_db == context.root_dir / "state.db"
-    assert context.image_state_db == context.root_dir / "image_state.db"
-    assert context.chroma_dir == context.root_dir / "chroma"
     assert context.memory_json == context.root_dir / "memory.json"
     assert context.checkpoints_db == context.root_dir / "checkpoints.db"
     assert context.artifacts_dir == context.root_dir / "artifacts"
+    assert context.jieba_cache_dir == context.root_dir / "cache" / "jieba"
     assert context.default_permission_mode is c.PermissionMode.ASK
-    assert context.default_reasoning_level is c.ReasoningLevel.HIGH
+    assert context.default_reasoning_level is c.ReasoningLevel.OFF
+
+    other = WorkspaceContext.build(
+        workspace_id="w2", storage_key="sk2", data_dir=tmp_path, name="营销组"
+    )
+    for attribute in ("documents_dir", "state_db", "image_state_db", "chroma_dir"):
+        assert getattr(other, attribute) == getattr(context, attribute), attribute
+    for attribute in ("memory_json", "checkpoints_db", "artifacts_dir", "jieba_cache_dir"):
+        assert getattr(other, attribute) != getattr(context, attribute), attribute
 
 
 def test_workspace_context_is_frozen_and_serializable(tmp_path) -> None:
@@ -729,7 +755,7 @@ def test_utc_now_iso_is_second_precision_utc() -> None:
 
 
 def test_every_event_type_has_a_payload_model() -> None:
-    assert len(agent_events.EVENT_PAYLOAD_MODELS) == len(list(c.EventType)) == 20
+    assert len(agent_events.EVENT_PAYLOAD_MODELS) == len(list(c.EventType)) == 21
     for event_type in c.EventType:
         assert agent_events.payload_model_for(event_type) is not None
         assert agent_events.payload_model_for(event_type.value) is not None
@@ -808,6 +834,7 @@ _WEB_PAGE_EVIDENCE_FIELDS = {
     "url",
     "final_url",
     "title",
+    "heading_path",
     "published_at",
     "retrieved_at",
     "content_hash",
@@ -825,7 +852,7 @@ def test_web_read_range_covers_prd_7_3() -> None:
 
 def test_web_page_evidence_covers_prd_7_3() -> None:
     assert _fields(c.WebPageEvidence) == _WEB_PAGE_EVIDENCE_FIELDS
-    assert len(_fields(c.WebPageEvidence)) == 10
+    assert len(_fields(c.WebPageEvidence)) == 11
 
 
 def test_web_page_evidence_round_trips_and_keeps_defaults() -> None:
@@ -835,6 +862,7 @@ def test_web_page_evidence_round_trips_and_keeps_defaults() -> None:
         "url": "https://example.com/news/1",
         "final_url": "https://example.com/news/1?utm=x",
         "title": "AI 新闻",
+        "heading_path": "产品 > AI 新闻",
         "published_at": "2026-09-18",
         "retrieved_at": "2026-09-19T08:00:00Z",
         "content_hash": "hash-1",
@@ -855,6 +883,7 @@ def test_web_page_evidence_round_trips_and_keeps_defaults() -> None:
         "url": "",
         "final_url": "",
         "title": "",
+        "heading_path": "",
         "published_at": "",
         "retrieved_at": "",
         "content_hash": "",

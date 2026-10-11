@@ -12,10 +12,9 @@
    显式写盘而不是留空文件，``load()`` 因此永不回退 ``.env``。所有持有该函数引用的模块一起
    替换（按 ``sys.modules`` 扫描），避免「某模块 import 时拿了旧引用」把凭证漏进来。
 2. **模型装配输入**：``agent_runtime._chat_config_from_settings`` 返回**空**
-   ``ChatModelConfig``，三个装配点（``general_model_for_chat`` / ``synthesis_model_for_chat``
-   / ``model_verifier_for_chat``）因此都走它们各自文档化的「未配置 ⇒ None」分支：general 给
-   结构化失败、synthesis 回落确定性渲染、verify 只剩程序侧检查。
-   刻意**不**把那三个函数直接钉成 ``None``：验收类用例
+   ``ChatModelConfig``，``general_model_for_chat`` 与 ``synthesis_model_for_chat``
+   根据配置创建模型。
+   验收类用例
    （``test_general_model_wiring`` / ``test_seam_assembly`` / ``test_lifespan_assembly``）靠
    patch ``create_chat_model_from_config`` 注入假模型并断言「已配置 ⇒ 可调用」，直接钉死会把
    那条真实装配路径的覆盖抹掉。隔离它们的**共同输入**既等效又不损失覆盖。

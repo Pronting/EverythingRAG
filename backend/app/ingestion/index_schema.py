@@ -5,6 +5,8 @@
 """
 
 INGESTION_SCHEMA_VERSION = 7
+# 文本表示更新只改变文档指纹，保留当前 collection，供同步逐份更新。
+INGESTION_REPRESENTATION_REVISION = 1
 
 
 def make_index_fingerprint(
@@ -18,4 +20,7 @@ def make_index_fingerprint(
     unchanged-file fast path from accidentally skipping a newly selected collection.
     """
 
-    return f"{embedding_fingerprint}::ingestion-v{schema_version}"
+    return (
+        f"{embedding_fingerprint}::ingestion-v{schema_version}"
+        f"::representation-v{INGESTION_REPRESENTATION_REVISION}"
+    )

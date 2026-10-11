@@ -19,7 +19,6 @@ interface Row {
   id: string;
   title: string;
   workspace_id: string;
-  sort_index?: number | null;
   archived?: boolean;
   archived_at?: string | null;
 }
@@ -47,7 +46,9 @@ class WorkspaceStub {
     { id: "c3", title: "另一条默认对话", workspace_id: "default" },
   ];
   /** 记录落库的拖拽目标，便于断言「拖到哪去了」。 */
-  moves: { id: string; workspaceId: string | null; targetIndex: number | null }[] = [];
+  moves: { id: string; workspaceId: string | null }[] = [];
+  /** 每次 `POST /api/conversations` 带的 `?workspace=`（新对话归属的最终判据）。 */
+  createdIn: string[] = [];
 
   counts(): Record<string, number> {
     const result: Record<string, number> = {};
@@ -73,14 +74,14 @@ class WorkspaceStub {
     });
   }
 
-  /** 某工作区里的会话顺序（按 sort_index，缺省排在后）。 */
+  /**
+   * 某工作区里的会话顺序（后端语义：**最近活动优先**）。
+   *
+   * 2026-09-22（需求 2）起服务端不再有手工位次：stub 里也没有 `sort_index`，
+   * 顺序回落到数组顺序（等价于「后来的排在后面」这个稳定的可见顺序）。
+   */
   ordered(workspaceId: string): Row[] {
-    return this.conversations
-      .filter((row) => row.workspace_id === workspaceId && !row.archived)
-      .sort(
-        (left, right) =>
-          (left.sort_index ?? Number.MAX_SAFE_INTEGER) - (right.sort_index ?? Number.MAX_SAFE_INTEGER),
-      );
+    return this.conversations.filter((row) => row.workspace_id === workspaceId && !row.archived);
   }
 
   /** 拖拽排序落库：按给定 id 顺序重写位次（不触碰置顶状态）。 */
@@ -153,6 +154,15 @@ async function stubBackend(page: Page, stub = new WorkspaceStub()): Promise<Work
     // GET：返回当前顺序（置顶在前 → 手工位次）
     return json(stub.payload());
   });
+  // 任务端点：必须比上面的 `**/api/workspaces**` **后注册**（Playwright 按注册的逆序匹配），
+  // 否则会被工作区列表路由吃掉。这里只要求「建会话发生在起 run 之前」，所以给一个最小 202。
+  await page.route("**/api/workspaces/*/runs", (route) =>
+    route.fulfill({
+      status: 202,
+      contentType: "application/json",
+      body: JSON.stringify({ run_id: "run-1", events_url: "" }),
+    }),
+  );
   await page.route("**/api/conversations**", (route) => {
     const request = route.request();
     const url = new URL(request.url());
@@ -164,13 +174,11 @@ async function stubBackend(page: Page, stub = new WorkspaceStub()): Promise<Work
     if (first === "archived") return json(stub.conversations.filter((row) => row.archived));
     if (request.method() === "POST" && second === "move") {
       const conversationId = decodeURIComponent(first);
-      const body = request.postDataJSON() as { workspace_id: string | null; target_index: number | null };
+      const body = request.postDataJSON() as { workspace_id: string | null };
       const found = stub.conversations.find((row) => row.id === conversationId);
       if (found === undefined) return json({ detail: "会话不存在" }, 404);
-      stub.moves.push({ id: conversationId, workspaceId: body.workspace_id, targetIndex: body.target_index });
+      stub.moves.push({ id: conversationId, workspaceId: body.workspace_id });
       if (body.workspace_id !== null) found.workspace_id = body.workspace_id;
-      // 模拟后端浮点插入：stub 用整数位次即可，够断言顺序
-      found.sort_index = body.target_index === null ? 99 : body.target_index;
       return json(found);
     }
     if (request.method() === "POST" && second === "workspace") {
@@ -179,12 +187,12 @@ async function stubBackend(page: Page, stub = new WorkspaceStub()): Promise<Work
       const found = stub.conversations.find((row) => row.id === conversationId);
       if (found === undefined) return json({ detail: "会话不存在" }, 404);
       found.workspace_id = body.workspace_id;
-      found.sort_index = null;
       return json(found);
     }
     if (request.method() === "POST" && second === "truncate") return json({ message_count: 0 });
     if (request.method() === "POST" && first === undefined) {
       const workspaceId = url.searchParams.get("workspace") ?? "default";
+      stub.createdIn.push(workspaceId);
       const created: Row = {
         id: `new-${stub.conversations.length + 1}`,
         title: "新对话",
@@ -253,12 +261,13 @@ test("折叠状态被记住：刷新后仍是收起的样子", async ({ page }) 
 
   // 收起「研究」后刷新：折叠状态应从 localStorage 恢复
   await page.getByRole("button", { name: "收起工作区「研究」" }).click();
-  await expect(page.getByText("研究区对话")).toHaveCount(0);
+  // 列表是**动画收起**的（内容仍在 DOM 里，收完后隐藏），所以断言「看不见」而非「不存在」
+  await expect(page.getByText("研究区对话")).not.toBeVisible();
 
   await page.reload();
   await expect(page.getByRole("button", { name: "工作区「研究」操作" })).toBeVisible();
   await expect(page.getByRole("button", { name: "展开工作区「研究」" })).toBeVisible();
-  await expect(page.getByText("研究区对话")).toHaveCount(0);
+  await expect(page.getByText("研究区对话")).not.toBeVisible();
 
   // 再展开也应记住
   await page.getByRole("button", { name: "展开工作区「研究」" }).click();
@@ -267,7 +276,7 @@ test("折叠状态被记住：刷新后仍是收起的样子", async ({ page }) 
   await expect(page.getByText("研究区对话")).toBeVisible();
 });
 
-test("会话列表默认显示 5 条，点「展开显示」每次追加 10 条", async ({ page }) => {
+test("会话列表默认 5 条：可展开、到底后可收起、刷新与折叠都回默认", async ({ page }) => {
   const stub = await stubBackend(page);
   // 默认工作区补到 19 条：5 → 15 → 19
   for (let index = 1; index <= 17; index += 1) {
@@ -277,8 +286,11 @@ test("会话列表默认显示 5 条，点「展开显示」每次追加 10 条"
 
   const folder = page.locator(".ws-folder").first();
   const more = folder.getByRole("button", { name: "展开显示" });
+  // 精确匹配：文件夹头的 `aria-label="收起工作区「默认」"` 也含「收起」，不精确会误命中
+  const less = folder.getByRole("button", { name: "收起", exact: true });
   await expect(folder.locator(".ws-conversation")).toHaveCount(5);
   await expect(more).toHaveAttribute("title", "还有 14 条");
+  await expect(less).toHaveCount(0);
 
   await more.click();
   await expect(folder.locator(".ws-conversation")).toHaveCount(15);
@@ -286,30 +298,96 @@ test("会话列表默认显示 5 条，点「展开显示」每次追加 10 条"
 
   await more.click();
   await expect(folder.locator(".ws-conversation")).toHaveCount(19);
-  // 全部展开后按钮消失
+  // 列表到底：不再有「展开显示」，改为给出「收起」
   await expect(more).toHaveCount(0);
+  await expect(less).toBeVisible();
 
-  // 展开进度也被记住：刷新后仍是全部展开
+  // 收起 → 回到默认 5 条（不再是「点了就一直长」）
+  await less.click();
+  await expect(folder.locator(".ws-conversation")).toHaveCount(5);
+  await expect(more).toHaveAttribute("title", "还有 14 条");
+
+  // 展开条数**不持久化**：刷新（等价重启）后回到默认 5 条
+  await more.click();
+  await expect(folder.locator(".ws-conversation")).toHaveCount(15);
   await page.reload();
-  await expect(page.locator(".ws-folder").first().locator(".ws-conversation")).toHaveCount(19);
-  await expect(page.locator(".ws-folder").first().getByRole("button", { name: "展开显示" })).toHaveCount(0);
+  await expect(page.locator(".ws-folder").first().locator(".ws-conversation")).toHaveCount(5);
+
+  // 折叠工作区再展开，同样回到默认 5 条（而不是折叠前的 15 条）
+  const lessAfterReload = page.locator(".ws-folder").first().getByRole("button", { name: "展开显示" });
+  await lessAfterReload.click();
+  await expect(page.locator(".ws-folder").first().locator(".ws-conversation")).toHaveCount(15);
+  await page.getByRole("button", { name: "收起工作区「默认」" }).click();
+  await page.getByRole("button", { name: "展开工作区「默认」" }).click();
+  await expect(page.locator(".ws-folder").first().locator(".ws-conversation")).toHaveCount(5);
 });
 
-test("文件夹可折叠，文件夹菜单可在此新建对话", async ({ page }) => {
+test("文件夹可折叠，文件夹菜单可在此新建对话（落库推迟到首次提问）", async ({ page }) => {
   const stub = await stubBackend(page);
   await page.goto("/");
 
   await page.getByRole("button", { name: "收起工作区「研究」" }).click();
-  await expect(page.getByText("研究区对话")).toHaveCount(0);
+  await expect(page.getByText("研究区对话")).not.toBeVisible();
   await page.getByRole("button", { name: "展开工作区「研究」" }).click();
   await expect(page.getByText("研究区对话")).toBeVisible();
 
-  // 在「研究」里新建对话：落到该工作区
+  // 「在此工作区新建对话」= 清空当前会话视图并把目标工作区记为当前工作区。
+  // 会话本体推迟到第一次提问才落库（`handleEnsureConversation`），所以这里**不该**有任何
+  // POST /api/conversations：这正是「重复点新对话只创建一个」的保证。
+  const before = stub.conversations.length;
   await openFolderMenu(page, "研究");
   await page.getByRole("menuitem", { name: "在此工作区新建对话" }).click();
-  const created = stub.conversations[stub.conversations.length - 1];
-  expect(created.workspace_id).toBe("research");
-  await expect(page.locator(".ws-folder").nth(1).getByText("新对话")).toBeVisible();
+  expect(stub.conversations.length).toBe(before);
+  await expect(page.getByRole("textbox", { name: "消息输入框" })).toHaveValue("");
+  await expect(page.locator(".ws-folder").nth(1).getByText("新对话")).toHaveCount(0);
+  // 菜单项里的点击不得冒泡到整行：文件夹必须保持展开（否则点菜单会顺手折叠）
+  await expect(page.getByText("研究区对话")).toBeVisible();
+});
+
+test("重复点新对话不会堆积空会话（去重）", async ({ page }) => {
+  const stub = await stubBackend(page);
+  await page.goto("/");
+
+  const before = stub.conversations.length;
+  const newChat = page.getByRole("button", { name: "新对话" });
+  await newChat.click();
+  await newChat.click();
+  await newChat.click();
+
+  // 空会话一个都不落库：侧边栏也不会冒出「新对话」条目
+  expect(stub.conversations.length).toBe(before);
+  await expect(page.locator(".ws-conversation", { hasText: "新对话" })).toHaveCount(0);
+});
+
+test("点过某个工作区后，新对话记在那个工作区名下", async ({ page }) => {
+  const stub = await stubBackend(page);
+  await page.goto("/");
+
+  // 点「研究」文件夹头（折叠/展开的同时把它记为当前工作区）
+  await page.locator(".ws-folder").nth(1).locator(".ws-folder-name").click();
+  await page.getByRole("button", { name: "新对话" }).click();
+  expect(stub.createdIn).toHaveLength(0); // 仍不落库（去重）
+
+  // 首次提问时才建会话：必须建在「研究」里（而不是默认工作区）
+  await page.getByRole("textbox", { name: "消息输入框" }).fill("你好");
+  await page.getByRole("button", { name: "发送" }).click();
+  await expect.poll(() => stub.createdIn.at(-1) ?? null).toBe("research");
+});
+
+test("点击工作区名是折叠/展开，不会新建对话", async ({ page }) => {
+  const stub = await stubBackend(page);
+  await page.goto("/");
+
+  const folderName = page.locator(".ws-folder").nth(1).locator(".ws-folder-name");
+  const before = stub.conversations.length;
+
+  await folderName.click();
+  await expect(page.getByText("研究区对话")).not.toBeVisible();
+  expect(stub.conversations.length).toBe(before);
+
+  await folderName.click();
+  await expect(page.getByText("研究区对话")).toBeVisible();
+  expect(stub.conversations.length).toBe(before);
 });
 
 test("新建工作区、双击重命名、删除时其中对话被归档", async ({ page }) => {
@@ -366,23 +444,21 @@ test("右键「移动到工作区」可把对话挪到别的文件夹", async ({
   expect(stub.counts()).toMatchObject({ default: 1, research: 2 });
 });
 
-test("拖拽会话可排序，也可拖进另一个工作区文件夹", async ({ page }) => {
+test("拖拽会话只能跨工作区移动，同区内拖拽不再排序", async ({ page }) => {
   const stub = await stubBackend(page);
   await page.goto("/");
 
-  // 1) 同区排序：不涉及归属，**不需要确认**（后端也只排序）
+  // 1) 同区拖拽：侧边栏恒为「最近活动优先」，区内位置不由拖拽决定 ⇒ 不产生任何请求
   await dragTo(page, page.getByText("另一条默认对话"), page.getByText("默认区对话"));
-  await expect
-    .poll(() => stub.moves.at(-1) ?? null)
-    .toMatchObject({ id: "c3", workspaceId: "default", targetIndex: 0 });
-  await expect.poll(() => stub.ordered("default").map((row) => row.id)).toEqual(["c3", "c1"]);
   await expect(page.getByRole("alertdialog", { name: "移动会话到其他工作区" })).toHaveCount(0);
+  expect(stub.moves).toHaveLength(0);
+  expect(stub.ordered("default").map((row) => row.id)).toEqual(["c1", "c3"]);
 
   // 2) 跨区拖动：归属变更 ⇒ 先确认（PRD 5.4）
   await dragTo(page, page.getByText("研究区对话"), page.locator(".ws-folder-name").first());
   const dialog = page.getByRole("alertdialog", { name: "移动会话到其他工作区" });
   await expect(dialog).toBeVisible();
-  expect(stub.moves).toHaveLength(1); // 仍只有同区那次
+  expect(stub.moves).toHaveLength(0); // 未确认前不得发生移动
   await dialog.getByRole("button", { name: "确认移动" }).click();
 
   await expect.poll(() => stub.moves.at(-1) ?? null).toMatchObject({ id: "c2", workspaceId: "default" });

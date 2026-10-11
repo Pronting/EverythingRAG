@@ -106,14 +106,16 @@ def test_catalog_documents_headings_terms_and_source_ids() -> None:
     assert catalog.knowledge_revision == 4
     assert len(catalog.documents) == 2
 
+    # D-KB 后续修：目录标题不再携带来源后缀（.md）—— 标题是匹配与提示用的名字，
+    # 保留后缀会让「问题整串等于标题」这条线索永远无法成立。
     assert sorted(document.title for document in catalog.documents) == [
-        "识图复盘.md",
-        "风控方案.md",
+        "识图复盘",
+        "风控方案",
     ]
     assert all(document.document_id.startswith("doc-") for document in catalog.documents)
     assert all(document.content_id for document in catalog.documents)
 
-    fengkong = next(document for document in catalog.documents if document.title == "风控方案.md")
+    fengkong = next(document for document in catalog.documents if document.title == "风控方案")
     assert [heading.path for heading in fengkong.headings] == ["风控 > P99 方案", "风控 > 坑位归因"]
     assert fengkong.headings[0].level == 2
     assert fengkong.headings[0].title == "P99 方案"
@@ -259,7 +261,7 @@ def test_parse_term_candidates_handles_json_and_fences() -> None:
 
 def test_apply_term_candidates_accepts_only_verifiable_evidence() -> None:
     catalog = _catalog()
-    document = next(document for document in catalog.documents if document.title == "风控方案.md")
+    document = next(document for document in catalog.documents if document.title == "风控方案")
     candidates = [
         TermCandidate(
             term="尾延迟",
@@ -310,7 +312,7 @@ def test_apply_term_candidates_accepts_only_verifiable_evidence() -> None:
 
 def test_apply_term_candidates_prefers_full_text_lookup_over_truncated_sample() -> None:
     catalog = _catalog()
-    document = next(document for document in catalog.documents if document.title == "风控方案.md")
+    document = next(document for document in catalog.documents if document.title == "风控方案")
     long_text = "无关前缀。" * 500 + "限流算法细节：令牌桶按固定速率补充令牌。"
     candidate = TermCandidate(
         term="限流算法细节",
@@ -326,7 +328,7 @@ def test_apply_term_candidates_prefers_full_text_lookup_over_truncated_sample() 
 
 def test_internal_text_lookup_maps_source_id_to_blocks_without_exposing_path() -> None:
     catalog = _catalog()
-    document = next(document for document in catalog.documents if document.title == "风控方案.md")
+    document = next(document for document in catalog.documents if document.title == "风控方案")
     vector_store = FakeVectorStore(
         {rf"{RAW_ROOT}\风控方案.md": {"b1": "第一块正文", "b2": "第二块正文"}}
     )
@@ -397,4 +399,151 @@ def test_catalog_for_area_caches_and_rebuilds_after_revision_bump(tmp_path: Path
 
 def test_normalize_catalog_text_is_stable() -> None:
     assert normalize_catalog_text("  Ｐ９９  方案 ") == "p99 方案"
+
+
+# ---------------------------------------------------------------------
+# 路由线索判据（真实缺陷回归）
+#
+# 两处缺陷曾让「问到了知识库里真实存在的资料」在真实应用里恒为 needs_knowledge=false：
+# ① 意图层拿到的是 None（`_catalog_for` 读错内部键 `_catalog`，见
+#    tests/test_lifespan_assembly.py 的装配用例）；
+# ② 线索判据本身：文档标题带着 `.md` 后缀 ⇒「整串等于标题」这条永不成立；而
+#    「标签整体出现在问题里」这一档对 1–2 字泛化小节标题（「方案」）也给 800 分 ⇒
+#    泛指问题被误判成「本区有这份资料」、真正被问到的文档反而一条线索都拿不到。
+# ---------------------------------------------------------------------
+
+_MEM_TITLE = "货拉拉大模型记忆系统（一）：从提取到召回的工程实践"
+
+
+def _clue_blocks() -> list[tuple[str, str, dict[str, Any]]]:
+    return [
+        (
+            "c1",
+            "记忆提取让会话消息变成可独立理解的事实；离线让记忆可维护。",
+            {
+                "source_file": rf"{RAW_ROOT}\{_MEM_TITLE}.md",
+                "chunk_type": "text",
+                "source_type": "document",
+                "platform": "local",
+                "doc_id": "hash-mem",
+                "heading_path": f"{_MEM_TITLE} > 二、总体设计",
+                "anchor": "a1",
+            },
+        ),
+        (
+            "c2",
+            "购物车分表与查询改写。",
+            {
+                "source_file": rf"{RAW_ROOT}\购物车分表分享V2.md",
+                "chunk_type": "text",
+                "source_type": "document",
+                "platform": "local",
+                "doc_id": "hash-cart",
+                "heading_path": "方案",
+                "anchor": "a2",
+            },
+        ),
+    ]
+
+
+def _clue_catalog() -> KnowledgeCatalog:
+    return build_knowledge_catalog(_clue_blocks(), workspace_id="ws-clue")
+
+
+def _clue_matches(question: str) -> list[CatalogMatch]:
+    """与本区路由规则同口径的「线索」：非术语条目且得分 ≥ 门槛（400）。"""
+
+    return [
+        match
+        for match in _clue_catalog().search(question, limit=8).matches
+        if match.kind != "term" and match.score >= 400
+    ]
+
+
+def test_catalog_document_title_drops_the_source_extension() -> None:
+    """标题用于匹配与提示，不该带来源后缀（否则「整串等于标题」永远不成立）。"""
+
+    titles = {document.title for document in _clue_catalog().documents}
+    assert _MEM_TITLE in titles
+    assert f"{_MEM_TITLE}.md" not in titles
+
+
+def test_partial_title_run_is_a_document_clue() -> None:
+    """问题与标题有 ≥4 字公共中文串时，该**文档**必须成为线索（可定位原文）。"""
+
+    for question, needle in (
+        ("货拉拉的记忆系统有淘汰策略吗。类似openclaw的那种方案", _MEM_TITLE),
+        ("货拉拉的记忆系统有淘汰策略吗", _MEM_TITLE),
+        ("记忆系统有淘汰策略吗", _MEM_TITLE),
+        ("货拉拉大模型记忆系统讲了什么", _MEM_TITLE),
+        (f"{_MEM_TITLE} 讲了什么", _MEM_TITLE),
+        ("从提取到召回的工程实践是怎么做的", _MEM_TITLE),
+    ):
+        hits = [match for match in _clue_matches(question) if match.title == needle]
+        assert hits, f"{question!r} 必须命中目标文档线索，实际：{_clue_matches(question)}"
+        assert hits[0].kind == "document"
+
+
+def test_generic_two_char_heading_never_authorizes_a_clue() -> None:
+    """泛指问题不得靠 1–2 字泛化小节标题（「方案」）取得「本区有资料」的授权。"""
+
+    for question in ("这个方案呢？", "那种方式更好一些", "类似openclaw的那种方案"):
+        assert _clue_matches(question) == [], question
+
+
+@pytest.mark.parametrize(
+    "question",
+    [
+        "今天天气怎么样",
+        "帮我写一首关于春天的诗",
+        "1+1 等于几",
+        "解释一下什么是光合作用",
+        "推荐几本好书",
+        "埋点怎么做的",
+    ],
+)
+def test_common_questions_do_not_produce_document_clues(question: str) -> None:
+    assert _clue_matches(question) == [], question
+
+
+def test_short_internal_term_still_searchable_but_not_a_clue() -> None:
+    """2 字内部术语仍要能被搜到（供 R3 / lookup_catalog 用），只是不再算「文档线索」。"""
+
+    matches = _clue_catalog().search("这个方案怎么做的", limit=8).matches
+    assert any(match.kind == "term" and "方案" in match.matched_on for match in matches), matches
+    assert [match for match in matches if match.score >= 400] == [], (
+        "2 字泛化小节标题（「方案」）不得再靠 800 档成为线索"
+    )
+
+
+def test_route_question_reaches_the_knowledge_path_for_partial_title_questions() -> None:
+    """端到端（离线）：同一意图的多种自然问法都必须让路由走知识路径。
+
+    并且**问到哪份资料就点名哪份资料**：句子里出现文档名/主题词的那些问法，R1 的证据必须
+    是目标文档本身（而不是碰巧共享「记忆系统」的别篇小节标题）。唯一例外是光秃秃的
+    「记忆系统有淘汰策略吗」——它只给了领域词，几篇讲记忆系统的资料同样相关，此时要求
+    「点名目标文档」既无依据也无意义，只要求走知识路径。
+    """
+
+    from app.agent.routing import IntentAgent, RoutingInput
+
+    agent = IntentAgent(catalog=_clue_catalog())
+    cases = {
+        # 问法 → 是否必须点名目标文档
+        "货拉拉的记忆系统有淘汰策略吗。类似openclaw的那种方案": True,
+        "货拉拉的记忆系统有淘汰策略吗": True,
+        "货拉拉大模型记忆系统讲了什么": True,
+        "从提取到召回的工程实践是怎么做的": True,
+        _MEM_TITLE: True,
+        "记忆系统有淘汰策略吗": False,
+    }
+    for question, must_name_target in cases.items():
+        result = agent.decide(
+            RoutingInput(question=question, workspace_id="ws-clue", file_count=2, chunk_count=2)
+        )
+        decision = result.decision
+        assert decision.needs_knowledge is True, (question, decision)
+        if must_name_target:
+            # R1 的证据必须点名**目标文档**（不是「方案」这类泛化标题的误命中）
+            assert any(_MEM_TITLE in hit.evidence for hit in result.rules), (question, result.rules)
     assert normalize_catalog_text(None) == ""

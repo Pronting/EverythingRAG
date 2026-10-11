@@ -809,6 +809,19 @@ export async function stubRunBackend(page: Page, options: StubRunOptions = {}): 
  * - 至少一次命中 `/runs`（证明前端真的走了新任务接口）；
  * - 零次命中 `/api/chat`（证明旧入口已彻底迁移，stub 没有空跑）。
  */
+/**
+ * 过程区域默认折叠成一行摘要（正文出现之后）：断言内部环节 / 任务前先展开。
+ *
+ * 幂等：已展开就不点（避免把它点回去），并断言最终状态 —— 失败落在折叠开关上，
+ * 而不是后续 locator 的超时上。
+ */
+export async function expandProcessArea(page: Page, index = 0): Promise<void> {
+  const head = page.getByTestId("process-head").nth(index);
+  await expect(head).toBeVisible();
+  if ((await head.getAttribute("aria-expanded")) !== "true") await head.click();
+  await expect(head).toHaveAttribute("aria-expanded", "true");
+}
+
 export function expectRunOnlyTraffic(stub: RunStub): void {
   expect(stub.runRequestCount(), "应至少一次请求 /runs").toBeGreaterThanOrEqual(1);
   expect(stub.chatRequestCount(), "不得再请求 /api/chat").toBe(0);

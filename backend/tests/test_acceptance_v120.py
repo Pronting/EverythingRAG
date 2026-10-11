@@ -64,12 +64,11 @@ from app.agent.tools import (
     build_default_registry,
 )
 from app.agent.verification import (
-    MaterialStatusReport,
+    CitationError,
     assign_citation_ids,
     compute_answer_basis,
-    run_program_checks,
+    publish_answer,
     synthesize_answer,
-    verify_answer,
 )
 from app.api import deps
 from app.core.workspace_context import (
@@ -92,6 +91,7 @@ from app.retrieval.workspace_retrieval import (
 from app.vectorstore.chroma_store import create_vector_store
 from tests.fakes import FakeEmbedder
 from tests.fakes_agent import app_store  # noqa: F401 -- 共享夹具
+from tests.test_verification import placeholder_model as _placeholder_model
 from tests.fakes_run import (
     FakeServices,
     build_manager,
@@ -125,7 +125,11 @@ def _clean_area_cache() -> None:
 
 
 def _committed_data_dir(tmp_path: Path) -> Path:
-    """已提交 ``storage_schema_version`` 的数据目录（每工作区布局，与 deps 一致）。"""
+    """已提交 ``storage_schema_version`` 的数据目录（工作区记录 authority，与 deps 一致）。
+
+    D-KB 后该标记与**知识库布局**无关（知识永远在 ``data_dir`` 根、所有工作区共享），
+    只决定工作区记录写 app.db 还是 JSON（D25/D29）。
+    """
 
     from app.core.config import settings
 
@@ -146,7 +150,7 @@ def _png_bytes() -> bytes:
 
 
 # =====================================================================
-# A01–A05 来源路由与工作区隔离（PRD 6.2 / 6.3 / 7.3）
+# A01–A05 来源路由（PRD 6.2 / 6.3 / 7.3）
 # =====================================================================
 
 
@@ -535,7 +539,7 @@ def test_a05_multi_turn_reference_is_resolved_to_the_right_object() -> None:
 
 
 # =====================================================================
-# A06–A08 工作区隔离（PRD 5.x）
+# A06–A08 共享知识库（D-KB：所有工作区共享同一个知识库）
 # =====================================================================
 
 SHARED_FILE_NAME = "notes.md"
@@ -573,10 +577,10 @@ def _seed_area(context: Any, *, block_id: str, text: str, vector: list[float]) -
     )
 
 
-def test_a06_two_workspaces_with_same_file_name_read_only_their_own_area(
+def test_a06_all_workspaces_read_the_same_knowledge_base(
     tmp_path: Path,
 ) -> None:
-    """A06：两个工作区含**同名**真实文档时，dense/统计/浏览分别只读本区。"""
+    """A06（D-KB）：语料只有一份 —— 甲区导入的资料，乙区的 dense/统计/浏览都看得到。"""
 
     store = WorkspaceStore(tmp_path)
     factory = WorkspaceContextFactory(tmp_path, store)
@@ -589,35 +593,26 @@ def test_a06_two_workspaces_with_same_file_name_read_only_their_own_area(
         text=f"# 风控\n\n{MARKER_A} 的 P99 阈值。",
         vector=[1.0, 0.0, 0.0, 0.0],
     )
-    area_b = _seed_area(
+    area_b = workspace_knowledge_area(
         context_b,
-        block_id="block-b",
-        text=f"# 营销\n\n{MARKER_B} 的预算。",
-        vector=[0.0, 1.0, 0.0, 0.0],
+        vector_store=area_a.vector_store,
+        index_fingerprint=area_a.index_fingerprint,
     )
 
-    assert area_a.stats() == {"files": 1, "chunks": 1, "images": 0}
-    assert area_b.stats() == {"files": 1, "chunks": 1, "images": 0}
-    assert [block[0] for block in area_a.blocks()] == ["block-a"]
-    assert [block[0] for block in area_b.blocks()] == ["block-b"]
-    assert area_a.cache_key != area_b.cache_key
+    # 路径共享 + 同一个向量句柄
+    assert context_a.chroma_dir == context_b.chroma_dir
+    assert context_a.documents_dir == context_b.documents_dir
+    assert area_b.stats() == area_a.stats() == {"files": 1, "chunks": 1, "images": 0}
+    assert [block[0] for block in area_b.blocks()] == ["block-a"]
 
-    for area, own_id, own_vector, own_marker, other_marker in (
-        (area_a, "block-a", [1.0, 0.0, 0.0, 0.0], MARKER_A, MARKER_B),
-        (area_b, "block-b", [0.0, 1.0, 0.0, 0.0], MARKER_B, MARKER_A),
-    ):
-        chunks = area.retriever.retrieve("风控 营销", own_vector)
-        assert chunks
-        ids = {chunk.block_id for chunk in chunks}
-        assert ids == {own_id}
-        for chunk in chunks:
-            haystack = f"{chunk.text}{chunk.context_text or ''}"
-            assert own_marker in haystack
-            assert other_marker not in haystack
+    chunks = area_b.retriever.retrieve("风控 P99", [1.0, 0.0, 0.0, 0.0])
+    assert chunks
+    assert {chunk.block_id for chunk in chunks} == {"block-a"}
+    assert MARKER_A in f"{chunks[0].text}{chunks[0].context_text or ''}"
 
 
-def test_a07_cross_workspace_image_hash_and_task_id_are_404(tmp_path: Path) -> None:
-    """A07：用其它工作区的图片 hash 或任务 ID 得到 404。"""
+def test_a07_image_and_task_are_shared_across_workspaces(tmp_path: Path) -> None:
+    """A07（D-KB）：共享图片库 —— 甲区写入的原图/任务，乙区同样取得到。"""
 
     workspace_store = deps.workspace_store
     factory = WorkspaceContextFactory(_committed_data_dir(tmp_path), workspace_store)
@@ -643,28 +638,33 @@ def test_a07_cross_workspace_image_hash_and_task_id_are_404(tmp_path: Path) -> N
         f"/api/knowledge/images/{image_hash}", params={"workspace_id": context_a.workspace_id}
     )
     assert ok.status_code == 200, ok.text
-    leaked = client.get(
+    shared = client.get(
         f"/api/knowledge/images/{image_hash}", params={"workspace_id": context_b.workspace_id}
     )
-    assert leaked.status_code == 404
-    assert image_hash not in leaked.text
+    assert shared.status_code == 200, shared.text
 
     task_ok = client.get(
         "/api/knowledge/image-tasks/task-a", params={"workspace_id": context_a.workspace_id}
     )
     assert task_ok.status_code == 200, task_ok.text
-    task_leaked = client.get(
+    task_shared = client.get(
         "/api/knowledge/image-tasks/task-a", params={"workspace_id": context_b.workspace_id}
     )
-    assert task_leaked.status_code == 404
+    assert task_shared.status_code == 200, task_shared.text
 
-    store_b = deps.workspace_image_state_store(context_b)
-    assert store_b.get_image_bytes(image_hash) is None
-    assert store_b.get_task("task-a") is None
+    # 未知工作区仍 404（不静默回落默认区）；共享库是同一个
+    assert (
+        client.get(
+            f"/api/knowledge/images/{image_hash}", params={"workspace_id": "nope"}
+        ).status_code
+        == 404
+    )
+    assert context_a.image_state_db == context_b.image_state_db
+    assert deps.workspace_image_state_store(context_b) is store_a
 
 
-def test_a08_import_task_keeps_creation_time_workspace(tmp_path: Path) -> None:
-    """A08：导入时切换工作区，任务仍写入创建时的工作区。"""
+def test_a08_import_task_writes_the_shared_knowledge_store(tmp_path: Path) -> None:
+    """A08（D-KB）：导入任务绑定创建时的工作区身份，写入的是共享知识库。"""
 
     from app.ingestion.state_store import DocumentStateStore
 
@@ -677,15 +677,16 @@ def test_a08_import_task_keeps_creation_time_workspace(tmp_path: Path) -> None:
 
     scope = BackgroundTaskScope.bind(context_a)
     assert scope.workspace_id == workspace_a.id
-    # 用户随后切到别的区并发起新的解析
+    # 用户随后切到别的区
     assert context_b.workspace_id == workspace_b.id
-    assert context_b.state_db != scope.state_db
+    # 共享知识：指纹库与文档根都是同一份
+    assert context_b.state_db == scope.state_db
+    assert context_b.documents_dir == scope.documents_dir
 
-    # 任务继续写**创建时**的区
     task_store = DocumentStateStore(scope.state_db)
     task_store.upsert_fingerprint(str(scope.documents_dir / "notes.md"), "hash", 1.0, 3, 1)
     assert scope.state_db.is_file()
-    assert DocumentStateStore(context_b.state_db).load_all() == {}
+    assert DocumentStateStore(context_b.state_db).load_all() != {}
     task_store.close()
 
 
@@ -828,6 +829,8 @@ def test_a12_citation_validity_is_enforced_by_program_checks() -> None:
         requirements={"r1": "给出 P99 目标"},
         workspace_id="ws-1",
         run_id="run-1",
+        # 候选答案必须由模型撰写（没有 model 时明确失败，不再回落确定性拼接稿）。
+        model=_placeholder_model,
     )
     assignment = assign_citation_ids(
         candidate.content, candidate.evidence, existing=candidate.citations
@@ -838,24 +841,11 @@ def test_a12_citation_validity_is_enforced_by_program_checks() -> None:
     good = candidate.model_copy(
         update={"content": assignment.content, "citations": assignment.citations}
     )
-    assert run_program_checks(good, requirements={"r1": "给出 P99 目标"}).ok is True
+    assert publish_answer(good, requirements={"r1": "给出 P99 目标"}).content == good.content
 
     broken = good.model_copy(update={"content": good.content + "\n补充结论。[S9]"})
-    bad = run_program_checks(broken, requirements={"r1": "给出 P99 目标"})
-    assert bad.ok is False
-    assert any("citation" in str(getattr(issue, "check", "")).lower() for issue in bad.issues)
-
-    verdicts = asyncio.run(_verdicts(good, broken))
-    assert verdicts[0] is c.VerifierVerdict.PASS
-    assert verdicts[1] is not c.VerifierVerdict.PASS
-
-
-async def _verdicts(good: Any, broken: Any) -> tuple[c.VerifierVerdict, c.VerifierVerdict]:
-    requirements = {"r1": "给出 P99 目标"}
-    return (
-        (await verify_answer(good, requirements=requirements)).verdict,
-        (await verify_answer(broken, requirements=requirements)).verdict,
-    )
+    with pytest.raises(CitationError):
+        publish_answer(broken, requirements={"r1": "给出 P99 目标"})
 
 
 # =====================================================================
@@ -1342,8 +1332,7 @@ async def test_a29_service_error_records_failed_node_and_keeps_successful_result
         await manager.aclose()
 
 
-def test_a32_deleted_material_is_rechecked_before_publishing() -> None:
-    """A32：生成后资料删除 → 发布前检测失效资料并重新核对受影响陈述。"""
+def test_publication_preserves_research_sources() -> None:
 
     evidence = Evidence(
         evidence_id="ev-1",
@@ -1373,6 +1362,8 @@ def test_a32_deleted_material_is_rechecked_before_publishing() -> None:
         requirements={"r1": "给出 P99 目标"},
         workspace_id="ws-1",
         run_id="run-1",
+        # 候选答案必须由模型撰写（没有 model 时明确失败，不再回落确定性拼接稿）。
+        model=_placeholder_model,
     )
     assignment = assign_citation_ids(
         candidate.content, candidate.evidence, existing=candidate.citations
@@ -1380,56 +1371,30 @@ def test_a32_deleted_material_is_rechecked_before_publishing() -> None:
     good = candidate.model_copy(
         update={"content": assignment.content, "citations": assignment.citations}
     )
-    assert run_program_checks(good, requirements={"r1": "给出 P99 目标"}).ok is True
-
-    material = MaterialStatusReport(
-        invalid_evidence_ids=["ev-1"], notes=["发布前该资料已被删除（PRD 8.2 / A32）"]
-    )
-    checks = run_program_checks(
-        good, requirements={"r1": "给出 P99 目标"}, material_status=material
-    )
-    assert checks.ok is False
-    assert any(
-        "material" in str(getattr(issue, "check", "")).lower() for issue in checks.issues
-    )
-    verdicts = asyncio.run(_verdicts_with_material(good, material))
-    assert verdicts is not c.VerifierVerdict.PASS
+    artifact = publish_answer(good, requirements={"r1": "给出 P99 目标"})
+    assert artifact.citations == assignment.citations
+    assert artifact.verification is None
 
 
-async def _verdicts_with_material(
-    candidate: Any, material: MaterialStatusReport
-) -> c.VerifierVerdict:
-    verification = await verify_answer(
-        candidate,
-        requirements={"r1": "给出 P99 目标"},
-        material_check=lambda _candidate: material,
-    )
-    return verification.verdict
-
-
-async def test_m7_cross_workspace_content_misuse_is_zero(tmp_path: Path) -> None:
+async def test_m7_no_workspace_reads_a_foreign_collection(tmp_path: Path) -> None:
     """PRD 16.3 第 7 项发布指标（M7）：跨工作区内容误用 = 0 次。
 
-    离线路由评测只覆盖 M1–M6；M7 需要真实工作区，这里用两个真实按区检索面
-    证明「跨区内容不可能被本区检索到」。
+    D-KB 之后「跨区」这件事在**知识层**已不存在（所有工作区共享同一份语料），因此
+    M7 的口径改为：**同一个 workspace_id 只会读到自己那份共享 collection**，不会读到
+    别的数据目录 / 别的语料根 —— 用两个**独立数据目录**的真实检索面证明：
+    甲数据目录写入的标记绝不出现乙数据目录的检索结果里。
     """
 
-    store = WorkspaceStore(tmp_path)
-    factory = WorkspaceContextFactory(tmp_path, store)
-    context_a = factory.resolve(store.create("甲区").id)
-    context_b = factory.resolve(store.create("乙区").id)
-    area_a = _seed_area(
-        context_a,
-        block_id="block-a",
-        text=f"# 风控\n\n{MARKER_A} 的 P99 阈值。",
-        vector=[1.0, 0.0, 0.0, 0.0],
-    )
-    area_b = _seed_area(
-        context_b,
-        block_id="block-b",
-        text=f"# 营销\n\n{MARKER_B} 的预算。",
-        vector=[0.0, 1.0, 0.0, 0.0],
-    )
+    def _area(root: Path, block_id: str, marker: str, vector: list[float]) -> Any:
+        store = WorkspaceStore(root)
+        factory = WorkspaceContextFactory(root, store)
+        context = factory.resolve(store.create("甲区").id)
+        return _seed_area(
+            context, block_id=block_id, text=f"# 主题\n\n{marker} 的 P99 阈值。", vector=vector
+        )
+
+    area_a = _area(tmp_path / "data-a", "block-a", MARKER_A, [1.0, 0.0, 0.0, 0.0])
+    area_b = _area(tmp_path / "data-b", "block-b", MARKER_B, [0.0, 1.0, 0.0, 0.0])
 
     misuse = 0
     for area, foreign_marker in ((area_a, MARKER_B), (area_b, MARKER_A)):
@@ -1438,6 +1403,7 @@ async def test_m7_cross_workspace_content_misuse_is_zero(tmp_path: Path) -> None
             if foreign_marker in haystack:
                 misuse += 1
     assert misuse == 0
+    assert area_a.chroma_dir != area_b.chroma_dir
 
 
 # =====================================================================

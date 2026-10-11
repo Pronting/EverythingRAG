@@ -33,6 +33,7 @@ from typing import Final
 
 from pydantic import Field
 
+from app.agent import query_plan
 from app.agent.contracts import (
     DEFAULT_MODEL_REQUEST_CONCURRENCY,
     DEFAULT_RESEARCH_AGENT_CONCURRENCY,
@@ -72,6 +73,10 @@ __all__ = [
 
 #: 输入长度到该值即按「复杂长问题」做完整性检查（PRD 6.4：输入长度用于提示检查完整性）。
 LONG_INPUT_MIN_CHARS: Final[int] = 200
+
+#: 整理后的检索查询最多建几个知识任务 / 联网任务（每个任务都会真的检索一次）。
+MAX_QUERY_TASKS: Final[int] = 3
+MAX_WEB_QUERY_TASKS: Final[int] = 2
 
 #: 出现这些词说明用户要求把通用解释与内部资料**结合**（PRD 6.3 R6 / A03）：
 #: 该要求下的 General 任务依赖同要求的 RAG 任务（先查内部方案，再给通用解释）。
@@ -151,7 +156,10 @@ PRECISION_MARKERS: Final[tuple[str, ...]] = (
     "版本",
 )
 
-_SENTENCE_SPLIT: Final[re.Pattern[str]] = re.compile(r"[^\n。；;!?！？]+")
+_SENTENCE_SPLIT: Final[re.Pattern[str]] = re.compile(
+    r"(?:(?![，,]\s*(?:再|然后|同时|另外)?(?:用|根据|依据)"
+    r"(?:通用知识|本地资料|知识库|网络资料))[^\n。；;!?！？])+"
+)
 _LIST_MARKER: Final[re.Pattern[str]] = re.compile(
     r"^(?:[-*•·]|\(?\d{1,2}\)?[.、)）]|第[一二三四五六七八九十百\d]{1,3}[步项点])[\s、.)）]*"
 )
@@ -245,11 +253,24 @@ def extract_requirements(question: str) -> list[UserRequirement]:
 
     text = str(question or "")
     requirements: list[UserRequirement] = []
+    starts: list[int] = []
     for match in _SENTENCE_SPLIT.finditer(text):
         quote = match.group(0)
         cleaned = _LIST_MARKER.sub("", quote).strip()
         if not cleaned:
             continue
+        if requirements and re.fullmatch(
+            r"(?:请|并请|同时请|并|同时|分别|逐项|各自)?(?:引用(?:资料|原文|文档)?|"
+            r"(?:引用|附上|提供|注明|标注|给出)"
+            r"(?:资料|文档|信息|参考)?(?:来源|出处|引用|参考文献)(?:链接)?)[。；;!?！？]*",
+            cleaned,
+        ):
+            combined = text[starts[-1]:match.end()]
+            requirements[-1] = requirements[-1].model_copy(update={
+                "text": _LIST_MARKER.sub("", combined).strip(), "quote": combined,
+            })
+            continue
+        starts.append(match.start())
         requirements.append(
             UserRequirement(
                 requirement_id=f"R{len(requirements) + 1}",
@@ -579,7 +600,15 @@ class ConcurrencyBudget:
 
 
 def _canonical_question(question: str) -> str:
-    return _PUNCTUATION.sub("", str(question or "").casefold())
+    """查询目标的规范形：与查询规划 / 研究执行共用同一个口径（C21.4）。
+
+    旧实现按自己的标点表归一，与 ``app.agent.query_plan`` / ``app.agent.research``
+    的去重口径不一致，标点变体会在多任务之间重复检索。
+    """
+
+    from app.agent import query_plan as agent_query_plan
+
+    return agent_query_plan.canonical_query(question)
 
 
 def result_key(workspace_id: str, knowledge_revision: int, question: str) -> str:
@@ -658,6 +687,9 @@ def build_web_subtask(
         depends_on=[parent.task_id],
         expected_evidence=TASK_SOURCES[TaskSource.WEB][1],
         status=TaskStatus.QUEUED,
+        query_identity=query_plan.stable_query_identity(
+            question, source_kind=TaskSource.WEB.value
+        ).key,
     )
 
 
@@ -668,6 +700,13 @@ def _sources_for(requirement: UserRequirement, decision: RouteDecision | None) -
     internal = any(marker in text for marker in _INTERNAL_MARKERS)
     freshness = any(marker in text for marker in _FRESHNESS_MARKERS)
     general = any(marker in text for marker in _GENERAL_MARKERS)
+    explicit_general = "通用知识" in text
+
+    if decision is not None and decision.needs_history and not (decision.needs_knowledge or decision.needs_web):
+        return [TaskSource.HISTORY]
+
+    if explicit_general and not internal and not freshness:
+        return [TaskSource.GENERAL]
 
     if decision is None:
         sources: list[TaskSource] = []
@@ -694,7 +733,7 @@ def _sources_for(requirement: UserRequirement, decision: RouteDecision | None) -
         sources.append(TaskSource.HISTORY)
     if decision.needs_web:
         sources.append(TaskSource.WEB)
-    if decision.needs_general:
+    if explicit_general or (decision.needs_general and not sources):
         sources.append(TaskSource.GENERAL)
     if not sources and decision.intent.value != "clarification":
         # 路由没有给出明确来源（例如纯 product 之外的 intent）：按文本线索兜底，
@@ -710,16 +749,24 @@ def _task_id(requirement_id: str, source: TaskSource) -> str:
 def _build_tasks(
     requirements: Sequence[UserRequirement],
     decision: RouteDecision | None,
-) -> tuple[list[ResearchTask], list[str]]:
-    """按「要求 × 来源」建任务；相同查询目标去重后合并要求（PRD 6.4）。"""
+) -> tuple[list[ResearchTask], list[str], dict[str, TaskSource]]:
+    """按「要求 × 来源」建任务；相同查询目标去重后合并要求（PRD 6.4）。
+
+    返回 ``(任务, notes, 任务 → 来源)``：来源映射供 :func:`_apply_retrieval_queries`
+    把「每条用户要求一个检索任务」替换成「按整理后的查询执行」。
+    """
 
     notes: list[str] = []
     grouped: dict[tuple[str, TaskSource], ResearchTask] = {}
-    requires_knowledge: dict[str, str] = {}
+    sources_by_task: dict[str, TaskSource] = {}
     for requirement in requirements:
         sources = _sources_for(requirement, decision)
         for source in sources:
-            key = (_canonical_question(requirement.text), source)
+            key = (
+                "shared" if source in {TaskSource.GENERAL, TaskSource.HISTORY}
+                else _canonical_question(requirement.text),
+                source,
+            )
             agent_kind, expected = TASK_SOURCES[source]
             existing = grouped.get(key)
             if existing is not None:
@@ -740,28 +787,155 @@ def _build_tasks(
                 depends_on=[],
                 expected_evidence=expected,
                 status=TaskStatus.QUEUED,
+                query_identity=query_plan.stable_query_identity(
+                    requirement.text, source_kind=source.value
+                ).key,
             )
-            if source is TaskSource.KNOWLEDGE:
-                requires_knowledge[requirement.requirement_id] = grouped[key].task_id
+            sources_by_task[grouped[key].task_id] = source
 
     tasks = list(grouped.values())
-    # 结合类要求（PRD 6.3 R6 / A03）：通用解释在同一要求内部依据之后启动。
-    for requirement in requirements:
-        if not any(marker in requirement.text for marker in COMBINE_MARKERS):
+    for task in tasks:
+        if task.agent_kind is AgentKind.GENERAL:
+            task.question = "；".join(item.text for item in requirements if item.requirement_id in task.requirement_ids)
+    research_ids = [task.task_id for task in tasks if task.agent_kind is not AgentKind.GENERAL]
+    for task in tasks:
+        if task.agent_kind is AgentKind.GENERAL:
+            task.depends_on = list(research_ids)
+    return tasks, notes, sources_by_task
+
+
+def _apply_retrieval_queries(
+    tasks: Sequence[ResearchTask],
+    sources_by_task: Mapping[str, TaskSource],
+    queries: Sequence[str],
+    notes: list[str],
+    *,
+    context_text: str = "",
+) -> list[ResearchTask]:
+    """把「每条用户要求一个检索任务」替换成「按整理后的查询执行」（PRD 7.2 第 1 步）。
+
+    用户实测缺陷（C02/C03）：一个问题被句末标点切成两句时，第二句会变成**独立检索
+    查询**（「有哪些维度值得考虑」「类似 OpenClaw 的那种方案」），既丢研究对象又与
+    第一句意图重复。整理后的查询（见 :mod:`app.agent.query_plan`）已经把补充句合并、
+    把研究对象与关注主题都带上，因此这里按整理结果重建知识 / 联网任务：
+
+    - **一项要求仍会被覆盖**：每个新任务承接原任务的全部 ``requirement_ids``；
+    - **依赖关系不丢**：原任务被替换时，指向它的 ``depends_on`` 重定向到**仍然存在**的
+      新任务（见 :func:`_replacement_target`）——包括「后续旧任务被合并成空列表」的情况
+      （用户实测缺陷 F01：``t-r2-general`` 依赖被删掉的 ``t-r2-knowledge``，整轮
+      ``PlanValidationError`` 失败）；
+    - 查询条数为 0 或来源不变时，任务保持原样（不改既有行为）。
+    """
+
+    active = [str(query) for query in queries if str(query or "").strip()]
+    if not active:
+        return list(tasks)
+    replaced: dict[str, list[ResearchTask]] = {}
+    for source, cap in ((TaskSource.KNOWLEDGE, MAX_QUERY_TASKS), (TaskSource.WEB, MAX_WEB_QUERY_TASKS), (TaskSource.HISTORY, MAX_QUERY_TASKS)):
+        origin = [task for task in tasks if sources_by_task.get(task.task_id) is source]
+        if not origin:
             continue
-        knowledge_task_id = requires_knowledge.get(requirement.requirement_id)
-        general_task_id = _task_id(requirement.requirement_id, TaskSource.GENERAL)
-        general_task = next((task for task in tasks if task.task_id == general_task_id), None)
-        if (
-            knowledge_task_id
-            and general_task is not None
-            and knowledge_task_id not in general_task.depends_on
-        ):
-            general_task.depends_on = [*general_task.depends_on, knowledge_task_id]
-            notes.append(
-                f"任务 {general_task.task_id} 依赖 {knowledge_task_id}（先内部资料后通用解释）"
+        requirement_ids: list[str] = []
+        for task in origin:
+            requirement_ids.extend(
+                item for item in task.requirement_ids if item not in requirement_ids
             )
-    return tasks, notes
+        agent_kind, expected = TASK_SOURCES[source]
+        if source is TaskSource.HISTORY:
+            source_queries, reuse_notes = list(dict.fromkeys(active)), []
+        else:
+            source_queries, reuse_notes = query_plan.merge_semantic_queries(
+                active, source_kind=source.value, context_text=context_text
+            )
+        notes.extend(reuse_notes)
+        created = [
+            ResearchTask(
+                task_id=f"t-q{index}-{source.value}",
+                question=query,
+                scoped_query=True,
+                requirement_ids=list(requirement_ids),
+                agent_kind=agent_kind,
+                depends_on=[],
+                expected_evidence=expected,
+                status=TaskStatus.QUEUED,
+                query_identity=query_plan.stable_query_identity(
+                    query, source_kind=source.value, context_text=context_text
+                ).key,
+                query_reuse_reason="；".join(
+                    note for note in reuse_notes if f"「{query}」" in note
+                ),
+            )
+            for index, query in enumerate(source_queries[:cap], 1)
+        ]
+        if not created:
+            continue
+        replaced[origin[0].task_id] = created
+        for task in origin[1:]:
+            replaced[task.task_id] = []
+        notes.append(
+            f"{source.value} 检索按整理后的 {len(created)} 条查询执行"
+            f"（原 {len(origin)} 个按句切分的查询已合并）"
+        )
+
+    if not replaced:
+        return list(tasks)
+    kept: list[ResearchTask] = []
+    seen: set[str] = set()
+    for task in tasks:
+        if task.task_id not in replaced:
+            kept.append(task)
+            continue
+        for created in replaced[task.task_id]:
+            if created.task_id in seen:
+                continue
+            seen.add(created.task_id)
+            kept.append(created)
+    # 依赖重定向：**每个**被替换掉的旧任务都必须映射到一个仍然存在的新任务。
+    # 旧实现只给「拿到新查询的第一项旧任务」登记目标，后续旧任务（``created`` 为空列表）
+    # 没有目标，于是依赖它们的任务保留了一个已被删除的任务 ID，校验随即整轮失败。
+    redirect: dict[str, str] = {}
+    for task_id, created in replaced.items():
+        target = _replacement_target(task_id, replaced=replaced)
+        if target:
+            redirect[task_id] = target
+    kept_ids = {task.task_id for task in kept}
+    for task in kept:
+        if not task.depends_on:
+            continue
+        rewritten: list[str] = []
+        for dependency in task.depends_on:
+            target = redirect.get(dependency, dependency)
+            if target not in kept_ids:
+                # 新查询任务已被裁剪（例如同一来源的前缀重复）：退化为「不依赖」，
+                # 绝不留一个不存在的依赖让计划失败。
+                notes.append(
+                    f"任务 {task.task_id} 的依赖 {dependency} 在合并检索查询后已不存在，已解除"
+                )
+                continue
+            if target not in rewritten:
+                rewritten.append(target)
+        task.depends_on = rewritten
+    return kept
+
+
+def _replacement_target(
+    task_id: str, *, replaced: Mapping[str, list[ResearchTask]]
+) -> str:
+    """被替换的旧检索任务 -> 承接它的新查询任务 ID（没有则返回空串）。
+
+    同一来源的多个旧任务被**一组**新查询任务整体替换：
+    ``replaced`` 里只有第一项旧任务拿到新任务列表，其余旧任务对应空列表。对后者，
+    在本来源的新任务里挑一个目标 —— 依赖方只需要「等这组检索做完」，因此取本组
+    最后一个新任务（它的证据最全），保证依赖语义（先拿到资料再解释）不被削弱。
+    """
+
+    created = replaced.get(task_id) or []
+    if created:
+        return created[-1].task_id
+    for candidates in replaced.values():
+        if candidates:
+            return candidates[-1].task_id
+    return ""
 
 
 def build_plan(
@@ -774,6 +948,7 @@ def build_plan(
     workspace_id: str = "",
     knowledge_revision: int = 0,
     settings: PlanSettings | None = None,
+    retrieval_queries: Sequence[str] | None = None,
 ) -> Plan:
     """由已理解的问题生成 ``Plan``（PRD 6.4）。
 
@@ -781,6 +956,9 @@ def build_plan(
     的完成声明直接抛 :class:`PlanValidationError`；模型漏掉的要求由程序按来源补任务
     （并在 ``notes`` 记录），因此「每项要求映射到至少一个任务」不依赖模型自觉。
     ``existing_results`` 是 :class:`TaskResultCache` 的映射：命中即复用结果（``result_ref``）。
+
+    ``retrieval_queries`` 是**整理后的检索查询**（:mod:`app.agent.query_plan` 的产物）：
+    给定时知识 / 联网任务按这些查询重建，避免把同一问题的补充句当成独立查询去检索。
     """
 
     active_settings = settings or PlanSettings()
@@ -791,7 +969,15 @@ def build_plan(
     validate_requirement_quotes(active_requirements, text)
     long_input = is_long_input(text)
 
-    rule_tasks, notes = _build_tasks(active_requirements, decision)
+    rule_tasks, notes, sources_by_task = _build_tasks(active_requirements, decision)
+    if retrieval_queries is not None:
+        rule_tasks = _apply_retrieval_queries(
+            rule_tasks,
+            sources_by_task,
+            retrieval_queries,
+            notes,
+            context_text=text,
+        )
     tasks: list[ResearchTask] = []
     model_covered: set[str] = set()
     if proposed_tasks:
@@ -823,6 +1009,11 @@ def build_plan(
             )
             continue
         tasks.append(task)
+
+    research_ids = [task.task_id for task in tasks if task.agent_kind is not AgentKind.GENERAL]
+    for task in tasks:
+        if task.agent_kind is AgentKind.GENERAL:
+            task.depends_on = list(dict.fromkeys([*task.depends_on, *research_ids]))
 
     clarification: ClarificationRecord | None = None
     clarify_intent = decision is not None and decision.intent.value == "clarification"
@@ -891,6 +1082,7 @@ class PlannerAgent:
         *,
         requirements: Sequence[UserRequirement] | None = None,
         proposed_tasks: Sequence[ResearchTask] | None = None,
+        retrieval_queries: Sequence[str] | None = None,
     ) -> Plan:
         """生成并校验计划（不合法直接抛 :class:`PlanValidationError`）。"""
 
@@ -903,6 +1095,7 @@ class PlannerAgent:
             workspace_id=self.workspace_id,
             knowledge_revision=self.knowledge_revision,
             settings=self.settings,
+            retrieval_queries=retrieval_queries,
         )
 
     def ready(self, plan: Plan, completed: Iterable[str]) -> list[ResearchTask]:

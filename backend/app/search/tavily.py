@@ -149,7 +149,7 @@ class TavilySearchProvider:
             payload["query"] = query
 
         data = await self._post_json("/extract", payload, method="web_extract", what="网页读取")
-        pages = tuple(_to_page(item) for item in _dict_items(data.get("results")))
+        pages = tuple(_to_page(item, focused=bool(query)) for item in _dict_items(data.get("results")))
         failed = tuple(_to_failure(item) for item in _dict_items(data.get("failed_results")))
         return ExtractResponse(
             request_id=str(data.get("request_id") or ""),
@@ -223,7 +223,7 @@ def _to_result(item: dict[str, Any]) -> SearchResult:
     )
 
 
-def _to_page(item: dict[str, Any]) -> ExtractedPage:
+def _to_page(item: dict[str, Any], *, focused: bool = False) -> ExtractedPage:
     content = str(item.get("raw_content") or "")
     return ExtractedPage(
         url=str(item.get("url") or ""),
@@ -232,7 +232,7 @@ def _to_page(item: dict[str, Any]) -> ExtractedPage:
         published_at=str(item.get("published_date") or ""),
         content=content,
         # 提供商明确截断或返回空正文时标记不完整（PRD 7.3 末段）。
-        content_complete=not bool(item.get("truncated")) and bool(content),
+        content_complete=not focused and not bool(item.get("truncated")) and bool(content),
     )
 
 

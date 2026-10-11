@@ -7,6 +7,9 @@
 - rerank：资料相关性筛选（PRD §6.5）。旧配置缺少该段 -> 读为未启用，下次合法保存写入；
   启用校验读取本地校准档案（data_dir/rerank-profiles.json），生产只接受 validated 档案。
 - 旧 system_prompt 首次读取时迁移为只读备份，永远不再参与模型 system 消息。
+- providers / model_selection（多供应商模型选择，见 ``core/model_providers.py``）：
+  ``chat`` 仍是**运行期唯一权威**；保存时由选择推导 ``chat``，所以问答链路无需改动。
+  旧配置只有单段 ``chat`` 时，首次读取把它迁移成一条供应商 + 选择（不丢配置）。
 API key 存 SecretStr：API 响应只回显「是否已设置 + 尾4位」，绝不回显明文。
 config.json 落在 data_dir（gitignored，类似 .env），明文仅存本地。
 """
@@ -27,6 +30,12 @@ from urllib.parse import urlsplit
 from pydantic import BaseModel, Field, SecretStr, model_validator
 
 from app.core.config import get_settings
+from app.core.model_providers import (
+    ModelProvider,
+    ModelSelection,
+    chat_config_for,
+    provider_from_legacy_chat,
+)
 from app.generation.prompt_policy import AnswerPreferences
 from app.retrieval.rerank_provider import DEFAULT_ENDPOINT, validate_endpoint
 from app.retrieval.reranker import (
@@ -141,7 +150,15 @@ class AppSettings(BaseModel):
     vision: VisionModelConfig = Field(default_factory=VisionModelConfig)
     search: SearchConfig = Field(default_factory=SearchConfig)
     rerank: RerankConfig = Field(default_factory=RerankConfig)
+    memory_enabled: bool = True
     answer_preferences: AnswerPreferences = Field(default_factory=AnswerPreferences)
+    #: 对话模型供应商注册表（设置页「模型」；可配置多个，按供应商分组）。
+    providers: list[ModelProvider] = Field(default_factory=list)
+    #: 当前选中的「供应商 + 模型」；None = 未选择（此时 ``chat`` 保持原值不动）。
+    model_selection: ModelSelection | None = None
+    #: 工作区默认思考档位对账版本（``core/reasoning_defaults.py`` 的一次性迁移标记）。
+    #: 0 = 尚未对账；标记与 app.db 同处一个数据目录，因此只对该数据目录生效。
+    workspace_reasoning_preferences_version: int = 0
     # 只用于保留历史配置，API 不暴露也不允许修改，ChatService 永远不读取。
     legacy_system_prompt_backup: str | None = None
     avatars: AvatarConfig = Field(default_factory=AvatarConfig)
@@ -179,7 +196,12 @@ class SettingsStore:
         return self._env_defaults()
 
     def save(self, settings: AppSettings) -> None:
-        """原子写入 config.json（先写 .tmp 再 os.replace）。"""
+        """原子写入 config.json（先写 .tmp 再 os.replace）。
+
+        写盘前先把「当前选择」推导成 ``chat``：这样 ``chat`` 永远与选择一致，
+        运行期（问答管线 / ``/api/status`` / 标题生成）继续只读 ``chat`` 即可。
+        """
+        settings = with_resolved_chat(settings)
         self._path.parent.mkdir(parents=True, exist_ok=True)
         payload = {
             "schema_version": CONFIG_SCHEMA_VERSION,
@@ -188,6 +210,13 @@ class SettingsStore:
             "vision": _vision_to_json(settings.vision),
             "search": _search_to_json(settings.search),
             "rerank": _rerank_to_json(settings.rerank),
+            "providers": _providers_to_json(settings.providers),
+            "model_selection": (
+                None
+                if settings.model_selection is None
+                else settings.model_selection.model_dump()
+            ),
+            "memory_enabled": settings.memory_enabled,
             "answer_preferences": settings.answer_preferences.model_dump(),
             "avatars": {
                 "user": settings.avatars.user,
@@ -197,9 +226,26 @@ class SettingsStore:
         }
         if settings.legacy_system_prompt_backup is not None:
             payload["legacy_system_prompt_backup"] = settings.legacy_system_prompt_backup
+        if settings.workspace_reasoning_preferences_version:
+            # 只在非 0（真的对过账）时落盘：旧配置保持字节稳定，不在读取时被改写。
+            payload["workspace_reasoning_preferences_version"] = (
+                settings.workspace_reasoning_preferences_version
+            )
         tmp = self._path.with_suffix(".json.tmp")
         tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
         os.replace(tmp, self._path)
+
+    def mark_workspace_reasoning_preferences_reconciled(self, version: int) -> None:
+        """记录「工作区默认档位已对账到第 N 版」（一次性迁移的完成标记）。
+
+        写入走 :meth:`save` 全量落盘（与设置页保存同一路径），因此不会与其它字段冲突。
+        """
+
+        current = self.load()
+        if current.workspace_reasoning_preferences_version >= version:
+            return
+        current.workspace_reasoning_preferences_version = version
+        self.save(current)
 
     def _read_file(self) -> AppSettings | None:
         if not self._path.is_file():
@@ -213,6 +259,7 @@ class SettingsStore:
 
         # v1 -> v2：旧任意 system_prompt 只做审计备份，不再有任何执行路径。
         migrated = False
+        legacy_providers = False
         if "system_prompt" in raw:
             legacy = raw.pop("system_prompt")
             if "legacy_system_prompt_backup" not in raw and isinstance(legacy, str):
@@ -224,23 +271,39 @@ class SettingsStore:
         if "answer_preferences" not in raw:
             raw["answer_preferences"] = AnswerPreferences().model_dump()
             migrated = True
+        if "providers" not in raw:
+            # 单段 chat 时代的配置 -> 内存里投影成一条供应商 + 选择（推导出的 chat 与原来一致）。
+            # **刻意不在读取时改写文件**：读取保持无副作用，等下一次合法保存再落盘新形态
+            # （与 rerank 缺段时的既有口径一致，见 test_settings_store）。
+            legacy_providers = True
 
         try:
             loaded = AppSettings.model_validate(raw)
         except (TypeError, ValueError):
             return None
+        if legacy_providers:
+            providers, selection = _legacy_providers_and_selection(loaded.chat)
+            loaded = loaded.model_copy(
+                update={"providers": providers, "model_selection": selection}
+            )
+        loaded = with_resolved_chat(loaded)
         if migrated:
             self.save(loaded)
         return loaded
 
     def _env_defaults(self) -> AppSettings:
         env = get_settings()
+        chat = ChatModelConfig(
+            base_url=env.chat_base_url,
+            model=env.chat_model,
+            api_key=env.chat_api_key,
+        )
+        # env 里配好的模型同样投影成一条供应商 + 选择：设置页不该出现「空白但问答能用」。
+        providers, selection = _legacy_providers_and_selection(chat)
         return AppSettings(
-            chat=ChatModelConfig(
-                base_url=env.chat_base_url,
-                model=env.chat_model,
-                api_key=env.chat_api_key,
-            ),
+            chat=chat,
+            providers=providers,
+            model_selection=selection,
             embed=EmbedModelConfig(
                 mode="cloud",
                 base_url=env.embed_base_url,
@@ -260,6 +323,48 @@ class SettingsStore:
                 max_results=env.search_max_results,
             ),
         )
+
+
+def with_resolved_chat(settings: AppSettings) -> AppSettings:
+    """把当前选择推导成 ``chat``；选择无效/未选择时原样返回。
+
+    这是「选择 -> 生效模型」的**唯一**收口：``chat`` 因此永远等于用户选中的那个模型，
+    问答管线、``/api/status``、标题生成继续只读 ``chat``，不需要知道选择的存在。
+    """
+
+    config = chat_config_for(settings.providers, settings.model_selection)
+    if config is None:
+        return settings
+    return settings.model_copy(update={"chat": config})
+
+
+def _legacy_providers_and_selection(chat: ChatModelConfig) -> tuple[list[ModelProvider], ModelSelection | None]:
+    """旧单段 ``chat``（或 env 兜底）→ 供应商列表 + 选择。"""
+
+    provider, selection = provider_from_legacy_chat(chat)
+    return ([provider] if provider is not None else []), selection
+
+
+def _providers_to_json(providers: list[ModelProvider]) -> list[dict]:
+    """供应商落盘形态（与 config.json 其它段一致：明文密钥仅存本地）。"""
+
+    return [
+        {
+            "id": provider.id,
+            "name": provider.name,
+            "kind": provider.kind,
+            "protocol": provider.protocol,
+            "base_url": provider.base_url,
+            "api_key": (
+                provider.api_key.get_secret_value() if provider.api_key is not None else None
+            ),
+            "models": [
+                {"id": entry.id, "name": entry.name, "vision": entry.vision}
+                for entry in provider.models
+            ],
+        }
+        for provider in providers
+    ]
 
 
 def _chat_to_json(chat: ChatModelConfig) -> dict:

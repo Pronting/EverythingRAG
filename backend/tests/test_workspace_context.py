@@ -80,26 +80,31 @@ def test_view_defaults_come_from_the_workspace_record(tmp_path: Path) -> None:
     workspace = store.create("研究")
     factory = WorkspaceContextFactory(tmp_path, store)
     view = factory.view_for(workspace.id)
-    # PRD 18.1 默认值：ask / high / 记忆开启
+    # PRD 18.1 默认值：ask / off / 记忆开启
     assert view.default_permission_mode.value == "ask"
-    assert view.default_reasoning_level.value == "high"
+    assert view.default_reasoning_level.value == "off"
     assert view.memory_enabled is True
     assert view.root_dir == tmp_path / "workspaces" / workspace.storage_key
 
 
-def test_vector_handle_cache_key_covers_all_three_components() -> None:
+def test_vector_handle_cache_key_covers_data_dir_provider_and_collection() -> None:
+    """D-KB：句柄键 = 共享数据根 + Provider 摘要 + collection 身份（**不含**工作区）。"""
+
     base = vector_handle_cache_key(
-        workspace_id="a", provider_digest="p1", collection_identity="chunks__m__v7"
-    )
-    # PRD 5.3.3：三项任一变化都必须换键，否则会跨区/跨凭证/跨入库版本串读
-    assert base != vector_handle_cache_key(
-        workspace_id="b", provider_digest="p1", collection_identity="chunks__m__v7"
+        data_dir="/data/a", provider_digest="p1", collection_identity="chunks__m__v7"
     )
     assert base != vector_handle_cache_key(
-        workspace_id="a", provider_digest="p2", collection_identity="chunks__m__v7"
+        data_dir="/data/b", provider_digest="p1", collection_identity="chunks__m__v7"
     )
     assert base != vector_handle_cache_key(
-        workspace_id="a", provider_digest="p1", collection_identity="chunks__m__v6"
+        data_dir="/data/a", provider_digest="p2", collection_identity="chunks__m__v7"
+    )
+    assert base != vector_handle_cache_key(
+        data_dir="/data/a", provider_digest="p1", collection_identity="chunks__m__v6"
+    )
+    # 知识库全局共享：同一份语料只应有一个句柄键，绝不因工作区不同而分叉
+    assert base == vector_handle_cache_key(
+        data_dir="/data/a", provider_digest="p1", collection_identity="chunks__m__v7"
     )
 
 

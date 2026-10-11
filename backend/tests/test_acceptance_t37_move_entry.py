@@ -145,7 +145,7 @@ def _force_divergence(harness: MoveHarness) -> None:
     """只改**存档**归属（复现 t35 之前的旧旁路行为），app.db 一动不动。"""
 
     _archive_store().move_in_sidebar(
-        harness.conversation, workspace_id=harness.second_workspace, target_index=0
+        harness.conversation, workspace_id=harness.second_workspace
     )
 
 
@@ -282,40 +282,40 @@ async def test_same_area_ordering_touches_nothing_authoritative(harness: MoveHar
     before = await harness.store.get_conversation(harness.conversation)
 
     response = await harness.client.post(
-        harness.drag_url, json={"workspace_id": harness.first_workspace, "target_index": 0}
+        harness.drag_url, json={"workspace_id": harness.first_workspace}
     )
     assert response.status_code == 200, response.text
-    assert "steps" not in response.json(), "同区排序不是移动，不得出现状态机步骤"
+    assert "steps" not in response.json(), "同区拖拽不是移动，不得出现状态机步骤"
 
-    # 只带 target_index（缺 workspace_id）也按同区处理
-    reordered = await harness.client.post(harness.drag_url, json={"target_index": 0})
+    # 只带落点工作区（缺 target_index —— 该字段已于 2026-09-22 移除）也按同区处理
+    reordered = await harness.client.post(harness.drag_url, json={})
     assert reordered.status_code == 200, reordered.text
     assert "steps" not in reordered.json()
 
     after = await harness.store.get_conversation(harness.conversation)
     assert after.workspace_id == harness.first_workspace
-    assert after.context_epoch == before.context_epoch, "同区排序不得递增 context_epoch"
-    assert after.updated_at == before.updated_at, "同区排序不得写权威行"
+    assert after.context_epoch == before.context_epoch, "同区拖拽不得递增 context_epoch"
+    assert after.updated_at == before.updated_at, "同区拖拽不得写权威行"
     assert _archive_workspace(harness) == harness.first_workspace
     assert await _diverged(harness) is False
 
 
 async def test_diverged_state_same_area_drag_heals_the_archive(harness: MoveHarness) -> None:
-    """**实现方未覆盖的角度**：分叉时拖到「app.db 当前所属区」按同区排序，并把存档拉回权威区。"""
+    """**实现方未覆盖的角度**：分叉时拖到「app.db 当前所属区」按同区处理，并把存档拉回权威区。"""
 
     _force_divergence(harness)
     assert await _diverged(harness) is True
     before = await harness.store.get_conversation(harness.conversation)
 
     response = await harness.client.post(
-        harness.drag_url, json={"workspace_id": harness.first_workspace, "target_index": 0}
+        harness.drag_url, json={"workspace_id": harness.first_workspace}
     )
     assert response.status_code == 200, response.text
     assert "steps" not in response.json()
 
     after = await harness.store.get_conversation(harness.conversation)
-    assert after.context_epoch == before.context_epoch, "同区排序不得递增 epoch"
-    assert after.updated_at == before.updated_at, "同区排序不得写权威行"
+    assert after.context_epoch == before.context_epoch, "同区拖拽不得递增 epoch"
+    assert after.updated_at == before.updated_at, "同区拖拽不得写权威行"
     assert _archive_workspace(harness) == harness.first_workspace, "存档应被拉回权威区"
     assert await _diverged(harness) is False
 
@@ -370,9 +370,7 @@ async def test_probe_is_non_vacuous_when_cross_area_entry_is_the_legacy_bypass(
     async def legacy_bypass(**kwargs: Any) -> dict[str, Any]:
         store = kwargs["store"]
         target = str(kwargs["target_workspace_id"])
-        moved = store.move_in_sidebar(
-            kwargs["conversation_id"], workspace_id=target, target_index=0
-        )
+        moved = store.move_in_sidebar(kwargs["conversation_id"], workspace_id=target)
         assert moved is not None
         return {"id": moved.id, "workspace_id": target}
 
@@ -469,8 +467,8 @@ def test_move_request_models_accept_the_prd_13_2_fields() -> None:
         properties = _request_model(operation)["properties"]
         assert "confirm" in properties, properties
         assert "expected_context_epoch" in properties, properties
-    # 拖拽入口还必须有落点位次（同区排序语义不变）
-    assert "target_index" in _request_model(move_schema)["properties"]
+    # 2026-09-22（需求 2）：侧边栏恒为「最近活动优先」，拖拽入口不再有落点位次
+    assert "target_index" not in _request_model(move_schema)["properties"]
 
 
 def test_single_state_machine_call_site_and_authoritative_read() -> None:

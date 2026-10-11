@@ -1,11 +1,13 @@
 """知识目录接口：返回从当前向量库元数据确定性聚合的安全概览。
 
-V1.2.0 工作区隔离（T01）：本模块的全部端点都按 ``workspace_id``（查询参数）解析
-**本区**上下文（PRD 5.1 / 5.3.5）。
+D-KB（全局共享知识库）：知识只有一份，本模块的端点仍按 ``workspace_id``（查询参数）
+解析并**校验归属**（未知工作区一律 404），但解析出的向量库 / 状态库 / 图片库是
+**所有工作区共享**的那一份 —— 因此「概览 / 清空 / 原图 / 任务查询」在各区看到的结果
+相同；工作区参数的作用收敛为「归属校验 + 审计归属」。
 
-- 概览与清空只作用于本区向量库、本区状态库、本区图片库；
-- 原图与图片任务 ID 同时校验「工作区 + 图片/任务身份」：拿别的区的图片 hash 或任务
-  ID 来查一律 404（A07），而不是把别的区的资料答出去。
+- 概览与清空作用于共享向量库、共享状态库、共享图片库（清空后**所有**工作区的
+  知识版本一起递增，见 ``deps.knowledge_revision_bumped``）；
+- 原图与图片任务 ID 仍校验格式与存在性：不存在的 hash / 任务 ID 一律 404。
 """
 
 from __future__ import annotations
@@ -41,9 +43,13 @@ def original_image(
     context: WorkspaceContext = Depends(get_workspace_context),  # noqa: B008
     images: ImageStateStore = Depends(get_workspace_image_state_store),  # noqa: B008
 ) -> Response:
-    """返回**本区**原图；跨区 hash 与不存在的 hash 一样得到 404（A07）。"""
+    """返回**共享知识库**里的原图；不存在的 hash 得到 404（D-KB）。
 
-    del context  # 归属校验由依赖完成；这里只需确认用的是本区图片库
+    工作区参数仍用于归属校验（未知工作区 404），但图片库是共享的：同一个 hash
+    在每个工作区都取得到 —— 因为原图属于那份唯一的知识。
+    """
+
+    del context  # 归属校验由依赖完成；图片库是所有工作区共用的那一份
     if not re.fullmatch(r"[a-f0-9]{16,64}", content_hash):
         raise HTTPException(status_code=404, detail="图片不存在")
     data = images.get_image_bytes(content_hash)
@@ -63,9 +69,10 @@ def image_task(
     context: WorkspaceContext = Depends(get_workspace_context),  # noqa: B008
     images: ImageStateStore = Depends(get_workspace_image_state_store),  # noqa: B008
 ) -> dict[str, str]:
-    """返回**本区**图片任务状态；跨区任务 ID 得到 404（A07）。
+    """返回**共享知识库**里的图片任务状态；不存在的任务 ID 得到 404（D-KB）。
 
     只回状态与来源归属，不回文件路径与正文（隐私红线：日志与响应不含路径）。
+    响应里的 ``workspace_id`` 是**本次请求**解析出的工作区（审计归属），不代表任务归属。
     """
 
     status = images.task_status(block_id)
@@ -91,7 +98,11 @@ async def delete_knowledge(
     images: ImageStateStore = Depends(get_workspace_image_state_store),  # noqa: B008
     tasks: ImportTaskStore = Depends(get_import_task_store),  # noqa: B008
 ) -> dict[str, int]:
-    """清空**本区**索引与来源登记；保留源文件与对话，其它工作区不受影响（PRD 5.4）。"""
+    """清空**共享知识库**的索引与来源登记；保留源文件与对话（D-KB）。
+
+    知识库只有一份，因此本操作对**所有**工作区生效（清空后各区的知识版本一起递增）；
+    工作区参数只用于归属校验。
+    """
 
     if tasks.has_running() or images.count_status().get("pending", 0) > 0:
         raise HTTPException(status_code=409, detail="导入、同步或图片识别仍在进行，请完成后再删除")
@@ -101,7 +112,8 @@ async def delete_knowledge(
     state.clear()
     images.clear()
     tasks.clear()
-    # PRD 5.3.6：删除**提交成功后**递增本区知识版本，使下一次工具调用读到更新后的索引
-    # （缓存键含 knowledge_revision）。响应体保持原样，不因内部版本变化改契约。
+    # PRD 5.3.6（D-KB 口径）：删除**提交成功后**递增知识版本，使下一次工具调用读到
+    # 更新后的索引（缓存键含 knowledge_revision）；共享知识 ⇒ **所有**工作区的版本
+    # 一起递增（见 deps.knowledge_revision_bumped）。响应体保持原样，不改契约。
     await knowledge_revision_bumped(context.workspace_id)
     return {"deleted_chunks": len(blocks)}

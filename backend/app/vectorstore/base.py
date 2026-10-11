@@ -51,6 +51,9 @@ class VectorStore(Protocol):
         """
         ...
 
+    def update_metadata(self, records: list[tuple[str, dict[str, Any]]]) -> None:
+        ...
+
     def query(
         self,
         vector: list[float],

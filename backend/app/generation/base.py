@@ -166,6 +166,7 @@ class ModelResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     content: str = ""
+    usage_available: bool = False
     reasoning_content: str = ""
     tool_calls: list[ToolCall] = Field(default_factory=list)
     finish_reason: str | None = None

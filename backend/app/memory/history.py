@@ -486,39 +486,78 @@ class WorkspaceHistoryIndex:
         不让索引无限膨胀。
         """
 
-        conn = self._store.connection
-        cursor = await conn.execute(
-            "DELETE FROM history_fts WHERE message_id NOT IN (SELECT id FROM messages)"
-        )
-        removed = int(cursor.rowcount or 0)
-        await cursor.close()
-        return removed
+        async with self._store.connection_scope() as conn:
+            async with conn.execute(
+                "DELETE FROM history_fts WHERE message_id NOT IN (SELECT id FROM messages)"
+            ) as cursor:
+                return int(cursor.rowcount or 0)
 
     async def rebuild(self) -> dict[str, int]:
         """按 ``messages`` 重建**本区**文本索引（原文是唯一权威源）。"""
 
-        conversations = await self._store.list_conversations(
-            self._workspace_id, include_archived=True
-        )
         indexed = 0
-        for conversation in conversations:
-            for message in await self._store.list_messages(conversation.id):
-                await self.index_message(
-                    message_id=message.id,
-                    conversation_id=conversation.id,
-                    content=message.content,
-                )
-                indexed += 1
+        async with self._store.transaction() as conn:
+            async with conn.execute(
+                "DELETE FROM history_fts WHERE workspace_id = ?", (self._workspace_id,)
+            ):
+                pass
+            conversations = await self._store.list_conversations(
+                self._workspace_id, include_archived=True
+            )
+            for conversation in conversations:
+                for message in await self._store.list_messages(conversation.id):
+                    await self.index_message(
+                        message_id=message.id,
+                        conversation_id=conversation.id,
+                        content=message.content,
+                    )
+                    indexed += 1
         self.write_marker(indexed=indexed)
         return {"indexed": indexed}
 
     async def ensure_fresh(self) -> dict[str, int]:
         """指纹变化（或从未建过）时重建本区索引；否则不做事。"""
 
-        if not self.needs_rebuild():
+        if not self.needs_rebuild() and not await self._has_index_difference():
             return {"indexed": 0, "rebuilt": 0}
         result = await self.rebuild()
         return {"indexed": result["indexed"], "rebuilt": 1}
+
+    async def _has_index_difference(self) -> bool:
+        async with self._store.connection_scope() as conn:
+            return await self._has_index_difference_locked(conn)
+
+    async def _has_index_difference_locked(self, conn: Any) -> bool:
+        async with conn.execute(
+            "SELECT 1 FROM messages m JOIN conversations c ON c.id = m.conversation_id"
+            " WHERE c.workspace_id = ? AND NOT EXISTS"
+            " (SELECT 1 FROM history_fts h WHERE h.message_id = m.id"
+            " AND h.conversation_id = m.conversation_id AND h.workspace_id = ?) LIMIT 1",
+            (self._workspace_id, self._workspace_id),
+        ) as missing:
+            missing_row = await missing.fetchone()
+        if missing_row is not None:
+            return True
+        async with conn.execute(
+            "SELECT 1 FROM history_fts h LEFT JOIN messages m ON m.id = h.message_id"
+            " LEFT JOIN conversations c ON c.id = m.conversation_id"
+            " WHERE h.workspace_id = ? AND"
+            " (m.id IS NULL OR c.workspace_id != ? OR h.conversation_id != m.conversation_id)"
+            " LIMIT 1",
+            (self._workspace_id, self._workspace_id),
+        ) as extra:
+            extra_row = await extra.fetchone()
+        if extra_row is not None:
+            return True
+        async with conn.execute(
+            "SELECT"
+            " (SELECT COUNT(*) FROM history_fts WHERE workspace_id = ?),"
+            " (SELECT COUNT(*) FROM messages m JOIN conversations c"
+            " ON c.id = m.conversation_id WHERE c.workspace_id = ?)",
+            (self._workspace_id, self._workspace_id),
+        ) as counts:
+            indexed_count, message_count = await counts.fetchone()
+        return indexed_count != message_count
 
 
 # ---------------------------------------------------------------------------
@@ -586,6 +625,8 @@ class HistorySearch:
         offset: int = 0,
         date_from: str | None = None,
         date_to: str | None = None,
+        exclude_message_id: str | None = None,
+        distinct_content: bool = False,
     ) -> list[HistoryHit]:
         """按关键词检索本区历史消息，返回**原文**（PRD 11.5：查询结果返回原文）。
 
@@ -606,9 +647,19 @@ class HistorySearch:
             " AND history_fts.workspace_id = ?"
             " AND (? IS NULL OR m.created_at >= ?)"
             " AND (? IS NULL OR m.created_at <= ?)"
-            " ORDER BY score, m.created_at DESC, m.sequence"
-            " LIMIT ? OFFSET ?"
+            " AND (? IS NULL OR m.id != ?)"
         )
+        if distinct_content:
+            sql = (
+                "WITH matches AS MATERIALIZED (" + sql + "), ranked AS ("
+                "SELECT *, ROW_NUMBER() OVER (PARTITION BY role, content, "
+                "CASE WHEN role = 'user' AND sequence = 1 AND LENGTH(content) >= 20 THEN '' ELSE message_id END "
+                "ORDER BY created_at, message_id) AS content_rank "
+                "FROM matches) SELECT * FROM ranked WHERE content_rank = 1 "
+                "ORDER BY score, created_at DESC, sequence LIMIT ? OFFSET ?"
+            )
+        else:
+            sql += " ORDER BY score, m.created_at DESC, m.sequence LIMIT ? OFFSET ?"
         params = (
             expression,
             self._workspace_id,
@@ -616,6 +667,8 @@ class HistorySearch:
             low,
             high,
             high,
+            exclude_message_id,
+            exclude_message_id,
             capped,
             max(0, int(offset)),
         )
@@ -642,6 +695,8 @@ class HistorySearch:
         *,
         date_from: str | None = None,
         date_to: str | None = None,
+        exclude_message_id: str | None = None,
+        distinct_content: bool = False,
     ) -> tuple[int, int]:
         """命中的**真实**条数与会话数 ``(total, conversation_count)``。
 
@@ -659,8 +714,22 @@ class HistorySearch:
             " AND history_fts.workspace_id = ?"
             " AND (? IS NULL OR m.created_at >= ?)"
             " AND (? IS NULL OR m.created_at <= ?)"
+            " AND (? IS NULL OR m.id != ?)"
         )
-        params = (expression, self._workspace_id, low, low, high, high)
+        params = (expression, self._workspace_id, low, low, high, high, exclude_message_id, exclude_message_id)
+        if distinct_content:
+            sql = (
+                "WITH matches AS (SELECT m.conversation_id, m.role, m.content, "
+                "ROW_NUMBER() OVER (PARTITION BY m.role, m.content, "
+                "CASE WHEN m.role = 'user' AND m.sequence = 1 AND LENGTH(m.content) >= 20 THEN '' ELSE m.id END "
+                "ORDER BY m.created_at, m.id) AS content_rank "
+                "FROM history_fts JOIN messages m ON m.id = history_fts.message_id "
+                "WHERE history_fts MATCH ? AND history_fts.workspace_id = ? "
+                "AND (? IS NULL OR m.created_at >= ?) AND (? IS NULL OR m.created_at <= ?) "
+                "AND (? IS NULL OR m.id != ?)) "
+                "SELECT COUNT(*) AS total, COUNT(DISTINCT conversation_id) AS conversations "
+                "FROM matches WHERE content_rank = 1"
+            )
         with self._lock:
             row = self.connection.execute(sql, params).fetchone()
         return int(row["total"]), int(row["conversations"])

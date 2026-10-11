@@ -141,9 +141,16 @@ async def test_general_model_is_wired_and_answers_end_to_end(
 
     # 装配确实把模型传给了 General Agent：模型收到了包含原问题的提示词，且提示词禁止引用编号
     assert fake.calls, "general 路径必须真的调到注入的对话模型"
-    prompt = str(fake.calls[0][0]["content"])
-    assert GENERAL_QUESTION in prompt
-    assert "[S1]" in prompt and "不要输出任何形如" in prompt
+    messages = fake.calls[0]
+    joined = "\n".join(str(message.get("content") or "") for message in messages)
+    assert GENERAL_QUESTION in joined
+    assert "[S1]" in joined and "不要输出任何形如" in joined
+    # 职责与硬性要求放 system 提示，问题另成 user 消息（PRD 9.3 固定顺序）
+    assert messages[0]["role"] == "system"
+    assert any(
+        message["role"] == "user" and GENERAL_QUESTION in str(message["content"])
+        for message in messages
+    )
     # 通用解释的证据不得带文档引用编号（PRD 8.1）
     assert not answer.citations
 
@@ -277,7 +284,10 @@ def test_assembly_seam_census_is_documented() -> None:
     source = inspect.getsource(agent_runtime.default_services)
     # 已接线：general_model 与工具上下文/history_search/redactor 相关缝在装配处出现
     assert "general_model=general_model" in source
-    assert "general_model_for_chat()" in source
+    assert "general_model_for_chat(" in source
+    # 设置页回答偏好（含自定义提示词）也在装配处读到并传入：否则设置页能填、实际不读
+    assert "effective_answer_preferences()" in source
+    assert "preferences=answer_preferences" in source
     # ``tool_context_for`` 负责把 redactor（NameRedactor）与 tool_services 提供的
     # history_search / image_reader / search_provider / extract_provider 塞进 ToolContext
     tool_source = inspect.getsource(agent_runtime.tool_context_for)

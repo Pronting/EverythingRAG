@@ -257,26 +257,26 @@ async def test_drag_epoch_mismatch_leaves_no_partial_move(
 
 
 # =====================================================================
-# 5. 同区拖拽只是排序（不涉及归属，不触发状态机）
+# 5. 同区拖拽只是存档自愈（不涉及归属，不触发状态机）
 # =====================================================================
 
 
 async def test_same_area_drag_is_ordering_only(env: MoveEnv, app_store) -> None:
-    response = await env.client.post(
-        DRAG_URL, json={"workspace_id": OLD_WORKSPACE, "target_index": 0}
-    )
+    response = await env.client.post(DRAG_URL, json={"workspace_id": OLD_WORKSPACE})
     assert response.status_code == 200, response.text
     payload = response.json()
-    assert "steps" not in payload, "同区排序不是跨区移动，不应触发状态机"
+    assert "steps" not in payload, "同区拖拽不是跨区移动，不应触发状态机"
     record = await app_store.get_conversation(CONVERSATION)
     assert record.workspace_id == OLD_WORKSPACE
-    assert record.context_epoch == 1, "同区排序不得递增 context_epoch"
+    assert record.context_epoch == 1, "同区拖拽不得递增 context_epoch"
     assert _sidebar_workspace(env) == OLD_WORKSPACE
     assert await _authority_diverged(env, app_store) is False
 
-    # 缺 target_index 的同区排序（拖到本区任意位置）同样只动存档顺序
+    # 只带 workspace_id 的同区请求（拖到本区任意位置）同样只做存档自愈；
+    # 2026-09-22 起服务端已不接受落点位次（侧边栏恒为最近活动优先）。
     reordered = await env.client.post(DRAG_URL, json={"workspace_id": OLD_WORKSPACE})
     assert reordered.status_code == 200, reordered.text
+    assert "target_index" not in reordered.json()
 
 
 # =====================================================================
@@ -291,7 +291,7 @@ async def test_archive_only_move_is_caught_by_the_consistency_detector(
 
     assert await _authority_diverged(env, app_store) is False
     # 旧行为：只改存档归属（这正是 conversations.py:593 早先做的事）
-    env.conversations.move_in_sidebar(CONVERSATION, workspace_id=NEW_WORKSPACE, target_index=0)
+    env.conversations.move_in_sidebar(CONVERSATION, workspace_id=NEW_WORKSPACE)
     assert await _authority_diverged(env, app_store) is True, (
         "检测器必须能判死「只改存档、app.db 不动」—— 否则第 1/3/4 条用例都是恒真"
     )
@@ -321,9 +321,14 @@ def test_both_entries_share_one_state_machine_implementation() -> None:
     # 整个路由模块里只有这一处调用状态机服务（否则就是第二条旁路）
     module_source = inspect.getsource(conversations_routes)
     assert module_source.count("await move_conversation(") == 1
-    assert module_source.count("store.move_in_sidebar(") == 2, (
-        "只允许两处存档排序调用：同区分支 + 跨区落位（均不含归属变更）"
+    # 存档侧只剩一处调用：同区自愈分支（2026-09-22 起跨区落位不再写位次，因此没有第二处）
+    assert module_source.count("store.move_in_sidebar(") == 1, (
+        "只允许一处存档写入调用：同区自愈分支（不含归属变更、不含排序）"
     )
+
+    # 同区分支只做自愈：不许再传落点位次（该字段已随「最近活动优先」一并移除）
+    assert "target_index" not in conversations_routes.MoveRequest.model_fields
+    assert "store.move_in_sidebar(conversation_id, workspace_id=source)" in module_source
 
 
 async def test_drag_missing_conversation_is_404(env: MoveEnv) -> None:

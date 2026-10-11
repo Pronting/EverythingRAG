@@ -290,6 +290,17 @@ def test_put_theme_saves_and_returns() -> None:
     assert client.get("/api/settings").json()["theme"] == "dark"
 
 
+def test_put_memory_switch_saves_and_returns() -> None:
+    client = _client()
+    assert client.get("/api/settings").json()["memory_enabled"] is True
+
+    response = client.put("/api/settings", json={"memory_enabled": False})
+
+    assert response.status_code == 200
+    assert response.json()["memory_enabled"] is False
+    assert client.get("/api/settings").json()["memory_enabled"] is False
+
+
 # --------------------------------------------------------------------------------------
 # 重排设置（PRD §6.5/§8.1）
 # --------------------------------------------------------------------------------------

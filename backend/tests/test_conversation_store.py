@@ -234,8 +234,12 @@ def test_fork_stays_in_parent_workspace(tmp_path: Path) -> None:
     assert branch.workspace_id == "research"
 
 
-def test_manual_sidebar_order_overrides_recency(tmp_path: Path) -> None:
-    """拖拽排序：手工位次的排在前并按位次，未排过的按更新时间倒序跟在后面。"""
+def test_sidebar_order_is_recency_only(tmp_path: Path) -> None:
+    """侧边栏恒为「最近活动优先」：任何一次活动（含 move_in_sidebar）都把它顶到最前。
+
+    2026-09-22（需求 2）起**没有**「手工拖拽过的排在前」的档位：同一工作区内怎么拖都不会
+    改变显示顺序，否则拖过一次的旧会话会永远压在新会话之上（这正是用户报的缺陷）。
+    """
 
     store = ConversationStore(tmp_path)
     first = _conversation_in(store, "default", "第一条")
@@ -245,13 +249,11 @@ def test_manual_sidebar_order_overrides_recency(tmp_path: Path) -> None:
     # 初始：最近更新的在前
     assert [item["id"] for item in store.list_summaries("default")] == [third, second, first]
 
-    # 把「第一条」拖到最前
-    moved = store.move_in_sidebar(first, target_index=0)
+    # 「第一条」再活动一次（等同同区拖拽 / 收到新消息）⇒ 它排到最前
+    moved = store.move_in_sidebar(first)
     assert moved is not None
-    ordered = [item["id"] for item in store.list_summaries("default")]
-    assert ordered[0] == first
-    # 未排过序的仍按更新时间倒序跟随
-    assert ordered[1:] == [third, second]
+    assert [item["id"] for item in store.list_summaries("default")] == [first, third, second]
+    assert "sort_index" not in store.list_summaries("default")[0]
 
 
 def test_recency_order_is_stable_when_timestamps_tie(
@@ -277,8 +279,9 @@ def test_recency_order_is_stable_when_timestamps_tie(
     # 打平的时间戳下仍须按「最近活动」倒序（第三条最后创建 → 排最前）
     assert [item["id"] for item in store.list_summaries("default")] == [third, second, first]
 
-    # 拖拽后，未排序的两条仍保持同样的相对顺序（不依赖字典迭代顺序）
-    store.move_in_sidebar(first, target_index=0)
+    # 让「第一条」再活动一次（时间戳仍打平）：靠活动序号兜底，它必须排到最前，
+    # 另外两条的相对顺序不许退化成字典迭代顺序
+    store.move_in_sidebar(first)
     ordered = [item["id"] for item in store.list_summaries("default")]
     assert ordered == [first, third, second]
 
@@ -303,19 +306,19 @@ def test_archived_order_is_stable_when_timestamps_tie(
     assert [item["id"] for item in store.list_archived_summaries()] == [third, second, first]
 
 
-def test_move_in_sidebar_reorders_within_workspace(tmp_path: Path) -> None:
+def test_move_in_sidebar_within_workspace_keeps_recency_order(tmp_path: Path) -> None:
+    """同区拖拽不再排序：只会把被拖的那条顶到最前（它刚「活动」过）。"""
+
     store = ConversationStore(tmp_path)
     first = _conversation_in(store, "default", "A")
     second = _conversation_in(store, "default", "B")
     third = _conversation_in(store, "default", "C")
-    # 先把三个都落成手工顺序 A,B,C
-    for index, conv_id in enumerate([first, second, third]):
-        store.move_in_sidebar(conv_id, target_index=index)
-    assert [item["id"] for item in store.list_summaries("default")] == [first, second, third]
+    assert [item["id"] for item in store.list_summaries("default")] == [third, second, first]
 
-    # 把 C 拖到第 0 位
-    store.move_in_sidebar(third, target_index=0)
-    assert [item["id"] for item in store.list_summaries("default")] == [third, first, second]
+    # 拖「A」到本区任意位置：没有位次语义，只剩「刷新了活动时间」这一效果
+    store.move_in_sidebar(third)
+    store.move_in_sidebar(first)
+    assert [item["id"] for item in store.list_summaries("default")] == [first, third, second]
 
 
 def test_move_in_sidebar_moves_to_another_workspace(tmp_path: Path) -> None:
@@ -323,7 +326,7 @@ def test_move_in_sidebar_moves_to_another_workspace(tmp_path: Path) -> None:
     conv_id = _conversation_in(store, "default", "待搬")
     other = _conversation_in(store, "research", "目标区已有")
 
-    moved = store.move_in_sidebar(conv_id, workspace_id="research", target_index=0)
+    moved = store.move_in_sidebar(conv_id, workspace_id="research")
     assert moved is not None
     assert moved.workspace_id == "research"
     assert store.list_summaries("default") == []
@@ -331,17 +334,17 @@ def test_move_in_sidebar_moves_to_another_workspace(tmp_path: Path) -> None:
 
 
 def test_move_in_sidebar_unknown_returns_none(tmp_path: Path) -> None:
-    assert ConversationStore(tmp_path).move_in_sidebar("nope", target_index=0) is None
+    assert ConversationStore(tmp_path).move_in_sidebar("nope") is None
 
 
 def test_move_in_sidebar_order_survives_reload(tmp_path: Path) -> None:
     store = ConversationStore(tmp_path)
     first = _conversation_in(store, "default", "A")
-    second = _conversation_in(store, "default", "B")
-    store.move_in_sidebar(second, target_index=0)
+    _second = _conversation_in(store, "default", "B")
+    store.move_in_sidebar(first)
 
     reloaded = ConversationStore(tmp_path)
-    assert [item["id"] for item in reloaded.list_summaries("default")] == [second, first]
+    assert [item["id"] for item in reloaded.list_summaries("default")] == [first, _second]
 
 
 def test_search_order_is_stable_when_timestamps_tie(

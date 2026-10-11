@@ -40,13 +40,17 @@ import asyncio
 import hashlib
 import inspect
 import json
+import logging
 import re
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from enum import StrEnum
 from pathlib import Path, PurePosixPath
+from time import monotonic
 from typing import Any, Final, Literal
 
+from markdown_it import MarkdownIt
+from openai import APIError, APITimeoutError
 from pydantic import Field, ValidationError
 
 from app.agent.app_store import AppStore, new_id
@@ -61,8 +65,13 @@ from app.agent.contracts import (
     WebReadRange,
     utc_now_iso,
 )
+from app.agent.web_budget import REASON_DUPLICATE
 from app.core.outbound import OutboundClient
-from app.generation.knowledge_catalog import KnowledgeOverview, build_knowledge_overview
+from app.generation.knowledge_catalog import (
+    KnowledgeOverview,
+    _document_id_for,
+    build_knowledge_overview,
+)
 from app.retrieval import rerank_pipeline
 from app.retrieval.query_transform import QueryVariant, build_query_variants
 from app.retrieval.vector_retriever import RetrievalError, RetrievedChunk
@@ -103,6 +112,7 @@ __all__ = [
     "ToolStatus",
     "ToolUnavailableError",
     "VerifyImageParams",
+    "WebBudgetExhaustedError",
     "WebPageEvidence",
     "WebReadRange",
     "WebSearchParams",
@@ -214,6 +224,11 @@ class ToolErrorCode(StrEnum):
     NOT_CONFIGURED = "not_configured"
     SERVICE_ERROR = "service_error"
     INTERNAL = "internal"
+    #: 联网额度不允许 / 已用完（思考等级关闭、用户限定资料范围，或本轮额度耗尽）。
+    #: 这不是「服务坏了」：调用方应改用已有资料回答并如实说明缺口，而不是把 run 判死。
+    WEB_BUDGET_EXHAUSTED = "web_budget_exhausted"
+    #: 同一查询本轮已经执行过（不重复扣减、不重复出网）。
+    WEB_QUERY_DUPLICATE = "web_query_duplicate"
 
 
 class ToolError(Exception):
@@ -261,6 +276,22 @@ class ToolExecutionError(ToolError):
     """执行期错误（服务失败 / 未预期异常），在发生位置抛出（PRD 7.4）。"""
 
     default_code = ToolErrorCode.SERVICE_ERROR
+
+
+class WebBudgetExhaustedError(ToolUnavailableError):
+    """联网额度不允许或已用完（关闭思考 / 限定资料范围 / 本轮额度耗尽）。
+
+    与「服务错误」区分：调用方（Web 研究分支）据此**降级为资料不足**并如实说明，
+    而不是把整个 run 判失败 —— 额度是上限，用完就用已有资料回答。
+    """
+
+    default_code = ToolErrorCode.WEB_BUDGET_EXHAUSTED
+
+
+class WebQueryDuplicateError(WebBudgetExhaustedError):
+    """同一查询本轮已执行过（「防止重复执行相同查询」；不扣额度、不重复出网）。"""
+
+    default_code = ToolErrorCode.WEB_QUERY_DUPLICATE
 
 
 # =====================================================================
@@ -319,6 +350,7 @@ class ReadDocumentParams(ContractModel):
     """``read_document`` 参数：读取指定文档的原文位置。"""
 
     document_id: str = Field(min_length=1, description="lookup_catalog 返回的 document_id。")
+    query: str | None = Field(default=None, description="在全文中定位本次研究关注的正文。")
     heading: str | None = Field(
         default=None,
         description="章节标题片段（大小写不敏感子串匹配）；省略 = 全文按标题顺序拼接。",
@@ -602,6 +634,9 @@ class ToolContext:
     image_reader: Callable[[Any, str], str] | None = None
     search_provider: Any = None
     extract_provider: Any = None
+    #: 本 run **共享**的联网额度账本（:class:`app.agent.web_budget.WebBudgetLedger`）。
+    #: None = 未注入（单测直连路径）：此时不扣减，行为与引入预算前一致。
+    web_budget: Any = None
     run_id: str | None = None
     task_id: str | None = None
     agent_kind: AgentKind | None = None
@@ -772,9 +807,12 @@ class ToolResult:
     artifact_id: str = ""
     artifact_ref: str = ""
     reused: bool = False
+    reuse_reason: str = ""
     error_code: str = ""
     permission_checked: bool = False
     network: bool = False
+    # 仅供本次研究计算原文窗口，不进入事件、模型或持久化负载。
+    read_document_content: str = field(default="", repr=False, compare=False)
 
     def to_payload(self) -> dict[str, Any]:
         """JSON 安全的投影（事件负载 / 模型上下文 / 操作缓存共用同一形状）。"""
@@ -787,6 +825,7 @@ class ToolResult:
             "artifact_id": self.artifact_id,
             "artifact_ref": self.artifact_ref,
             "reused": self.reused,
+            "reuse_reason": self.reuse_reason,
             "error_code": self.error_code,
             "permission_checked": self.permission_checked,
             "network": self.network,
@@ -805,6 +844,7 @@ class ToolResult:
             artifact_id=str(payload.get("artifact_id") or ""),
             artifact_ref=str(payload.get("artifact_ref") or ""),
             reused=True,
+            reuse_reason=str(payload.get("reuse_reason") or "persisted_operation"),
             error_code=str(payload.get("error_code") or ""),
             permission_checked=bool(payload.get("permission_checked")),
             network=bool(payload.get("network")),
@@ -997,15 +1037,62 @@ def _embed_texts(embedder: Any, texts: list[str]) -> list[list[float]]:
     return [list(vector) for vector in vectors]
 
 
-def _embed_and_retrieve(embedder: Any, retriever: Any, query: str) -> list[Any]:
+def _embed_and_retrieve(
+    embedder: Any, retriever: Any, query: str, where: dict[str, Any] | None = None,
+    timings: dict[str, float] | None = None,
+) -> list[Any]:
     """查询变体嵌入 + 混合检索（与线上 Chat 走同一条多变体路径）。"""
 
     variants = build_query_variants(query) or (QueryVariant(kind="original", text=query),)
-    vectors = _embed_texts(embedder, [variant.text for variant in variants])
+    durations = timings if timings is not None else {}
+    query_hash = hashlib.sha256(query.encode("utf-8")).hexdigest()[:16]
+    started_at = monotonic()
+    try:
+        vectors = _embed_texts(embedder, [variant.text for variant in variants])
+    except (APITimeoutError, TimeoutError) as exc:
+        raise ToolExecutionError("查询嵌入超时，可继续执行以重新请求") from exc
+    except APIError as exc:
+        raise ToolExecutionError(f"查询嵌入服务调用失败：{type(exc).__name__}") from exc
+    finally:
+        durations["embedding_seconds"] = round(monotonic() - started_at, 3)
+        logging.getLogger(__name__).warning("knowledge_retrieval_timing %s", json.dumps({
+            "query_hash": query_hash, "at": utc_now_iso(), **durations,
+        }))
     retrieve_variants = getattr(retriever, "retrieve_variants", None)
-    if callable(retrieve_variants):
-        return list(retrieve_variants(variants, vectors))
-    return list(retriever.retrieve(variants[0].text, vectors[0]))
+    filters = {"where": where} if where is not None else {}
+    started_at = monotonic()
+    try:
+        if callable(retrieve_variants):
+            return list(retrieve_variants(variants, vectors, **filters))
+        return list(retriever.retrieve(variants[0].text, vectors[0], **filters))
+    finally:
+        durations["local_retrieval_seconds"] = round(monotonic() - started_at, 3)
+        logging.getLogger(__name__).warning("knowledge_retrieval_timing %s", json.dumps({
+            "query_hash": query_hash, "at": utc_now_iso(), **durations,
+        }))
+
+
+def document_scope_filter(
+    blocks: Sequence[tuple[str, str, Mapping[str, Any]]], scope: Sequence[str],
+) -> tuple[dict[str, Any], set[str]]:
+    wanted = set(scope)
+    sources: set[str] = set()
+    documents: set[str] = set()
+    resolved: set[str] = set()
+    for block_id, _text, metadata in blocks:
+        source = str(metadata.get("source_file") or "")
+        document_id = document_id_of_block(block_id)
+        matched = wanted & {document_id, _document_id_for(source)} if source else set()
+        if matched:
+            sources.add(source)
+            documents.add(document_id)
+            resolved.update(matched)
+    if wanted - resolved:
+        raise ToolExecutionError(
+            f"指定文档范围中有 {len(wanted - resolved)} 项未对应已登记来源",
+            code=ToolErrorCode.INVALID_ARGUMENTS,
+        )
+    return {"source_file": {"$in": sorted(sources)}}, documents
 
 
 def _count_or_none(vector_store: Any) -> int | None:
@@ -1114,6 +1201,22 @@ def _date_in_range(created_at: str, start_date: str | None, end_date: str | None
     if start_date and day < str(start_date):
         return False
     return not (end_date and day > str(end_date))
+
+
+def _web_denial(reason_code: str, message: str, tool: str) -> ToolError:
+    """把额度拒绝映射成**带类型**的工具错误（重复查询与服务错误分开报）。"""
+
+    if reason_code == REASON_DUPLICATE:
+        return WebQueryDuplicateError(message, tool=tool)
+    return WebBudgetExhaustedError(message, tool=tool)
+
+
+def _web_phase(context: ToolContext) -> str:
+    """联网调用发生在哪个阶段（记账与过程说明用）：``agent_kind:task_id``。"""
+
+    kind = getattr(context.agent_kind, "value", context.agent_kind) or "unknown"
+    task = str(context.task_id or "main")
+    return f"{kind}:{task}"
 
 
 def _hit_payload(item: Any) -> dict[str, Any]:
@@ -1361,16 +1464,21 @@ async def _search_knowledge(params: SearchKnowledgeParams, context: ToolContext)
         # 评分期间不得生成正式答案：先上报进度，再执行筛选。
         await _report_rerank_progress(context, "running")
 
+    where = None
+    scope: set[str] = set()
+    if params.document_scope:
+        blocks = await asyncio.to_thread(_list_blocks, vector_store)
+        where, scope = document_scope_filter(blocks, params.document_scope)
+    timings: dict[str, float] = {}
     try:
         chunks = await asyncio.to_thread(
-            _embed_and_retrieve, context.embedder, retriever, params.query
+            _embed_and_retrieve, context.embedder, retriever, params.query, where, timings
         )
     except RetrievalError as exc:
         raise ToolExecutionError(str(exc)) from exc
 
     raw_count = len(chunks)
     if params.document_scope:
-        scope = {str(item) for item in params.document_scope}
         chunks = [chunk for chunk in chunks if document_id_of_block(getattr(chunk, "block_id", "")) in scope]
     if params.min_similarity is not None:
         chunks = [chunk for chunk in chunks if _meets_similarity(chunk, params.min_similarity)]
@@ -1378,6 +1486,7 @@ async def _search_knowledge(params: SearchKnowledgeParams, context: ToolContext)
     outcome: rerank_pipeline.RerankOutcome | None = None
     if filtering:
         # 评分与选择只看到**调用方真正要的那批候选**（范围/门控先收窄，再排序）。
+        rerank_started_at = monotonic()
         outcome = await rerank_pipeline.filter_chunks(
             chunks=chunks,
             query=params.query,
@@ -1385,6 +1494,7 @@ async def _search_knowledge(params: SearchKnowledgeParams, context: ToolContext)
             vectorstore=vector_store,
             scope=context.rerank_scope,
         )
+        timings["rerank_seconds"] = round(monotonic() - rerank_started_at, 3)
         if outcome.failed:
             await _report_rerank_progress(context, "error", outcome.error_code)
             raise _rerank_failure(outcome)
@@ -1446,6 +1556,7 @@ async def _search_knowledge(params: SearchKnowledgeParams, context: ToolContext)
         "chunks": [_chunk_payload(chunk) for chunk in selected],
         "count": len(selected),
         "candidate_count": raw_count if outcome is None else outcome.candidate_count,
+        "timings": timings,
         "knowledge_revision": context.knowledge_revision,
     }
     if outcome is not None:
@@ -1594,6 +1705,57 @@ _RERANK_CONFIG_ERROR_CODES: Final[frozenset[str]] = frozenset(
 # ---------------------------------------------------------------- 4/10 读原文
 
 
+def _ordered_document_blocks(
+    blocks: list[tuple[str, str, dict[str, Any]]],
+) -> list[tuple[str, str, dict[str, Any]]]:
+    """按入库位置排列；旧索引从 Markdown 来源核验内容并恢复位置。"""
+
+    recorded = [metadata.get("document_order") for _, _, metadata in blocks]
+    if all(type(position) is int and position >= 0 for position in recorded):
+        if len(set(recorded)) != len(recorded):
+            raise ToolExecutionError("文档块顺序重复，请重新导入文档")
+        return sorted(blocks, key=lambda item: item[2]["document_order"])
+
+    from app.ingestion.chunker import chunk_document
+    from app.ingestion.markdown_parser import parse_markdown
+    from app.ingestion.pipeline import read_text
+    from app.ingestion.scanner import discover_file
+
+    sources = {str(metadata.get("source_file") or "") for _, _, metadata in blocks}
+    revisions = {str(metadata.get("doc_id") or "") for _, _, metadata in blocks}
+    if len(sources) != 1 or not next(iter(sources)):
+        raise ToolExecutionError("文档块来源不一致，请重新导入文档")
+    source = Path(next(iter(sources)))
+    discovered = discover_file(source)
+    if discovered is None:
+        raise ToolExecutionError("旧索引缺少文档顺序，来源文件不可用，请重新导入文档")
+    source_revision = discovered.content_hash
+    matching_revision = revisions == {source_revision}
+    chunks = chunk_document(parse_markdown(read_text(source)), str(source))
+    positions = {chunk.block_id: (index, chunk) for index, chunk in enumerate(chunks)}
+
+    def position_of(block: tuple[str, str, dict[str, Any]]) -> tuple[int, int]:
+        block_id, text, metadata = block
+        parts = block_id.split("::", 2)
+        if len(parts) != 3:
+            raise ToolExecutionError("旧索引缺少块位置，请重新导入文档")
+        match = re.fullmatch(r"(.+)-s(\d+)", parts[2])
+        chunk_id = match.group(1) if match else parts[2]
+        if chunk_id not in positions:
+            raise ToolExecutionError("旧索引与来源文档的块位置不一致，请重新导入文档")
+        position, chunk = positions[chunk_id]
+        if not matching_revision and metadata.get("doc_id") != source_revision:
+            content_matches = (
+                metadata.get("chunk_type") != "image_description"
+                and (text in chunk.text if match else text == chunk.text)
+            )
+            if not content_matches:
+                raise ToolExecutionError("旧索引与来源文档的块内容不一致，请重新导入文档")
+        return position, int(match.group(2)) if match else 0
+
+    return sorted(blocks, key=position_of)
+
+
 async def _read_document(params: ReadDocumentParams, context: ToolContext) -> ToolResult:
     """读取指定文档的原文位置（标题 / 锚点 / 可继续读取的位置）。"""
 
@@ -1613,7 +1775,6 @@ async def _read_document(params: ReadDocumentParams, context: ToolContext) -> To
             data={"code": "document_not_found", "document_id": params.document_id},
         )
 
-    mine.sort(key=lambda item: (str(item[2].get("heading_path") or ""), item[0]))
     if params.heading:
         needle = params.heading.casefold()
         mine = [
@@ -1632,8 +1793,18 @@ async def _read_document(params: ReadDocumentParams, context: ToolContext) -> To
                     "heading": params.heading,
                 },
             )
+    mine = await asyncio.to_thread(_ordered_document_blocks, mine)
 
-    full = "\n\n".join(text for _block_id, text, _metadata in mine)
+    sections: list[tuple[int, int, str]] = []
+    parts: list[str] = []
+    position = 0
+    for _block_id, text, metadata in mine:
+        heading = str(metadata.get("heading_path") or "")
+        body = f"章节：{heading}\n{text}" if heading else text
+        sections.append((position, position + len(body), heading))
+        parts.append(body)
+        position += len(body) + 2
+    full = "\n\n".join(parts)
     total = len(full)
     if params.offset >= total and total:
         return ToolResult(
@@ -1647,15 +1818,20 @@ async def _read_document(params: ReadDocumentParams, context: ToolContext) -> To
                 "offset": params.offset,
             },
         )
-    window = full[params.offset : params.offset + params.limit]
-    read_end = params.offset + len(window)
-    name, topic = _public_source_parts(mine[0][2].get("source_file"), mine[0][2])
-    headings = tuple(
-        dict.fromkeys(str(metadata.get("heading_path") or "") for *_rest, metadata in mine)
+    offset = (
+        focused_window_offset(full, params.query, params.limit)
+        if params.query and not params.offset else params.offset
     )
+    window = full[offset : offset + params.limit]
+    read_end = offset + len(window)
+    name, topic = _public_source_parts(mine[0][2].get("source_file"), mine[0][2])
+    headings = tuple(dict.fromkeys(
+        heading for start, end, heading in sections if start < read_end and end > offset
+    ))
     return ToolResult(
         tool=tool,
         status=ToolStatus.OK,
+        read_document_content=full,
         data={
             "document_id": params.document_id,
             "document_name": name,
@@ -1663,7 +1839,7 @@ async def _read_document(params: ReadDocumentParams, context: ToolContext) -> To
             "document_revision": str(mine[0][2].get("doc_id") or ""),
             "block_count": len(mine),
             "total_chars": total,
-            "offset": params.offset,
+            "offset": offset,
             "text": window,
             "headings": [heading for heading in headings if heading],
             "next_offset": read_end if read_end < total else None,
@@ -1708,7 +1884,13 @@ async def _search_history_via_index(
         "cursor": params.cursor,
         "start_date": params.start_date,
         "end_date": params.end_date,
+        "distinct_content": True,
     }
+    if context.app_store is not None and context.run_id:
+        run = await context.app_store.get_run(context.run_id)
+        if run is not None:
+            request["exclude_message_id"] = run.input_message_id
+            request["snapshot_time"] = run.created_at
     try:
         payload = await seam(params.query, request)
     except ToolError:
@@ -1774,6 +1956,8 @@ async def _search_history_fallback(
     scanned_messages = 0
     truncated = False
 
+    run = await store.get_run(context.run_id) if context.run_id else None
+
     for conversation in conversations:
         if scanned_conversations >= context.history_max_conversations:
             truncated = True  # 跨会话上限
@@ -1793,6 +1977,8 @@ async def _search_history_fallback(
                 truncated = True  # 跨会话消息总量上限（会话内同样生效）
                 break
             scanned_messages += 1
+            if run is not None and (message.id == run.input_message_id or message.created_at > run.created_at):
+                continue
             if message.role not in ("user", "assistant"):
                 continue
             if not _date_in_range(message.created_at, params.start_date, params.end_date):
@@ -1915,6 +2101,7 @@ def _history_message_payload(item: Mapping[str, Any], tokens: Sequence[str]) -> 
         "role": str(item.get("role") or ""),
         "created_at": str(item.get("created_at") or ""),
         "excerpt": excerpt,
+        "content": content,
         "matched_terms": matched_terms,
     }
 
@@ -1974,6 +2161,10 @@ async def _read_history(params: ReadHistoryParams, context: ToolContext) -> Tool
     messages = await store.list_messages(
         params.conversation_id, after_sequence=after, limit=params.limit
     )
+    run = await store.get_run(context.run_id) if context.run_id else None
+    if run is not None:
+        messages = [message for message in messages
+                    if message.id != run.input_message_id and message.created_at <= run.created_at]
     if not messages:
         return ToolResult(
             tool=tool,
@@ -2015,12 +2206,22 @@ async def _read_history(params: ReadHistoryParams, context: ToolContext) -> Tool
 
 
 async def _web_search(params: WebSearchParams, context: ToolContext) -> ToolResult:
-    """联网搜索线索（PRD 7.3）：过「已脱敏参数」后出网，返回 URL / 摘要 / 日期 / 请求 ID。"""
+    """联网搜索线索（PRD 7.3）：过「已脱敏参数」后出网，返回 URL / 摘要 / 日期 / 请求 ID。
+
+    **联网预算在真正出网前扣减**（思考等级决定是否允许与额度；同 run 内所有子任务共享
+    一份额度）。额度不允许 / 已用完时抛 :class:`WebBudgetExhaustedError`（不是服务错误），
+    调用方据此降级为「用已有资料回答 + 说明缺口」。
+    """
 
     tool = str(ToolName.WEB_SEARCH)
     provider = context.require_search_provider()
     redacted = context.redact_arguments(ToolName.WEB_SEARCH, params.model_dump(mode="json"))
     query = str(redacted.get("query") or params.query)
+    ledger = context.web_budget
+    if ledger is not None:
+        reservation = ledger.reserve_search(query, phase=_web_phase(context))
+        if not reservation.allowed:
+            raise _web_denial(reservation.reason_code, reservation.message, tool)
     kwargs: dict[str, Any] = {
         "topic": redacted.get("topic"),
         "start_date": redacted.get("start_date"),
@@ -2042,11 +2243,15 @@ async def _web_search(params: WebSearchParams, context: ToolContext) -> ToolResu
             request_id = ""
             raw_results = list(await provider.search(query, params.max_results))
     except SearchError as exc:
+        if ledger is not None:
+            ledger.note_result("web_search", ok=False, detail=str(exc), query=query)
         raise ToolExecutionError(
             str(exc), code=ToolErrorCode.SERVICE_ERROR, tool=tool
         ) from exc
 
     hits = [_hit_payload(item) for item in raw_results]
+    if ledger is not None:
+        ledger.note_result("web_search", ok=bool(hits), detail=f"{len(hits)} 条线索", query=query)
     data = {
         "query": query,
         "request_id": request_id,
@@ -2055,6 +2260,9 @@ async def _web_search(params: WebSearchParams, context: ToolContext) -> ToolResu
         "count": len(hits),
         "redacted": context.redactor is not None,
     }
+    if ledger is not None:
+        # 额度状态随结果一起返回（事件 payload 模型是冻结契约，不改字段）。
+        data["web_budget"] = ledger.snapshot()
     if not hits:
         return ToolResult(
             tool=tool,
@@ -2068,8 +2276,74 @@ async def _web_search(params: WebSearchParams, context: ToolContext) -> ToolResu
 # ---------------------------------------------------------------- 8/10 网页原文
 
 
+def focused_window_offset(content: str, query: str | None, limit: int) -> int:
+    if not query or len(content) <= limit:
+        return 0
+    from app.agent.query_plan import content_terms
+    from app.agent.research import _complete_terms
+
+    terms = content_terms(query)
+    phrases = [term.casefold() for term in _complete_terms(query)]
+    folded = content.casefold()
+    counts = {term: folded.count(term) for term in terms}
+    terms = [term for term in terms if counts[term]]
+    if not terms:
+        return 0
+    # 按完整正文中的稀有词定位，页头反复出现的导航词贡献较低。
+    stride = max(1, limit // 4)
+    end = len(content) - limit
+    candidates = set(range(0, end + 1, stride)) | {end}
+    for phrase in phrases:
+        for match in re.finditer(re.escape(phrase), folded):
+            candidates.add(max(0, min(end, match.start() - limit // 4)))
+    heading_hits = []
+    for match in re.finditer(r"(?m)^(?:#{1,6}\s+|章节：|[一二三四五六七八九十百]+[、．.])[^\n]{1,160}", content):
+        if any(phrase in match.group(0).casefold() for phrase in phrases):
+            heading_hits.append((match.start(), match.end()))
+    def score(offset: int) -> tuple[int, float, float]:
+        window = folded[offset:offset + limit]
+        phrase_score = sum(window.count(phrase) / max(1, folded.count(phrase)) for phrase in phrases)
+        headings = sum(offset <= start and end <= offset + limit for start, end in heading_hits)
+        return headings, phrase_score, sum(min(window.count(term), 3) / counts[term] for term in terms)
+    return max(sorted(candidates), key=score)
+
+
+def _markdown_heading_path(content: str, offset: int) -> str:
+    """返回正文窗口起点所在的 Markdown 标题路径。"""
+
+    line_index = content.count("\n", 0, max(0, offset))
+    tokens = MarkdownIt("commonmark").parse(content)
+    headings: dict[int, str] = {}
+    for index, token in enumerate(tokens):
+        if token.type != "heading_open" or not token.map or token.map[0] > line_index:
+            continue
+        level = int(token.tag[1:])
+        title = tokens[index + 1].content.strip() if index + 1 < len(tokens) else ""
+        if not title:
+            continue
+        headings = {key: value for key, value in headings.items() if key < level}
+        headings[level] = title
+    path = " > ".join(headings[key] for key in sorted(headings))
+    if path:
+        return path
+    nearby_start = max(0, offset - 500)
+    nearby = content[nearby_start:min(len(content), offset + 800)]
+    candidates = []
+    for match in re.finditer(r"(?m)^\s*`?([A-Za-z][A-Za-z0-9_]{2,80})`?\s*$", nearby):
+        name = match.group(1)
+        if not re.search(r"[A-Z_]", name[1:]):
+            continue
+        absolute = nearby_start + match.start(1)
+        candidates.append((abs(absolute - offset), absolute, name))
+    return min(candidates)[2] if candidates else ""
+
+
 async def _read_web_page(params: ReadWebPageParams, context: ToolContext) -> ToolResult:
-    """读取网页原文（PRD 7.3）：逐项检查 results / failed_results，长页写 artifacts。"""
+    """读取网页原文（PRD 7.3）：逐项检查 results / failed_results，长页写 artifacts。
+
+    网页读取额度与搜索额度**分开计**；同样在出网前扣减，额度不足时按剩余额度收窄
+    URL 列表（已扣减的额度不会被浪费），完全没有额度时抛 :class:`WebBudgetExhaustedError`。
+    """
 
     tool = str(ToolName.READ_WEB_PAGE)
     provider = context.require_extract_provider()
@@ -2078,16 +2352,38 @@ async def _read_web_page(params: ReadWebPageParams, context: ToolContext) -> Too
     query = redacted.get("query", params.query)
     if query is not None and not str(query).strip():
         query = None
+    ledger = context.web_budget
+    page_note = ""
+    if ledger is not None:
+        remaining_before = max(0, ledger.policy.budget.pages - ledger.pages_used)
+        reservation = ledger.reserve_pages(len(urls), phase=_web_phase(context))
+        if not reservation.allowed:
+            raise _web_denial(reservation.reason_code, reservation.message, tool)
+        allowed_pages = min(len(urls), remaining_before)
+        if allowed_pages < len(urls):
+            urls = urls[:allowed_pages]
+            page_note = (
+                f"网页读取额度只剩 {allowed_pages} 页，本次只读取前 {allowed_pages} 个链接"
+            )
 
     try:
         response = await provider.extract(
             urls,
-            query=None if query is None else str(query),
+            query=None,
             extract_depth=WEB_EXTRACT_DEPTH,
             format=WEB_EXTRACT_FORMAT,
         )
     except SearchError as exc:
+        if ledger is not None:
+            ledger.note_result("read_web_page", ok=False, detail=str(exc), query=f"{len(urls)} 页")
         raise ToolExecutionError(str(exc), code=ToolErrorCode.SERVICE_ERROR, tool=tool) from exc
+    if ledger is not None:
+        ledger.note_result(
+            "read_web_page",
+            ok=bool(list(getattr(response, "pages", ()) or ())),
+            detail=f"{len(urls)} 页请求",
+            query=f"{len(urls)} 页",
+        )
 
     retrieved_at = utc_now_iso()
     evidences: list[WebPageEvidence] = []
@@ -2100,19 +2396,24 @@ async def _read_web_page(params: ReadWebPageParams, context: ToolContext) -> Too
                 context, WEB_ARTIFACT_DIR, content_hash, content, suffix=".md"
             )
             artifact_id = written.artifact_id
-        window = content[params.offset : params.offset + params.limit]
-        covers_all = params.offset == 0 and len(window) == len(content)
+        offset = (
+            focused_window_offset(content, query, params.limit)
+            if not params.offset else params.offset
+        )
+        window = content[offset : offset + params.limit]
+        covers_all = offset == 0 and len(window) == len(content)
         evidences.append(
             WebPageEvidence(
                 url=str(getattr(page, "url", "") or ""),
                 final_url=str(getattr(page, "final_url", "") or ""),
                 title=str(getattr(page, "title", "") or ""),
+                heading_path=_markdown_heading_path(content, offset),
                 published_at=str(getattr(page, "published_at", "") or ""),
                 retrieved_at=retrieved_at,
                 content_hash=content_hash,
                 artifact_id=artifact_id,
                 read_range=WebReadRange(
-                    offset=params.offset,
+                    offset=offset,
                     length=len(window),
                     total=len(content),
                     complete=covers_all,
@@ -2140,6 +2441,11 @@ async def _read_web_page(params: ReadWebPageParams, context: ToolContext) -> Too
         "limit": params.limit,
         "network": True,
     }
+    if ledger is not None:
+        # 额度状态与「按剩余额度收窄 URL」的说明（事件 payload 模型是冻结契约，不改字段）。
+        data["web_budget"] = ledger.snapshot()
+        if page_note:
+            data["budget_note"] = page_note
     if not evidences:
         return ToolResult(
             tool=tool,
@@ -2445,7 +2751,14 @@ class ToolRegistry:
             permission_checked=permission_checked,
             network=spec.networked,
         )
-        ref = self._store_result(context, spec, operation_id, args_hash, final)
+        ref = self._store_result(
+            context,
+            spec,
+            operation_id,
+            args_hash,
+            params.model_dump(mode="json"),
+            final,
+        )
         if store is not None:
             await store.finish_operation(
                 operation_id, OperationStatus.SUCCEEDED, result_ref=ref or None
@@ -2477,6 +2790,7 @@ class ToolRegistry:
         spec: ToolSpec,
         operation_id: str,
         args_hash: str,
+        arguments: Mapping[str, Any],
         result: ToolResult,
     ) -> str:
         """把结果写进操作缓存；返回相对 artifacts 的引用（写不了就返回空串，不阻断）。"""
@@ -2486,6 +2800,7 @@ class ToolRegistry:
         payload = {
             "tool": str(spec.name),
             "args_hash": args_hash,
+            "arguments": dict(arguments),
             "knowledge_revision": context.knowledge_revision,
             "created_at": utc_now_iso(),
             "result": result.to_payload(),

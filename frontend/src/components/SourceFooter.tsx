@@ -48,7 +48,7 @@ export function SourceFooter({ sources, retrieval, onSelect }: SourceFooterProps
           ) : (
             <>
               <span className="source-chip-id">{source.source_id}</span>
-              <span className="source-chip-file">{basename(source.source_file)}</span>
+              <span className="source-chip-file">{source.document_title || basename(source.source_file)}</span>
               <span className="source-chip-sim">{sourceMatchLabel(source)}</span>
             </>
           )}

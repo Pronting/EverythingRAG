@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import {
   answerDelta,
+  expandProcessArea,
   expectRunOnlyTraffic,
   imageRefPayload,
   planUpdated,
@@ -203,8 +204,9 @@ test("父子任务按 run 详情的 parent_task_id 归组显示", async ({ page 
   await page.getByRole("textbox", { name: "消息输入框" }).fill("父子任务测试");
   await page.getByRole("button", { name: "发送", exact: true }).click();
   await expect(page.getByText("综合结论。")).toBeVisible();
+  await expandProcessArea(page);
 
-  await page.getByTestId("process-toggle").click();
+  // 研究任务行默认可见，点开看细节
   await page.getByTestId("process-task-t1").getByRole("button").first().click();
   const detail = page.getByTestId("process-task-detail-t1");
   await expect(detail).toContainText("子问题");

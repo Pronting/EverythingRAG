@@ -127,7 +127,7 @@ async def test_workspace_fields_follow_prd_13_1(app_store: AppStore) -> None:
     workspace = await app_store.create_workspace("w1", "sk1", name="风控组")
     assert workspace.status == "active"
     assert workspace.default_permission_mode == "ask"
-    assert workspace.default_reasoning_level == "high"
+    assert workspace.default_reasoning_level == "off"
     assert workspace.knowledge_revision == 0
 
     assert await app_store.bump_knowledge_revision("w1") == 1

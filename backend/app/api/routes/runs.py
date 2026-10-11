@@ -91,6 +91,7 @@ class RunCreateRequest(BaseModel):
     conversation_id: str = Field(min_length=1)
     message: str = Field(min_length=1, max_length=DEFAULT_USER_INPUT_MAX_CHARS)
     client_request_id: str | None = Field(default=None, max_length=200)
+    replace_from_message_id: str | None = Field(default=None, min_length=1, max_length=200)
     images: list[str] = Field(default_factory=list, max_length=MAX_RUN_IMAGES)
     permission_mode: PermissionMode | None = None
     reasoning_level: ReasoningLevel | None = None
@@ -171,8 +172,8 @@ def _summary(run: Any) -> RunSummary:
         permission_mode=run.permission_mode,
         reasoning_level=run.reasoning_level,
         answer_id=run.answer_id,
-        error_code=run.error_code,
-        stop_reason=run.stop_reason,
+        error_code=run.error_code if run.status is RunStatus.FAILED else None,
+        stop_reason=run.stop_reason if run.status is RunStatus.CANCELLED else None,
         resumable=bool(run.resumable),
         context_epoch=int(run.context_epoch or 1),
         created_at=run.created_at,
@@ -223,6 +224,7 @@ async def create_run(
             conversation_id=body.conversation_id,
             question=body.message,
             client_request_id=body.client_request_id,
+            replace_from_message_id=body.replace_from_message_id,
             # PRD 1.3 三层优先级：请求显式 → 会话保存 → 工作区默认 → 18.1 兜底。
             # 解析唯一实现见 app/api/settings_scope.py；RunManager 只收结果。
             permission_mode=settings.permission_mode,
@@ -253,6 +255,10 @@ async def list_runs(
 
     await _require_workspace(workspace_id)
     conversation = await manager.get_conversation(conversation_id)
+    if conversation is None:
+        legacy = get_conversation_store().get(conversation_id)
+        if legacy is not None and legacy.workspace_id == workspace_id:
+            return RunListResponse(runs=[])
     if conversation is None or conversation.workspace_id != workspace_id:
         raise HTTPException(status_code=404, detail="会话不存在")
     runs = await manager.list_runs(conversation_id, limit=limit)
@@ -319,12 +325,12 @@ async def stream_run_events(
 
     await _require_run(manager, workspace_id, run_id)
     last_event_id = request.headers.get("last-event-id")
-    start = after
-    if start is None and last_event_id:
+    start = after or 0
+    if last_event_id:
         try:
-            start = int(last_event_id)
+            start = max(start, int(last_event_id))
         except ValueError:
-            start = 0
+            raise HTTPException(status_code=400, detail="事件序号格式无效") from None
     return StreamingResponse(
         _sse(manager, run_id, start or 0),
         media_type="text/event-stream",
@@ -353,7 +359,7 @@ async def cancel_run(
     body: CancelRequest | None = None,
     manager: RunManager = Depends(get_run_manager_dep),  # noqa: B008
 ) -> RunDetail:
-    """停止：终止主任务与活动子任务，等模型请求退出后记完成（PRD 12.4）。"""
+    """停止：立即取消主任务与活动子任务并返回取消状态。"""
 
     run = await _require_run(manager, workspace_id, run_id)
     try:
@@ -457,6 +463,18 @@ async def _ensure_conversation_row(
         permission_mode=settings.permission_mode,
         reasoning_level=settings.reasoning_level,
     )
+    for message in legacy.messages:
+        await store.append_message(
+            conversation_id=conversation_id,
+            role=message.role,
+            content=message.content,
+            source_snapshot={
+                "sources": message.sources,
+                "answer_basis": message.answer_basis,
+                "policy_version": message.policy_version,
+            },
+            created_at=message.created_at,
+        )
 
 
 async def _resolve_settings(

@@ -11,7 +11,7 @@
 - 证据来源类型  → PRD 8.1（6 类权威来源；General Agent 另加 2 类）
 - 发布依据      → PRD 8.3（`answer_basis` 9 个取值）
 - 权限模式      → PRD 10.1（ask/auto/full，默认 ask）
-- 思考强度      → PRD 9.1（off/low/high/max，默认 high）
+- 思考强度      → PRD 9.1（off/low/high/max，默认 off）
 - 意图与时效    → PRD 6.2（`RouteDecision.intent` / `freshness`）
 - Agent 职责    → PRD 4.2（9 个节点角色）
 - 核对结论      → PRD 8.2（`verdict=pass/revise/research/clarify/insufficient`）
@@ -280,6 +280,7 @@ class EventType(StrEnum):
     PLAN_UPDATED = "plan.updated"
     AGENT_STARTED = "agent.started"
     AGENT_COMPLETED = "agent.completed"
+    MODEL_REASONING = "model.reasoning"
     TOOL_STARTED = "tool.started"
     TOOL_COMPLETED = "tool.completed"
     APPROVAL_REQUESTED = "approval.requested"
@@ -507,8 +508,10 @@ def citation_prefix(source_type: SourceType | EvidenceSourceType) -> str | None:
 #: 新会话默认权限模式（PRD 10.1 / 18.1）：请求批准。
 DEFAULT_PERMISSION_MODE: Final[PermissionMode] = PermissionMode.ASK
 
-#: 新会话默认思考强度（PRD 9.1 / 18.1）：深度思考。
-DEFAULT_REASONING_LEVEL: Final[ReasoningLevel] = ReasoningLevel.HIGH
+#: 新会话默认思考强度（PRD 9.1 / 18.1）：关闭思考。
+#: 用户裁定（2026-09）：默认档位从「深度思考」改为「关闭思考」——默认不产生思维链，
+#: 需要深度推理时由用户在输入框旁的思考菜单显式选择 low/high/max。
+DEFAULT_REASONING_LEVEL: Final[ReasoningLevel] = ReasoningLevel.OFF
 
 
 # =====================================================================
@@ -722,7 +725,7 @@ class ContractModel(BaseModel):
 
 
 class RouteDecision(ContractModel):
-    """意图识别输出（PRD 6.2 表，逐字对齐 12 个字段）。"""
+    """意图识别结果、来源范围与可复用的原文。"""
 
     question: str
     resolved_question: str
@@ -734,6 +737,9 @@ class RouteDecision(ContractModel):
     freshness: Freshness = Freshness.NONE
     entities: list[str] = Field(default_factory=list)
     scope_evidence_ids: list[str] = Field(default_factory=list)
+    reuse_evidence_ids: list[str] = Field(default_factory=list)
+    read_evidence_ids: list[str] = Field(default_factory=list)
+    needs_source_search: bool = True
     unresolved_terms: list[str] = Field(default_factory=list)
     reason_summary: str = ""
 
@@ -760,6 +766,9 @@ class ResearchTask(ContractModel):
     expected_evidence: str = ""
     status: TaskStatus = TaskStatus.QUEUED
     result_ref: str | None = None
+    query_identity: str = ""
+    query_reuse_reason: str = ""
+    scoped_query: bool = False
 
     @model_validator(mode="after")
     def _no_self_dependency(self) -> ResearchTask:
@@ -812,7 +821,13 @@ def validate_task_graph(tasks: Sequence[ResearchTask]) -> None:
 
 
 class Evidence(ContractModel):
-    """一条证据（PRD 8.1，逐字对齐 12 个字段）。"""
+    """一条证据（PRD 8.1，逐字对齐 12 个字段）。
+
+    ``document_title`` 是**纯追加**字段（默认空串 ⇒ 旧记录与既有构造不变）：它是这条
+    证据所属文档的完整标题（``source_file`` 的 basename，不含绝对路径）。引入原因：
+    文档身份此前只存在于 ``source_ref``（内部 ID），于是引用面板与模型都只看到章节名，
+    答案会把章节名当文章名、把 A 文章的章节归给 B 文章（用户实测缺陷 F13）。
+    """
 
     evidence_id: str
     workspace_id: str
@@ -826,6 +841,15 @@ class Evidence(ContractModel):
     retrieved_at: str
     supported_requirements: list[str] = Field(default_factory=list)
     limitations: list[str] = Field(default_factory=list)
+    #: 该证据所属章节标题；未记录时为空串。
+    heading_path: str = ""
+    #: 该证据所属文档的完整标题（人读、可核对）；未记录时为空串，绝不猜。
+    document_title: str = ""
+    #: 网页读取窗口在原文中的字符区间；未知时保留 0。
+    source_start: int = Field(default=0, ge=0)
+    source_end: int = Field(default=0, ge=0)
+    #: 合并前的证据 ID，供结论引用改写到合并后的证据。
+    member_evidence_ids: list[str] = Field(default_factory=list)
 
 
 class CitationEntry(ContractModel):
@@ -871,6 +895,14 @@ class CitationEntry(ContractModel):
     #: **语义约束**：``similarity`` 只能是检索阶段的向量分数，**不得**存入重排分数
     #: （重排分数只进 :attr:`rerank_score`）；两者必须互不混淆。
     similarity: float | None = None
+    #: 该证据所属章节标题（``heading_path``，如「3.3 记忆管理 > 3.3.5 记忆关联与概念标签」）。
+    #: 纯追加字段（默认空串 ⇒ 旧记录与既有构造不变）：来源面板据此显示**人读的位置**，
+    #: 与 :attr:`source_ref`（文档 ID / 版本 / block ID，仅供定位）分开表达，互不替代。
+    heading_path: str = ""
+    #: 该证据所属文档的**完整标题**（纯追加，默认空串）。与 ``heading_path`` 一起构成
+    #: 「这份资料是哪篇文章的哪一节」：只有章节名时，跨文档比较会把 A 文章的章节当成
+    #: B 文章的观点（用户实测缺陷 F13）。
+    document_title: str = ""
 
 
 class WebReadRange(ContractModel):
@@ -901,6 +933,7 @@ class WebPageEvidence(ContractModel):
     url: str = ""
     final_url: str = ""
     title: str = ""
+    heading_path: str = ""
     published_at: str = ""
     retrieved_at: str = ""
     content_hash: str = ""
@@ -1162,23 +1195,27 @@ class WorkspaceContext(ContractModel):
     data_dir: Path
     root_dir: Path
 
-    # ---- 目录（PRD 5.1）----
+    # ---- 目录（D-KB：知识库全局共享，见 app/core/workspace_context.py）----
+    #
+    # 共享知识路径由 ``data_dir`` 派生（所有工作区相同），私有件由 ``root_dir`` 派生
+    # （``data_dir/workspaces/<storage_key>/``）。两个定义必须与
+    # ``WorkspacePaths`` 逐字段一致。
 
     @property
     def documents_dir(self) -> Path:
-        return self.root_dir / "documents"
+        return self.data_dir / "documents"
 
     @property
     def state_db(self) -> Path:
-        return self.root_dir / "state.db"
+        return self.data_dir / "state.db"
 
     @property
     def image_state_db(self) -> Path:
-        return self.root_dir / "image_state.db"
+        return self.data_dir / "image_state.db"
 
     @property
     def chroma_dir(self) -> Path:
-        return self.root_dir / "chroma"
+        return self.data_dir
 
     @property
     def memory_json(self) -> Path:
@@ -1206,7 +1243,11 @@ class WorkspaceContext(ContractModel):
         name: str = "",
         **kwargs: Any,
     ) -> WorkspaceContext:
-        """按 PRD 5.1 由 ``storage_key`` 构建目录树（``data_dir/workspaces/<key>/``）。"""
+        """由 ``storage_key`` 构建上下文数据视图。
+
+        ``root_dir`` = 本区**私有**根 ``data_dir/workspaces/<key>/``；共享知识路径由
+        ``data_dir`` 派生（D-KB：所有工作区共享同一个知识库）。
+        """
 
         base = Path(data_dir)
         return cls(

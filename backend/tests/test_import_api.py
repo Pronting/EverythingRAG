@@ -325,10 +325,10 @@ def _upload_files(
 
 
 def _documents_root() -> Path:
-    """本用例的规范根：按**当前工作区**解析（V1.2.0 起上传落本区 documents/）。
+    """本用例的规范根：**共享知识库**的 ``data_dir/documents``（D-KB）。
 
-    T01 之后默认工作区也走每区目录树（data_dir/workspaces/<storage_key>/documents），
-    断言不能再写 data_dir/documents —— 那正是被修掉的全局布局。
+    上传一律落这份共享根 —— 任何工作区解析结果都相同；断言不写死自己拼的路径，
+    而是走 ``WorkspaceContextFactory``（与生产同一条解析路径）。
     """
     from app.api import deps
 

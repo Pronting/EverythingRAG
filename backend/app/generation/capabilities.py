@@ -5,7 +5,7 @@
 
 - 按 provider 配置（base_url + model）解析出该模型的能力声明；
 - 把用户选择的思考档位翻译为 DeepSeek 原生请求参数
-  （``thinking.type`` + ``reasoning_effort``，PRD 9.1，默认 ``high``）；
+  （``thinking.type`` + ``reasoning_effort``，PRD 9.1，默认 ``off``）；
 - Provider 不支持所选功能时抛 :class:`CapabilityConfigurationError`
   （明确配置错误），**绝不静默降级**（PRD 9.2）；
 - 未知模型不给猜测值，而是抛错并告诉用户如何显式声明能力
@@ -16,7 +16,8 @@
 - 模型表：``deepseek-flash`` / ``deepseek-v4-pro``，上下文 1M，最大输出 384K，
   支持工具调用、（flash 额外支持识图）。
 - 思考模式：``thinking.type=enabled|disabled``，``reasoning_effort=low|high|max``，
-  默认开启且默认 ``high``；OpenAI SDK 通过 ``extra_body`` 传 ``thinking``。
+  官方端点默认开启且默认 ``high``；本产品的**默认档位是 ``off``**（PRD 18.1，用户裁定），
+  即默认下发 ``thinking.type=disabled``；OpenAI SDK 通过 ``extra_body`` 传 ``thinking``。
 """
 
 from __future__ import annotations
@@ -107,6 +108,8 @@ _DEEPSEEK_ALIASES: Final[dict[str, str]] = {
     "deepseek-v4-flash": "deepseek-flash",
     "deepseek-v4-flash-vision-exp": "deepseek-flash",
 }
+
+_COMMANDCODE_DEEPSEEK_FLASH_MODEL: Final[str] = "deepseek/deepseek-v4.1-flash"
 
 DEEPSEEK_MODEL_CAPABILITIES: Final[dict[str, ModelCapabilities]] = {
     "deepseek-flash": _DEEPSEEK_FLASH,
@@ -214,6 +217,8 @@ def resolve_capabilities(
         return _capabilities_from_declaration(model, declaration)
 
     key = model.strip().lower()
+    if key == _COMMANDCODE_DEEPSEEK_FLASH_MODEL and _host_of(base_url) == "api.commandcode.ai":
+        return _DEEPSEEK_FLASH.model_copy(update={"context_limit": 1_000_000})
     alias = _DEEPSEEK_ALIASES.get(key)
     if alias is not None and _is_official_deepseek(base_url):
         key = alias
@@ -239,7 +244,7 @@ def resolve_reasoning_params(
 ) -> ProviderReasoningParams:
     """把思考档位解析为 DeepSeek 参数；能力缺失时抛明确配置错误。
 
-    - ``level=None`` 用 PRD 18.1 默认值 ``high``；
+    - ``level=None`` 用 PRD 18.1 默认值 ``off``（关闭思考）；
     - 非 DeepSeek 适配（``supports_thinking_toggle=False``）只允许 ``off``，
       选择 ``low/high/max`` 抛错（PRD 9.2 不得静默降级）；
     - 不支持 ``off`` 之外的档位但 capability 未声明 -> 同样抛错。

@@ -42,6 +42,8 @@ from app.api.run_services import build_run_manager
 from app.core.config import settings
 from app.core.outbound import outbound_client
 from app.core.settings_store import get_settings_store, is_search_configured, is_vision_configured
+from app.core.workspace_context import committed_storage_version
+from app.core.workspace_store import WORKSPACE_LAYOUT_VERSION
 from app.ingestion.import_task import ImportTaskStore
 from app.ingestion.index_schema import make_index_fingerprint
 from app.ingestion.state_store import DocumentStateStore
@@ -49,6 +51,50 @@ from app.vectorstore.base import VectorStore
 from app.vectorstore.embedder import Embedder
 
 logger = logging.getLogger(__name__)
+
+
+async def _initialize_history_indexes(store: AppStore) -> None:
+    factory = api_deps.get_workspace_context_factory()
+
+    def index_for(workspace_id: str):
+        context = factory.resolve(workspace_id)
+        return api_deps.workspace_history_index(context, store)
+
+    store.configure_history_index(index_for)
+    workspaces = (
+        await store.list_workspaces()
+        if committed_storage_version(factory.data_dir) >= WORKSPACE_LAYOUT_VERSION
+        else factory.workspace_store.list()
+    )
+    for workspace in workspaces:
+        await index_for(workspace.id).ensure_fresh()
+
+
+async def _reconcile_workspace_reasoning_defaults(store: AppStore) -> None:
+    """启动时的**异步**工作区默认档位对账（旧默认值 → 当前程序默认值）。
+
+    必须在事件循环内执行：早期版本在同步阶段用 ``asyncio.run`` ⇒ ``RuntimeError`` 被宽泛的
+    except 吞掉 ⇒ 对账静默不执行、界面照旧显示「深度思考」（用户实测复现）。写库统一走
+    :class:`AppStore`（D19/A3：不得绕过它直写 ``workspaces`` 表）。
+
+    与续跑识图任务（``resume_pending_image_tasks``）同属「启动即做、失败不判死启动」的
+    维护动作：对账失败只记类型，绝不让本地服务起不来。
+    """
+
+    from app.core.reasoning_defaults import reconcile_workspace_default_reasoning
+    from app.core.settings_store import get_settings_store
+    from app.core.workspace_store import WorkspaceStore
+
+    try:
+        await reconcile_workspace_default_reasoning(
+            get_settings_store(),
+            store,
+            archive_store=WorkspaceStore(settings.data_dir),
+        )
+    except Exception as exc:  # noqa: BLE001 - 维护动作失败不阻断启动
+        logger.warning(
+            "工作区默认档位对账未完成：error=%s（步骤=reasoning_defaults）", type(exc).__name__
+        )
 
 
 @asynccontextmanager
@@ -81,6 +127,8 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
             f"sqlite={getattr(exc, 'sqlite_errorname', None)})"
         ) from exc
     register_app_store(store)
+    await _initialize_history_indexes(store)
+    await _reconcile_workspace_reasoning_defaults(store)
     manager = None
     try:
         # V1.2.0：RunManager（PRD 12.2）。lifespan 创建、退出关闭；每工作区检查点按需建。
@@ -88,6 +136,7 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
             manager = build_run_manager(store)
             register_run_manager(manager)
             _app.state.run_manager = manager
+            await manager.recover_after_restart()
         except Exception as exc:
             logger.error(
                 "启动失败：RunManager 初始化未成功（步骤=build_run_manager, error=%s）",

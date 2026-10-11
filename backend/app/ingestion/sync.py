@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import logging
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 import xxhash
@@ -479,6 +479,12 @@ class SyncService:
 
         返回 (blocks_upserted, blocks_deleted)。
         """
+        old = self._state_store.load_all().get(str(disc.path))
+        compatible = f"{self._embedder.fingerprint}::ingestion-v{INGESTION_SCHEMA_VERSION}"
+        if (force_reindex and old is not None
+                and old.schema_version == INGESTION_SCHEMA_VERSION
+                and old.index_fingerprint in {compatible, compatible + "::representation-v0"}):
+            return self._migrate_representation(disc)
         text = read_text(disc.path)
         parsed = parse_markdown(text)
         chunks = chunk_document(parsed, source_file=str(disc.path))
@@ -509,6 +515,8 @@ class SyncService:
         # 文本块先入库（快路径）；图片块后补——图片失败不拖累文本（T5 §5.3 文本先行）。
         upserted = 0
         new_text_ids: set[str] = set()
+        new_image_ids: set[str] = set()
+        document_orders = {chunk.block_id: index for index, chunk in enumerate(chunks)}
         if to_embed:
             vectors = embed_document_texts(
                 self._embedder,
@@ -523,28 +531,37 @@ class SyncService:
                 )
                 new_text_ids.add(block_id)
                 text_blocks.append(
-                    (block_id, chunk.text, vector, make_chunk_metadata(block_id, disc, chunk))
+                    (block_id, chunk.text, vector,
+                     make_chunk_metadata(
+                         block_id, disc, chunk, document_order=document_orders[chunk.block_id]
+                     ))
                 )
             self._vectorstore.upsert(text_blocks)
             upserted = len(text_blocks)
         # 图片块：重新下载 + 识图 + 嵌入（同图去重走持久化），不进文本块级复用。
         if self._worker is not None:
             for chunk in image_chunks:
-                task = self._pipeline.make_image_task(disc, chunk)
+                task = self._pipeline.make_image_task(
+                    disc, chunk, document_order=document_orders[chunk.block_id]
+                )
                 if task is not None:
                     self._worker.enqueue(task)
+                    new_image_ids.add(task.block_id)
         else:
-            blocks = self._pipeline.sync_image_blocks(disc, image_chunks)
+            blocks = self._pipeline.sync_image_blocks(
+                disc, image_chunks, document_orders=document_orders
+            )
             if blocks:
                 self._vectorstore.upsert(blocks)
                 upserted += len(blocks)
+                new_image_ids.update(block[0] for block in blocks)
 
         # schema 升级且内容哈希相同时，新旧 block_id 可能重合；这些 ID 已被 upsert，
         # 不能再当陈旧块删除。被移除的旧块和旧图片描述仍会清掉。
         stale = [
             block_id
             for block_id in old_blocks
-            if block_id not in matched and block_id not in new_text_ids
+            if block_id not in matched and block_id not in new_text_ids and block_id not in new_image_ids
         ]
         if stale:
             self._vectorstore.delete_by_ids(stale)
@@ -558,6 +575,91 @@ class SyncService:
             index_fingerprint=self._index_fingerprint,
         )
         return upserted, len(stale)
+
+    def _migrate_representation(self, disc: DiscoveredFile) -> tuple[int, int]:
+        parsed = parse_markdown(read_text(disc.path))
+        raw_chunks = chunk_document(parsed, source_file=str(disc.path))
+        existing = {block_id: (text, meta) for block_id, text, meta in self._vectorstore.list_blocks()
+                    if meta.get("source_file") == str(disc.path)}
+        by_anchor: dict[str, list[str]] = {}
+        for key in existing:
+            by_anchor.setdefault(key.rsplit("::", 1)[-1], []).append(key)
+
+        def existing_id(chunk: Chunk) -> str:
+            current = make_block_id(disc.content_hash, chunk.block_id, source_file=disc.path)
+            if (chunk.kind != "image" and current in existing
+                    and existing[current][1].get("chunk_type") == "image_description"):
+                current += "-text"
+            if chunk.kind == "image":
+                images = [key for key, (_text, meta) in existing.items()
+                          if meta.get("image_path") == chunk.src
+                          and meta.get("heading_path", "") == chunk.heading_path]
+                if len(images) == 1:
+                    return images[0]
+            candidates = by_anchor.get(chunk.block_id, [])
+            if current in existing:
+                candidates = [current]
+            matching = [key for key in candidates
+                        if existing[key][1].get("heading_path", "") == chunk.heading_path
+                        and (existing[key][1].get("image_path") == chunk.src
+                             if chunk.kind == "image" else existing[key][0] == chunk.text)]
+            return matching[0] if len(matching) == 1 else current
+
+        chunks: list[Chunk] = []
+        for chunk in raw_chunks:
+            block_id = existing_id(chunk)
+            previous = existing.get(block_id)
+            if chunk.kind == "image" or (previous is not None and previous[0] == chunk.text):
+                chunks.append(chunk)
+                continue
+            children = sorted(
+                ((key, text) for key, (text, _meta) in existing.items()
+                 if key.startswith(block_id + "-s") and key[len(block_id) + 2:].isdigit()),
+                key=lambda item: int(item[0][len(block_id) + 2:]),
+            )
+            if children and "\n\n".join(text for _key, text in children) == chunk.text:
+                chunks.extend(replace(chunk, block_id=key.rsplit("::", 1)[-1], text=text)
+                              for key, text in children)
+            else:
+                chunks.extend(self._pipeline.semantic_split([chunk]))
+        retained: set[str] = set()
+        changed: list[tuple[str, Chunk, BlockMetadata]] = []
+        metadata_updates = []
+        for order, chunk in enumerate(chunks):
+            block_id = existing_id(chunk)
+            previous = existing.get(block_id)
+            if chunk.kind == "image":
+                if previous is not None and previous[1].get("image_path") == chunk.src:
+                    retained.add(block_id)
+                    metadata = {**previous[1], "document_order": order}
+                    if metadata != previous[1]:
+                        metadata_updates.append((block_id, metadata))
+                continue
+            metadata = make_chunk_metadata(block_id, disc, chunk, document_order=order)
+            if (previous is not None and previous[0] == chunk.text
+                    and previous[1].get("heading_path", "") == chunk.heading_path):
+                retained.add(block_id)
+                values = metadata.model_dump(exclude_none=True)
+                if values != previous[1]:
+                    metadata_updates.append((block_id, values))
+            else:
+                changed.append((block_id, chunk, metadata))
+        missing_images = [block_id for block_id, (_text, meta) in existing.items()
+                          if meta.get("chunk_type") == "image_description" and block_id not in retained]
+        if missing_images:
+            raise ValueError(f"表示更新无法对应已有图片：{len(missing_images)} 个")
+        if changed:
+            vectors = embed_document_texts(self._embedder, [chunk_embedding_text(item[1]) for item in changed])
+            self._vectorstore.upsert([(block_id, chunk.text, vector, metadata)
+                                      for (block_id, chunk, metadata), vector in zip(changed, vectors, strict=True)])
+            retained.update(item[0] for item in changed)
+        self._vectorstore.update_metadata(metadata_updates)
+        stale = [block_id for block_id in existing if block_id not in retained]
+        if stale:
+            self._vectorstore.delete_by_ids(stale)
+        self._state_store.upsert_fingerprint(str(disc.path), disc.content_hash, disc.mtime,
+                                             disc.size, len(chunks), index_fingerprint=self._index_fingerprint)
+        return len(changed), len(stale)
 
     def _requires_reindex(self, old: DocFingerprint) -> bool:
         """Return whether a state row belongs to another index representation."""

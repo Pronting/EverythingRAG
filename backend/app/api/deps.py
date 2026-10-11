@@ -30,6 +30,7 @@ from app.core.workspace_context import (
     WorkspaceContextFactory,
     WorkspaceNotFoundError,
     committed_storage_version,
+    vector_handle_cache_key,
 )
 from app.core.workspace_store import WORKSPACE_LAYOUT_VERSION, WorkspaceStore
 from app.generation.chat_service import RerankRuntime
@@ -110,13 +111,28 @@ def get_embedder() -> Embedder:
 
 
 def get_vector_store() -> VectorStore:
-    """返回与当前完整 Provider 设置匹配的进程内共享向量库包装器。"""
+    """返回共享知识库的进程内向量库包装器（与 ``get_workspace_vector_store`` 同一个）。
+
+    D-KB：知识库全局共享，句柄键只含 Provider 配置摘要 + collection 身份，因此
+    「不带工作区的老入口」与「按区 provider」拿到的是**同一个实例**，不会在同一
+    persist 根上开出两个 ``PersistentClient``。
+    """
 
     with _registry_lock:
-        embedder, cache_key = _get_embedder_and_cache_key()
+        embedder, provider_digest = _get_embedder_and_cache_key()
+        collection_identity = f"chunks__{embedder.fingerprint}__v{INGESTION_SCHEMA_VERSION}"
+        cache_key = vector_handle_cache_key(
+            data_dir=settings.data_dir,
+            provider_digest=provider_digest,
+            collection_identity=collection_identity,
+        )
         store = _vector_store_registry.get(cache_key)
         if store is None:
-            store = create_vector_store(persist_dir=settings.data_dir, embedder=embedder)
+            store = create_vector_store(
+                persist_dir=settings.data_dir,
+                collection_name=collection_identity,
+                embedder=embedder,
+            )
             _vector_store_registry[cache_key] = store
         return store
 
@@ -245,14 +261,14 @@ def _rerank_token_counter() -> Any | None:
 
 
 def resume_pending_image_tasks() -> int:
-    """应用启动续跑：识图已配置时，按**工作区**加载未完成图片任务；返回投递数。
+    """应用启动续跑：识图已配置时加载未完成图片任务；返回投递数。
 
     延迟 import（vision/pipeline/worker）避免模块级循环依赖；单区失败静默降级
-    （续跑是尽力而为，不影响应用启动），但**一个工作区失败不影响其它工作区** ——
-    A 区的坏数据不能让 B 区的图片任务永不续跑（A07/A08）。
+    （续跑是尽力而为，不影响应用启动），且一个工作区失败不影响其它工作区。
 
-    每区用**本区**的图片库 / 状态库 / 向量库句柄：续跑写入必须回到任务创建时的区，
-    否则 A 区启动时补做的图片会落进 B 区的索引。
+    D-KB：图片任务库是**共享**的（``data_dir/image_state.db``），因此按
+    ``image_state_db`` 路径**去重**后只续跑一次 —— 否则有几个工作区就会把同一批
+    待办重复投递几次。循环结构保留（未来若某个部署再分库，去重自动失效为逐库处理）。
     """
 
     from app.core.outbound import outbound_client
@@ -271,7 +287,12 @@ def resume_pending_image_tasks() -> int:
         return 0
 
     resumed = 0
+    seen_stores: set[str] = set()
     for context in _workspace_contexts_for_resume():
+        store_key = str(context.image_state_db)
+        if store_key in seen_stores:
+            continue
+        seen_stores.add(store_key)
         try:
             image_store = workspace_image_state_store(context)
             pipeline = IngestionPipeline(
@@ -401,19 +422,20 @@ def read_app_db_workspaces() -> list[dict[str, Any]]:
 
 
 # =====================================================================
-# V1.2.0 工作区知识隔离（PRD 5.1–5.3，T01）
+# 全局共享知识库 + 按区私有状态（D-KB；provider 名沿用 V1.2.0 的按区入口）
 # =====================================================================
 #
-# 本节只**追加**新的 provider，既有 ``get_vector_store`` / ``get_state_store`` /
-# ``get_image_state_store`` 保持原签名与语义（§4：共享入口 append-only），供尚未迁移
-# 到工作区的调用方与既有测试继续使用。新调用方一律走下面的按区 provider：
+# D-KB（2026-09-20 用户决策）取消「按工作区划分知识库」：所有工作区读写**同一份**
+# 知识（文档 / 向量库 / 图片库 / 同步指纹库 / 目录与 BM25 索引），工作区只保留私有件
+# （记忆 / 运行检查点 / 工件 / jieba 缓存）。按区 provider 因此全部解析到同一批共享
+# 路径，句柄注册表以**路径**为键天然复用同一个实例：
 #
 #   get_workspace_context  → 按 ``workspace_id``（查询参数）解析并校验归属
 #   get_workspace_vector_store / *_state_store / *_image_state_store
-#   get_workspace_knowledge_area → 本区 dense + BM25 + 章节 + 浏览统计
+#   get_workspace_knowledge_area → 共享语料的 dense + BM25 + 章节 + 浏览统计
 #
-# 归属校验与目录解析只在 ``WorkspaceContextFactory`` 一处（PRD 5.1），本模块不做
-# 第二份路径拼接。
+# 归属校验与路径解析只在 ``WorkspaceContextFactory`` 一处，本模块不做第二份路径拼接。
+# （provider 名与签名保持不变：调用方无需改动，语义由「本区」变为「共享」。）
 
 #: app.db 访问层单例：由 main.py 的 lifespan 创建并注册（T02/approval-privacy）。
 #: 这里只持有引用，不自行创建 —— 第二个连接池会造成 WAL 下的意外并发写。
@@ -489,10 +511,11 @@ def get_workspace_context(
 def get_workspace_vector_store(
     context: Annotated[WorkspaceContext | None, Depends(get_workspace_context)] = None,
 ) -> VectorStore:
-    """本区向量库句柄（PRD 5.3.1 / 5.3.3）。
+    """共享知识库向量句柄（D-KB）。
 
-    缓存键含 ``workspace_id`` + Provider 配置摘要 + collection 身份：换工作区、换凭证
-    端点或换入库版本都会拿到新句柄，不会继续读旧 ANN 段。
+    缓存键 = Provider 配置摘要 + collection 身份（**不含** ``workspace_id``）：换凭证
+    端点或换入库版本会拿到新句柄，不继续读旧 ANN 段；而不同工作区拿到**同一个**句柄，
+    因为语料只有一份。
     """
 
     resolved = context if context is not None else get_workspace_context()
@@ -515,7 +538,7 @@ def get_workspace_vector_store(
 
 
 def workspace_state_store(context: WorkspaceContext) -> DocumentStateStore:
-    """本区增量同步状态库（``<区根>/state.db``；PRD 5.1）。"""
+    """共享知识库的增量同步状态库（``data_dir/state.db``；D-KB）。"""
 
     key = str(context.state_db)
     with _registry_lock:
@@ -527,9 +550,10 @@ def workspace_state_store(context: WorkspaceContext) -> DocumentStateStore:
 
 
 def workspace_image_state_store(context: WorkspaceContext) -> ImageStateStore:
-    """本区图片任务与内容缓存库（``<区根>/image_state.db``；PRD 5.1 / 5.3.5）。
+    """共享知识库的图片任务与内容缓存库（``data_dir/image_state.db``；D-KB）。
 
-    每区独立文件即天然隔离：A 区的图片 hash 在 B 区查不到（A07 的 404 语义）。
+    共享后原图与任务在所有工作区可见（同一个 hash / task_id 在每个区都能取到）——
+    这是「一个知识库」的应有语义；不存在的 hash 仍是 404。
     """
 
     key = str(context.image_state_db)
@@ -571,14 +595,14 @@ def get_workspace_knowledge_area(
 
 
 async def knowledge_revision_bumped(workspace_id: str, *, delta: int = 1) -> int | None:
-    """提交成功后递增本区知识版本（PRD 5.3.6 的唯一调用点）。
+    """导入 / 同步 / 删除提交成功后递增知识版本（PRD 5.3.6 的唯一调用点）。
 
-    导入 / 同步 / 删除三处提交成功后调用；递增会换掉本区检索面缓存键，使下一次工具
-    调用读到更新后的索引。返回新版本；工作区不存在返回 None。
+    D-KB（知识库全局共享）：语料只有一份，任何一区的导入/删除都改变了**所有区**看到
+    的知识。因此这里递增**目标区 + 其余全部工作区**的版本 —— 否则 B 区的索引与目录
+    缓存会继续命中旧键，读到的还是变更前的语料（PRD 8.2 的资料状态失效检查同样依赖
+    它）。返回目标区的新版本；目标区不存在返回 None。
 
-    D29（迁移后）：落 **app.db** 权威列并把权威行镜像回存档 —— ``knowledge_revision``
-    既是 PRD 5.3.4 的缓存键，也是发布前「资料状态」失效检查（PRD 8.2）的依据，
-    只写存档而让 app.db 滞后会导致索引缓存不失效、证据失效检查失灵。
+    D29（工作区记录迁移后）：落 **app.db** 权威列并把权威行镜像回存档；
     迁移前（``storage_schema_version<2``）保持既有同步 JSON 语义。
     """
 
@@ -589,20 +613,42 @@ async def knowledge_revision_bumped(workspace_id: str, *, delta: int = 1) -> int
                 return None
             revision = await store.bump_knowledge_revision(workspace_id, delta=delta)
             workspace_store.adopt_record(await store.get_workspace(workspace_id))
+            for record in await store.list_workspaces():
+                if record.id == workspace_id:
+                    continue
+                try:
+                    await store.bump_knowledge_revision(record.id, delta=delta)
+                except Exception:  # noqa: BLE001 -- 单区失败不得让本次提交失败
+                    logger.warning("邻区知识版本递增失败：workspace=%s", record.id)
             return revision
-    return workspace_store.bump_knowledge_revision(workspace_id, delta=delta)
+
+    revision = workspace_store.bump_knowledge_revision(workspace_id, delta=delta)
+    if revision is None:
+        return None
+    for workspace in workspace_store.list():
+        if workspace.id == workspace_id:
+            continue
+        try:
+            workspace_store.bump_knowledge_revision(workspace.id, delta=delta)
+        except Exception:  # noqa: BLE001 -- 单区失败不得让本次提交失败
+            logger.warning("邻区知识版本递增失败：workspace=%s", workspace.id)
+    return revision
 
 
 def reset_workspace_scoped_caches() -> None:
-    """清空按区句柄注册表与检索面缓存（测试隔离；迁移切换布局后同样应调用）。
+    """清空按区句柄注册表、共享向量库句柄与检索面缓存（测试隔离；数据目录切换后同样应调用）。
 
-    不清 ``_vector_store_registry``：它由 ``_get_embedder_and_cache_key`` 在 Provider
-    配置变化时自行清空，且键里已含 workspace_id，跨区不会串读。
+    ``_vector_store_registry`` **必须一起清**（D-KB）：共享知识只有一个句柄，键里带的
+    ``data_dir`` 已经挡住跨数据目录复用；但 Chroma 的进程级 System 缓存被清空 / 被
+    ``stop()`` 之后，旧包装器手里的 ``bindings`` 已被销毁（实测
+    ``AttributeError: 'RustBindingsAPI' object has no attribute 'bindings'``），
+    继续留着它只会在下一次调用时炸掉。
     """
 
     with _registry_lock:
         _state_store_registry.clear()
         _image_store_registry.clear()
+        _vector_store_registry.clear()
     clear_workspace_area_cache()
 
 
@@ -745,7 +791,7 @@ async def workspace_history_seam(
 
     import asyncio
 
-    from app.memory.history import DEFAULT_HISTORY_LIMIT, MAX_HISTORY_LIMIT
+    from app.memory.history import DEFAULT_HISTORY_LIMIT, MAX_HISTORY_LIMIT, normalize_date_bounds
 
     requested = request.get("limit")
     limit = DEFAULT_HISTORY_LIMIT if requested in (None, "") else int(requested)
@@ -754,14 +800,25 @@ async def workspace_history_seam(
     offset = 0 if raw_cursor in (None, "") else max(0, int(raw_cursor))
     start_date = request.get("start_date")
     end_date = request.get("end_date")
+    exclude_message_id = request.get("exclude_message_id")
+    distinct_content = bool(request.get("distinct_content", False))
+    snapshot_time = request.get("snapshot_time")
+    if snapshot_time:
+        _, end_date = normalize_date_bounds(None, end_date)
+        end_date = min(end_date, snapshot_time) if end_date else snapshot_time
 
     def _query() -> tuple[list[Any], int, int]:
         search = workspace_history_search(context)
         try:
             hits = search.search(
-                query, limit=limit, offset=offset, date_from=start_date, date_to=end_date
+                query, limit=limit, offset=offset, date_from=start_date, date_to=end_date,
+                exclude_message_id=exclude_message_id,
+                distinct_content=distinct_content,
             )
-            total, conversations = search.count(query, date_from=start_date, date_to=end_date)
+            total, conversations = search.count(
+                query, date_from=start_date, date_to=end_date, exclude_message_id=exclude_message_id,
+                distinct_content=distinct_content,
+            )
             return hits, total, conversations
         finally:
             search.close()

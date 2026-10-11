@@ -13,7 +13,7 @@ import {
   listConversations,
   moveConversationInSidebar,
   moveConversationToWorkspace,
-  truncateConversation,
+  updateConversationSettings,
 } from "./api/conversationApi";
 import type { MoveOutcome } from "./api/conversationApi";
 import { listConversationRuns } from "./api/runApi";
@@ -32,10 +32,11 @@ import ConfirmDialog from "./components/ConfirmDialog";
 import ConversationMenu from "./components/ConversationMenu";
 import MemoryPanel from "./components/MemoryPanel";
 import SettingsModal from "./components/SettingsModal";
+import type { SettingsPage } from "./components/SettingsModal";
 import Sidebar from "./components/Sidebar";
 import type { ConversationAction, ConversationMenuState } from "./components/Sidebar";
 import type { DropTarget } from "./components/WorkspaceTree";
-import { getSettings } from "./api/settingsApi";
+import { getSettings, updateSettings } from "./api/settingsApi";
 import { persistTheme, readStoredTheme } from "./theme";
 import {
   DEFAULT_PERMISSION_MODE,
@@ -44,7 +45,9 @@ import {
 import type {
   ConversationMessage,
   ConversationSummary,
+  ModelSelectionView,
   PermissionMode,
+  ProviderView,
   ReasoningLevel,
   Source,
   StatusResponse,
@@ -57,16 +60,31 @@ import "./App.css";
 import "./design.css";
 import "./settings.css";
 
+/**
+ * 移动会话的入口。
+ *
+ * 两条入口在后端收敛到**同一条状态机**（`t35`），但请求必须从用户实际用的那个端点发出
+ * （拖拽 → `POST /{id}/move`，右键菜单 → `POST /{id}/workspace`）—— 否则「未确认先弹窗」
+ * 这类分支会在两个入口之间分叉，且确认后重放会走错端点。
+ */
+type MoveEntry = "drag" | "menu";
+
 /** 应用外壳（ChatGPT 风格）：左侧边栏（会话历史/知识库/设置）+ 主聊天区。 */
 export default function App() {
   const [status, setStatus] = useState<StatusResponse | null>(null);
   const [statusError, setStatusError] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  /** 打开设置时落在哪一页（侧边栏齿轮 = 默认外观页；模型选择器「管理提供方」= 模型服务）。 */
+  const [settingsPage, setSettingsPage] = useState<SettingsPage | undefined>(undefined);
   const [avatars, setAvatars] = useState<{ user: string | null; agent: string | null }>({
     user: null,
     agent: null,
   });
   const [knowledgeOnly, setKnowledgeOnly] = useState(false);
+  /** 模型选择器数据（供应商列表 + 当前选择 + 生效模型名）；设置页保存后刷新。 */
+  const [modelProviders, setModelProviders] = useState<ProviderView[]>([]);
+  const [modelSelection, setModelSelection] = useState<ModelSelectionView | null>(null);
+  const [currentModel, setCurrentModel] = useState<string | null>(null);
   const [theme, setTheme] = useState<ThemeValue>(() => readStoredTheme());
   const persistedThemeRef = useRef<ThemeValue>(readStoredTheme());
   const transitionTimeoutRef = useRef<number | null>(null);
@@ -76,8 +94,10 @@ export default function App() {
   // 会话管理
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
+  const activeConversationRef = useRef(activeConversationId);
+  activeConversationRef.current = activeConversationId;
   const [chatMessages, setChatMessages] = useState<ConversationMessage[]>([]);
-  /** 父级修订号：编辑重发截断历史后自增，让 Chat 按新历史重载消息。 */
+  /** 父级修订号：历史消息变化后通知 Chat 重新读取。 */
   const [chatRevision, setChatRevision] = useState(0);
   const [citationPanel, setCitationPanel] = useState<{ sources: Source[]; index: number } | null>(
     null,
@@ -103,7 +123,7 @@ export default function App() {
    */
   const loadingConversationRef = useRef(false);
 
-  // V1.2 会话级设置（PRD 14.1）：权限模式与思考深度，默认「请求批准 + 深度思考」。
+  // V1.2 会话级设置（PRD 14.1）：权限模式与思考深度，默认「请求批准 + 关闭思考」。
   const [permissionMode, setPermissionMode] = useState<PermissionMode>(DEFAULT_PERMISSION_MODE);
   const [reasoningLevel, setReasoningLevel] = useState<ReasoningLevel>(DEFAULT_REASONING_LEVEL);
   const [memoryOpen, setMemoryOpen] = useState(false);
@@ -117,7 +137,8 @@ export default function App() {
   const [pendingMove, setPendingMove] = useState<{
     conversation: ConversationSummary;
     targetWorkspaceId: string;
-    targetIndex?: number;
+    /** 触发这次移动的入口：确认后必须从**同一个入口**重放，否则两条路径分叉。 */
+    entry: MoveEntry;
     reason: "needs_confirm" | "epoch_changed";
   } | null>(null);
   const [moveBusy, setMoveBusy] = useState(false);
@@ -332,8 +353,8 @@ export default function App() {
     async (
       conversation: ConversationSummary,
       targetWorkspaceId: string,
-      targetIndex: number | undefined,
       confirm: boolean,
+      entry: MoveEntry,
     ): Promise<void> => {
       const options = {
         confirm,
@@ -342,13 +363,13 @@ export default function App() {
       setMoveBusy(true);
       try {
         const outcome =
-          targetIndex === undefined
-            ? await moveConversationToWorkspace(conversation.id, targetWorkspaceId, options)
-            : await moveConversationInSidebar(
+          entry === "drag"
+            ? await moveConversationInSidebar(
                 conversation.id,
-                { workspaceId: targetWorkspaceId, targetIndex },
+                { workspaceId: targetWorkspaceId },
                 options,
-              );
+              )
+            : await moveConversationToWorkspace(conversation.id, targetWorkspaceId, options);
         setPendingMove(null);
         setConversationMenu(null);
         await afterMove(conversation.id, targetWorkspaceId, outcome);
@@ -361,13 +382,13 @@ export default function App() {
             setPendingMove({
               conversation,
               targetWorkspaceId,
-              targetIndex,
+              entry,
               reason: "epoch_changed",
             });
             return;
           }
           if (error.kind === "confirm_required" && !confirm) {
-            setPendingMove({ conversation, targetWorkspaceId, targetIndex, reason: "needs_confirm" });
+            setPendingMove({ conversation, targetWorkspaceId, entry, reason: "needs_confirm" });
             return;
           }
           // 已经确认过却仍被判需要确认：说明判断口径与后端不一致，如实报错而不是再弹一次（防死循环）。
@@ -387,67 +408,46 @@ export default function App() {
   );
 
   /**
-   * 侧边栏拖拽落点：把会话移到目标工作区的指定位置（同区即为手动排序）。
+   * 侧边栏拖拽落点：把会话放进目标工作区。
    *
-   * 目标位次按「落点前后的兄弟会话」在当前排序里的下标推算：
-   * 插到 before 之前 / after 之后；落在文件夹空白处则排到末尾。
-   *
-   * 跨区拖拽 == 归属变更，与右键「移动到工作区」同一条状态机；**同区排序不需要确认**
-   * （后端也只排序，不递增 epoch、不写权威行）。
+   * 自 2026-09-22（需求 2）起侧边栏一律「最近活动优先」，**工作区内拖拽排序已取消**：
+   * 拖到本区不产生任何调用（否则会写出一个马上被最近活动顺序覆盖的位次，界面却不变化）。
+   * 跨区拖拽 == 归属变更，与右键「移动到工作区」同一条状态机；携带历史时先确认。
    */
   const handleDropConversation = useCallback(
     async (conversationId: string, target: DropTarget): Promise<void> => {
       const conversation = conversations.find((item) => item.id === conversationId);
       if (conversation === undefined) return;
-      const siblings = conversations
-        .filter(
-          (item) =>
-            item.id !== conversationId && (item.workspace_id ?? "default") === target.workspaceId,
-        )
-        .sort(
-          (left, right) =>
-            (left.sort_index ?? Number.MAX_SAFE_INTEGER) - (right.sort_index ?? Number.MAX_SAFE_INTEGER),
-        );
-      let targetIndex = siblings.length;
-      if (target.beforeId !== null) {
-        const index = siblings.findIndex((item) => item.id === target.beforeId);
-        if (index >= 0) targetIndex = index;
-      } else if (target.afterId !== null) {
-        const index = siblings.findIndex((item) => item.id === target.afterId);
-        if (index >= 0) targetIndex = index + 1;
-      }
-
-      const currentWorkspaceId = conversation.workspace_id ?? DEFAULT_WORKSPACE_ID;
-      if (currentWorkspaceId === target.workspaceId) {
-        // 同区：仅排序，不涉及归属，无需确认。
-        await runMove(conversation, target.workspaceId, targetIndex, false);
-        return;
-      }
-      // 跨区：携带历史时先让用户确认真实影响（空会话交给后端的 409 判定，不无谓打扰）。
+      if ((conversation.workspace_id ?? DEFAULT_WORKSPACE_ID) === target.workspaceId) return;
       if (conversation.message_count > 0) {
         setPendingMove({
           conversation,
           targetWorkspaceId: target.workspaceId,
-          targetIndex,
+          entry: "drag",
           reason: "needs_confirm",
         });
         return;
       }
-      await runMove(conversation, target.workspaceId, targetIndex, false);
+      await runMove(conversation, target.workspaceId, false, "drag");
     },
     [conversations, runMove],
   );
 
-  /** 右键菜单「移动到工作区」：移动到目标分区（排在末尾，位置由拖拽微调）。 */
+  /** 右键菜单「移动到工作区」：把会话挪到目标分区（区内位置由「最近活动优先」自然决定）。 */
   const handleMoveConversation = useCallback(
     async (conversation: ConversationSummary, workspaceId: string): Promise<void> => {
       if ((conversation.workspace_id ?? DEFAULT_WORKSPACE_ID) === workspaceId) return;
       // 携带历史的会话必须先确认（PRD 5.4 首句）；空会话照旧直接移。
       if (conversation.message_count > 0) {
-        setPendingMove({ conversation, targetWorkspaceId: workspaceId, reason: "needs_confirm" });
+        setPendingMove({
+          conversation,
+          targetWorkspaceId: workspaceId,
+          entry: "menu",
+          reason: "needs_confirm",
+        });
         return;
       }
-      await runMove(conversation, workspaceId, undefined, false);
+      await runMove(conversation, workspaceId, false, "menu");
     },
     [runMove],
   );
@@ -471,16 +471,24 @@ export default function App() {
     } else if (root.dataset.theme !== next) {
       root.dataset.theme = next;
       root.classList.remove("theme-transition");
+    } else {
+      // 目标主题已是当前主题：这里同样要清掉过渡类。否则「先切主题、再点保存（保存会
+      // 重新 loadSettings → applyTheme）」会把已经挂上的 `.theme-transition` 永久留在
+      // <html> 上 —— 定时器刚被上面清掉，就再也没人移除它（本轮真机验证实测到的缺陷）。
+      root.classList.remove("theme-transition");
     }
     setTheme(next);
   }, []);
 
-  // 加载设置（头像 + 主题；设置页保存后也刷新），失败静默回退默认
+  // 加载设置（头像 + 主题 + 模型供应商；设置页保存后也刷新），失败静默回退默认
   const loadSettings = useCallback((): void => {
     getSettings()
       .then((view) => {
         setAvatars(view.avatars ?? { user: null, agent: null });
         setKnowledgeOnly(view.answer_preferences?.knowledge_only ?? false);
+        setModelProviders(view.providers ?? []);
+        setModelSelection(view.model_selection ?? null);
+        setCurrentModel(view.chat?.model ?? null);
         const next = view.theme ?? "light";
         persistedThemeRef.current = next;
         persistTheme(next);
@@ -490,6 +498,28 @@ export default function App() {
         /* 忽略：加载失败保持默认 */
       });
   }, [applyTheme]);
+
+  /**
+   * 选择对话模型：写设置（`model_selection`）后立刻刷新，界面上显示的是**真正生效**的值。
+   *
+   * 选择对**之后的提问**生效：正在跑的那一轮不受影响（后端每轮开始时才读设置）。
+   */
+  const handleModelSelect = useCallback(
+    (providerId: string, modelId: string): void => {
+      updateSettings({ model_selection: { provider_id: providerId, model_id: modelId } })
+        .then((view) => {
+          setModelProviders(view.providers ?? []);
+          setModelSelection(view.model_selection ?? null);
+          setCurrentModel(view.chat?.model ?? null);
+          showToast("success", `已切换到 ${view.model_selection?.model_name ?? modelId}`);
+        })
+        .catch((error: unknown) => {
+          showToast("error", error instanceof Error ? error.message : String(error));
+          loadSettings();
+        });
+    },
+    [loadSettings, showToast],
+  );
 
   // 启动：状态 + 设置 + 分区（分区到位后再拉会话列表，避免拉成「全部分区」）
   // 启动：状态 + 设置 + 工作区 + 全部会话（侧边栏自行按工作区分组）
@@ -517,20 +547,43 @@ export default function App() {
     [applyTheme],
   );
 
-  const handleNewChat = async (workspaceId?: string): Promise<void> => {
-    try {
-      // 新对话归入指定工作区（点文件夹则在那个文件夹里建；否则落在最近使用的分区）
-      const targetWorkspace = workspaceId ?? activeWorkspaceId;
-      const conversation = await createConversation(targetWorkspace);
-      setConversations((prev) => [conversation, ...prev]);
-      setActiveConversationId(conversation.id);
-      setActiveWorkspaceId(targetWorkspace ?? null);
-      setChatMessages([]);
+  /**
+   * 用户在侧边栏点了一个工作区：记为「当前工作区」，决定新对话落到哪里（需求 3）。
+   *
+   * 还处在**草稿态**（还没建会话）时顺带带上该工作区的会话默认值，与点「新对话」同一条口径；
+   * 已经打开着某条历史会话时不改它的权限/思考档位（那属于那条会话自己的设置）。
+   */
+  const handleSelectWorkspace = useCallback(
+    (workspaceId: string): void => {
+      setActiveWorkspaceId(workspaceId);
+      if (activeConversationId !== null) return;
+      const defaults = workspaces.find((workspace) => workspace.id === workspaceId);
+      setPermissionMode(defaults?.default_permission_mode ?? DEFAULT_PERMISSION_MODE);
+      setReasoningLevel(defaults?.default_reasoning_level ?? DEFAULT_REASONING_LEVEL);
+    },
+    [activeConversationId, workspaces],
+  );
+
+  /**
+   * 新建对话（侧边栏「新对话」、文件夹菜单「在此工作区新建对话」、空文件夹的提示按钮共用）。
+   *
+   * 两条硬要求（用户 2026-09-22）：
+   * 1. **落到用户当前点选的工作区**：`workspaceId`（点文件夹菜单时给出）优先，其次是用
+   *    `onSelectWorkspace` 捕获的「用户刚点过的那个文件夹」，都没有才回落到默认工作区。
+   * 2. **重复点击只产生一个会话**：这里改成了**纯界面切换**，会话推迟到第一次提问时由
+   *    `handleEnsureConversation` 惰性落库。于是重复点击天然是幂等的，也不会在库里堆下
+   *    一堆永远没消息的空会话（旧实现每次都 POST 一次并把空会话插到侧边栏顶端）。
+   */
+  const handleNewChat = (workspaceId?: string): void => {
+    const target = workspaceId ?? activeWorkspaceId ?? DEFAULT_WORKSPACE_ID;
+    const defaults = workspaces.find((workspace) => workspace.id === target);
+    setActiveWorkspaceId(target);
+    setPermissionMode(defaults?.default_permission_mode ?? DEFAULT_PERMISSION_MODE);
+    setReasoningLevel(defaults?.default_reasoning_level ?? DEFAULT_REASONING_LEVEL);
+    setActiveConversationId(null);
+    setChatMessages([]);
     setChatRevision(0);
-      setCitationPanel(null);
-    } catch (error) {
-      setStatusError(error instanceof Error ? error.message : String(error));
-    }
+    setCitationPanel(null);
   };
 
   const handleSelectConversation = async (id: string): Promise<void> => {
@@ -540,6 +593,8 @@ export default function App() {
       const conversation = await getConversation(id);
       setActiveConversationId(conversation.id);
       setChatMessages(conversation.messages);
+      setPermissionMode(conversation.permission_mode ?? DEFAULT_PERMISSION_MODE);
+      setReasoningLevel(conversation.reasoning_level ?? DEFAULT_REASONING_LEVEL);
       setChatRevision(0);
       setCitationPanel(null);
       // 记住这条对话所属分区：后续「新对话」默认落在同一个文件夹里
@@ -637,32 +692,9 @@ export default function App() {
     setCitationPanel({ sources, index });
   }, []);
 
-  /**
-   * 编辑重发：把会话历史从第 index 条起截断（该条及其后的轮次作废）并返回新历史。
-   *
-   * 与 ChatGPT 的编辑语义一致：改写中间某条提问后，后面的问答都失效；
-   * 真截断落库后重发只追加，因此不会出现「旧卡片 + 新卡片」两份重复轮次。
-   */
-  const handleEditUserMessage = useCallback(
-    async (index: number, _content: string): Promise<ConversationMessage[] | null> => {
-      if (activeConversationId === null) return null;
-      const next = chatMessages.slice(0, index);
-      // 截断期间禁止把问答结果再追加落库（历史基线正在变化）
-      loadingConversationRef.current = true;
-      try {
-        await truncateConversation(activeConversationId, index);
-        setChatMessages(next);
-        setChatRevision((value) => value + 1);
-        return next;
-      } catch (error) {
-        showToast("error", error instanceof Error ? error.message : "无法编辑这条提问，请稍后重试");
-        return null;
-      } finally {
-        loadingConversationRef.current = false;
-      }
-    },
-    [activeConversationId, chatMessages, showToast],
-  );
+  const handleEditCommitted = useCallback((index: number): void => {
+    setChatMessages((messages) => messages.slice(0, index));
+  }, []);
 
   const closeConversationMenu = useCallback((): void => setConversationMenu(null), []);
 
@@ -749,15 +781,36 @@ export default function App() {
     }
   };
 
+  useEffect(() => {
+    const saved = sessionStorage.getItem("everything-rag-conversation");
+    if (saved !== null) void handleSelectConversation(saved);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 页面加载时恢复会话
+  }, []);
+
+  useEffect(() => {
+    if (activeConversationId !== null) {
+      sessionStorage.setItem("everything-rag-conversation", activeConversationId);
+    } else {
+      // 草稿态（点了「新对话」还没提问）：会话推迟到首次提问才建，所以记忆也要跟着清掉，
+      // 否则刷新会把你丢回上一个会话 —— 与「新对话」的语义不符。
+      sessionStorage.removeItem("everything-rag-conversation");
+    }
+  }, [activeConversationId]);
+
   return (
     <div className="app">
       <Sidebar
         statusError={statusError}
         conversations={conversations}
         activeConversationId={activeConversationId}
-        onNewChat={(workspaceId) => void handleNewChat(workspaceId)}
+        onNewChat={(workspaceId) => handleNewChat(workspaceId)}
+        onSelectWorkspace={handleSelectWorkspace}
         onSelectConversation={(id) => void handleSelectConversation(id)}
-        onOpenSettings={() => setSettingsOpen(true)}
+        onOpenSettings={() => {
+          // 侧边栏齿轮：保持原有默认页（外观与头像）
+          setSettingsPage(undefined);
+          setSettingsOpen(true);
+        }}
         onOpenConversationMenu={setConversationMenu}
         workspaces={workspaces}
         onCreateWorkspace={async () => {
@@ -789,15 +842,53 @@ export default function App() {
           ensureConversation={handleEnsureConversation}
           revision={chatRevision}
           onExchangeComplete={handleExchangeComplete}
-          onEditUserMessage={handleEditUserMessage}
-          onChatComplete={loadStatus}
+          onEditCommitted={handleEditCommitted}
+          onChatComplete={() => {
+            loadStatus();
+            loadConversations();
+            void loadWorkspaces();
+            if (activeConversationId !== null) {
+              void getConversation(activeConversationId).then((conversation) => {
+                if (!loadingConversationRef.current && activeConversationRef.current === conversation.id) {
+                  setChatMessages(conversation.messages);
+                }
+              }).catch((error) => showToast("error", error.message));
+            }
+          }}
           avatars={avatars}
           onCitationSelect={handleCitationSelect}
           permissionMode={permissionMode}
           reasoningLevel={reasoningLevel}
-          onPermissionModeChange={setPermissionMode}
-          onReasoningLevelChange={setReasoningLevel}
+          onPermissionModeChange={(mode) => {
+            const previous = permissionMode;
+            setPermissionMode(mode);
+            if (activeConversationId !== null) {
+              void updateConversationSettings(activeConversationId, { permission_mode: mode }).catch((error) => {
+                setPermissionMode(previous);
+                showToast("error", error.message);
+              });
+            }
+          }}
+          onReasoningLevelChange={(level) => {
+            const previous = reasoningLevel;
+            setReasoningLevel(level);
+            if (activeConversationId !== null) {
+              void updateConversationSettings(activeConversationId, { reasoning_level: level }).catch((error) => {
+                setReasoningLevel(previous);
+                showToast("error", error.message);
+              });
+            }
+          }}
           onNotify={showToast}
+          modelProviders={modelProviders}
+          modelSelection={modelSelection}
+          currentModel={currentModel}
+          onModelSelect={handleModelSelect}
+          onOpenSettings={() => {
+            // 「管理提供方」必须直接落到**模型服务**页
+            setSettingsPage("models");
+            setSettingsOpen(true);
+          }}
           originRunId={
             activeConversationId === null ? null : (originRunIds[activeConversationId] ?? null)
           }
@@ -829,8 +920,8 @@ export default function App() {
           void runMove(
             pendingMove.conversation,
             pendingMove.targetWorkspaceId,
-            pendingMove.targetIndex,
             true,
+            pendingMove.entry,
           );
         }}
         onCancel={() => setPendingMove(null)}
@@ -896,6 +987,7 @@ export default function App() {
           void loadWorkspaces();
         }}
         open={settingsOpen}
+        initialPage={settingsPage}
         onClose={() => {
           setSettingsOpen(false);
           // 未保存则回退到已持久化的主题

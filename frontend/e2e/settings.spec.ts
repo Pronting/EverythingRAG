@@ -13,15 +13,76 @@ const STATUS_BODY = JSON.stringify({
   privacy: { outbound_state: "local-only", providers: {} },
 });
 
+/** 供应商脱敏视图（与 /api/settings 的 providers 字段同形）。 */
+const PROVIDERS = [
+  {
+    id: "deepseek",
+    name: "DeepSeek",
+    kind: "builtin",
+    protocol: "openai-completions",
+    base_url: "https://api.deepseek.com/v1",
+    api_key_set: true,
+    api_key_hint: "...abcd",
+    models: [{ id: "deepseek-flash", name: "DeepSeek Flash", vision: true }],
+    status: "ready",
+    selected: true,
+  },
+  {
+    id: "custom-1",
+    name: "commande code",
+    kind: "custom",
+    protocol: "openai-completions",
+    base_url: "https://api.commandcode.ai/provider/v1",
+    api_key_set: false,
+    api_key_hint: null,
+    models: [{ id: "deepseek/deepseek-v4.1-flash", name: "DeepSeek V4.1 Flash", vision: false }],
+    status: "ready",
+    selected: false,
+  },
+];
+
+const MODEL_SELECTION = {
+  provider_id: "deepseek",
+  provider_name: "DeepSeek",
+  model_id: "deepseek-flash",
+  model_name: "DeepSeek Flash",
+  vision: true,
+};
+
+const MODEL_CATALOG = [
+  {
+    id: "deepseek",
+    name: "DeepSeek",
+    base_url: "https://api.deepseek.com/v1",
+    summary: "官方端点",
+    requires_api_key: true,
+    docs_url: null,
+    models: [{ id: "deepseek-flash", name: "DeepSeek Flash", vision: true }],
+  },
+  {
+    id: "ollama",
+    name: "Ollama（本地）",
+    base_url: "http://127.0.0.1:11434/v1",
+    summary: "本机 Ollama",
+    requires_api_key: false,
+    docs_url: null,
+    models: [],
+  },
+];
+
 const SETTINGS_VIEW = {
   chat: {
     provider_type: "openai_compatible",
-    base_url: "https://api.example.com/v1",
-    model: "deepseek-chat",
+    base_url: "https://api.deepseek.com/v1",
+    model: "deepseek-flash",
     api_key_set: true,
     api_key_hint: "...abcd",
-    supports_image: false,
+    supports_image: true,
   },
+  providers: PROVIDERS,
+  model_selection: MODEL_SELECTION,
+  model_catalog: MODEL_CATALOG,
+  model_protocols: ["openai-completions"],
   embed: {
     mode: "cloud",
     base_url: "https://embed.example.com/v1",
@@ -44,6 +105,7 @@ const SETTINGS_VIEW = {
     api_key_set: false,
     api_key_hint: null,
   },
+  memory_enabled: true,
   answer_preferences: {
     language: "auto",
     verbosity: "balanced",
@@ -128,9 +190,12 @@ test("设置弹窗：核心策略只读 + 保存结构化回答偏好", async ({
   await expect(dialog).toBeVisible();
   await expect(dialog.getByRole("heading", { name: "头像", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "模型服务", exact: true }).click();
-  await expect(dialog.getByRole("heading", { name: "对话模型" })).toBeVisible();
+  await expect(dialog.getByRole("heading", { name: "模型", exact: true })).toBeVisible();
   await expect(dialog.getByRole("heading", { name: "嵌入模型" })).toBeVisible();
-  await expect(page.getByLabel("对话模型 API Key")).toHaveValue("");
+  // 对话模型改为「供应商卡片」形态：默认折叠，只看得到名称/状态/编辑按钮
+  await expect(page.getByTestId("provider-deepseek")).toBeVisible();
+  await expect(page.getByTestId("provider-custom-1")).toBeVisible();
+  await expect(page.getByTestId("provider-status-deepseek")).toHaveAttribute("aria-label", "已就绪");
   await page.getByRole("button", { name: "回答偏好", exact: true }).click();
   await expect(dialog.getByRole("heading", { name: "回答偏好" })).toBeVisible();
   await expect(dialog.getByText(/rag-policy-v3/)).not.toBeVisible();
@@ -170,6 +235,21 @@ test("设置弹窗：修改嵌入模型显示重建提示", async ({ page }) => 
   await expect(page.getByText(/重新导入全部文档/)).toBeVisible();
 });
 
+test("设置弹窗：关闭记忆并保存", async ({ page }) => {
+  const { putBody } = await stubSettings(page);
+  await page.goto("/");
+  await page.getByRole("button", { name: "设置", exact: true }).click();
+  await page.getByRole("button", { name: "记忆", exact: true }).click();
+
+  const toggle = page.getByTestId("settings-memory-enabled");
+  await expect(toggle).toBeChecked();
+  await toggle.uncheck();
+  await expect(page.getByTestId("settings-memory-disabled-note")).toBeVisible();
+  await page.getByRole("button", { name: "保存", exact: true }).click();
+
+  expect(putBody()).toMatchObject({ memory_enabled: false });
+});
+
 test("设置分类保留未保存内容，键盘焦点限制在弹窗内，取消还原主题", async ({ page }) => {
   await stubSettings(page);
   await page.goto("/");
@@ -181,11 +261,12 @@ test("设置分类保留未保存内容，键盘焦点限制在弹窗内，取�
   await page.keyboard.press("Tab");
   await expect(close).toBeFocused();
   await page.getByRole("button", { name: "模型服务", exact: true }).click();
-  await page.getByPlaceholder("deepseek-chat / gpt-4o-mini").fill("draft-model");
+  await page.getByTestId("provider-custom-1").getByRole("button", { name: "编辑" }).click();
+  await page.getByLabel("custom-1 显示名称").fill("draft-provider");
   await page.getByRole("navigation", { name: "设置分类" }).getByRole("button", { name: "联网搜索", exact: true }).click();
   await page.getByLabel("启用联网搜索").check();
   await page.getByRole("button", { name: "模型服务", exact: true }).click();
-  await expect(page.getByPlaceholder("deepseek-chat / gpt-4o-mini")).toHaveValue("draft-model");
+  await expect(page.getByLabel("custom-1 显示名称")).toHaveValue("draft-provider");
   await page.getByRole("button", { name: "外观与头像", exact: true }).click();
   await page.getByRole("button", { name: "深色", exact: true }).click();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
@@ -258,22 +339,32 @@ test("精简设置的密钥操作可清除保存，手机与桌面不溢出", as
     await page.getByRole("button", { name: "外观与头像", exact: true }).click();
     await page.screenshot({ path: `test-results/compact-appearance-${width}.png` });
     await page.getByRole("button", { name: "模型服务", exact: true }).click();
-    const key = page.getByLabel("对话模型 API Key");
+    // 供应商卡片展开后才看得到密钥行（已保存的密钥只显示尾4位）；已展开就不重复点
+    const card = page.getByTestId("provider-deepseek");
+    if ((await card.getAttribute("data-expanded")) !== "true") {
+      await card.getByRole("button", { name: "编辑" }).click();
+    }
+    await expect(card).toHaveAttribute("data-expanded", "true");
+    const key = page.getByLabel("DeepSeek API 密钥");
     await expect(key).toBeVisible();
-    const clear = page.getByRole("button", { name: "清除 Key", exact: true });
+    await expect(key).toHaveAttribute("placeholder", "已配置——输入新值可替换");
+    const clear = page.getByTestId("provider-deepseek").getByRole("button", { name: "清除 Key" });
     const box = await clear.boundingBox();
     expect(box!.x + box!.width).toBeLessThanOrEqual(width);
     await page.screenshot({ path: `test-results/compact-models-${width}.png` });
   }
-  await page.getByRole("button", { name: "清除 Key", exact: true }).click();
-  await expect(page.getByLabel("对话模型 API Key")).toHaveValue("");
+  await page.getByTestId("provider-deepseek").getByRole("button", { name: "清除 Key" }).click();
+  await expect(page.getByTestId("provider-deepseek").getByText("保存后清除")).toBeVisible();
   await page.getByRole("button", { name: "保存", exact: true }).click();
   await expect(page.getByText("已保存", { exact: true })).toBeVisible();
-  expect(putBody()).toMatchObject({ chat: { api_key: "" } });
+  // 整表替换语义：被清的那条提交空串（清除），未动的另一条不带 api_key（保留原值）
+  const body = putBody() as { providers: { id: string; api_key?: string }[] };
+  expect(body.providers.find((item) => item.id === "deepseek")?.api_key).toBe("");
+  expect(body.providers.find((item) => item.id === "custom-1")?.api_key).toBeUndefined();
 });
 
 
-test("模型连接测试使用未保存配置，结果弹窗支持成功和失败", async ({ page }) => {
+test("供应商连接测试用未保存配置（真实请求体），嵌入连接测试仍用弹窗", async ({ page }) => {
   await stubSettings(page);
   const calls: unknown[] = [];
   await page.route("**/api/settings/test-connection", route => {
@@ -283,14 +374,16 @@ test("模型连接测试使用未保存配置，结果弹窗支持成功和失�
   await page.goto("/");
   await page.getByRole("button", { name: "设置", exact: true }).click();
   await page.getByRole("button", { name: "模型服务", exact: true }).click();
-  await page.getByRole("textbox", { name: "模型名", exact: true }).first().fill("draft-model");
-  await page.getByRole("button", { name: "测试对话模型连接" }).click();
-  const result = page.getByRole("dialog", { name: "连接成功", exact: true });
-  await expect(result).toBeVisible();
-  await expect(result.getByText("响应耗时 120 毫秒")).toBeVisible();
-  expect(calls[0]).toMatchObject({ kind: "chat", model: "draft-model" });
+  await page.getByTestId("provider-custom-1").getByRole("button", { name: "编辑" }).click();
+  await page.getByTestId("provider-test-custom-1").click();
+  // 供应商连接测试用 toast 如实汇报（成功/失败都可见），请求体带该供应商的地址与首个模型
+  await expect(page.getByText(/「commande code」连接成功/)).toBeVisible();
+  expect(calls[0]).toMatchObject({
+    kind: "chat",
+    base_url: "https://api.commandcode.ai/provider/v1",
+    model: "deepseek/deepseek-v4.1-flash",
+  });
   await page.screenshot({ path: "test-results/model-connection-success.png" });
-  await result.getByRole("button", { name: "关闭", exact: true }).click();
   await page.getByRole("button", { name: "测试嵌入模型连接" }).click();
   await expect(page.getByRole("dialog", { name: "连接失败", exact: true })).toBeVisible();
   await page.keyboard.press("Escape");

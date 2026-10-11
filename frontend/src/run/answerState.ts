@@ -129,8 +129,7 @@ const IMAGE_REF = /^(?:\/api\/knowledge\/images\/[a-f0-9]{16,64}|https?:\/\/\S+\
  *
  * * `similarity`（**原始向量分数**，PRD RAG-relevance §52/§304）**无条件搬运**：它是向量
  *   检索命中的原始分数，与「是否启用重排」**语义正交** —— 未启用筛选的来源照样有向量
- *   分数，必须显示「向量相似度 N%」；真的没有（纯词法命中）才由 `util/source.ts` 显示
- *   「词法命中」，不显示 0%。
+ *   分数，必须显示「向量相似度 N%」；缺少分数时依据实际来源类型展示。
  * * 「已筛选资料」字段（集成 t5）**按原值搬运且受 `filtered` 闸门约束**：后端把本轮真实
  *   筛选结果（`relevance_checked` / `rerank_score` / `score_type` / `profile_id` /
  *   `evidence_hash` / `member_refs`）写在引用上，这里只拷贝 —— 记录缺失时保持缺省
@@ -146,10 +145,17 @@ export function citationToSource(citation: CitationEntry): Source {
     block_id: citation.evidence_id,
     text: citation.snippet,
     source_file: citation.source_ref,
+    document_title: citation.document_title ?? null,
     // 原始**向量**分数：与 rerank 开关无关，有值就搬运（有值 ⇒「向量相似度 N%」）。
     // 它与 `rerank_score`（排序分数）是两条独立数值，缺省不填 0、不互相顶替。
     similarity: citation.similarity ?? null,
-    heading_path: null,
+    match_type: citation.match_type ?? (
+      citation.source_type === "knowledge" && /#read:\d+$/.test(citation.source_ref)
+        ? "read" : undefined
+    ),
+    // 章节标题来自引用的 heading_path（后端把「标题：…／内容：…」包装拆开后单列）：
+    // 面板显示**人读的位置**，与 source_file（文档 ID / block ID，仅供定位）分开。
+    heading_path: citation.heading_path ?? null,
     anchor: null,
     // 图片证据：面板要走 Markdown 渲染（表格/描述），并给出「查看原图」入口。
     chunk_type: isImage ? "image_description" : "evidence",

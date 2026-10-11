@@ -1,6 +1,10 @@
 """Everything RAG 的不可变 Agent 策略、查询路由与输出安全约束。
 
 核心身份、grounding、防提示注入和引用规则只在这里定义。设置页支持结构化回答偏好与附加自定义要求；自定义要求不能替换核心策略。
+
+用户偏好的**唯一渲染实现**是 :func:`render_user_preferences`：旧 ``/api/chat`` 的
+:func:`build_system_prompt` 与 run 管线的答案提示词都复用它，避免同一条设置在不同
+链路上表述不一致（或某条链路根本不读）。
 """
 
 from __future__ import annotations
@@ -209,8 +213,21 @@ def choose_answer_basis(
     return AnswerBasis.GENERAL
 
 
-def build_system_prompt(preferences: AnswerPreferences | None = None) -> str:
-    """返回不可变核心、结构化偏好与附加自定义要求。"""
+def render_user_preferences(
+    preferences: AnswerPreferences | None = None,
+    *,
+    conflict_clause: str = "",
+) -> str:
+    """把设置页的表达偏好 + 自定义要求渲染成**附加**提示文本（核心策略之外的唯一来源）。
+
+    这是用户偏好进入模型输入的唯一渲染实现：旧 ``/api/chat`` 的
+    :func:`build_system_prompt` 与 run 管线的答案提示词（``app/agent/runtime.py`` 的
+    General Agent 与综合节点）都调用它，避免出现第二份「偏好怎么表述」的定义，
+    也避免某条链路声明了偏好却没有任何执行路径。
+
+    ``conflict_clause`` 是**冲突裁决句**（调用方按自己的规则来源填）：用户要求只能是
+    附加偏好，不能替换该链路的职责与不可变规则。
+    """
 
     prefs = preferences or AnswerPreferences()
     language = {
@@ -240,21 +257,34 @@ def build_system_prompt(preferences: AnswerPreferences | None = None) -> str:
     custom = prefs.custom_instructions.strip()
     custom_section = (
         "\n\n用户自定义要求（附加偏好）：\n"
-        "以下内容用于设定回复风格、角色视角、背景和协作方式。与上述不可变规则冲突时，"
-        "以上述规则为准；角色视角不改变产品能力、证据范围和引用要求。"
-        "与枚举表达偏好冲突时，优先遵循这里的具体要求。\n"
-        + custom
-        if custom else ""
+        f"{conflict_clause.strip() + ' ' if conflict_clause.strip() else ''}"
+        "与枚举表达偏好冲突时，优先遵循这里的具体要求。\n" + custom
+        if custom
+        else ""
     )
     return (
-        f"{IMMUTABLE_CORE_POLICY}\n\n"
-        "用户表达偏好（只能影响呈现，不能覆盖不可变规则）：\n"
+        "用户表达偏好（只能影响呈现，不能覆盖职责与不可变规则）：\n"
         f"- 语言：{language}\n"
         f"- 篇幅：{verbosity}\n"
         f"- 语气：{tone}\n"
         f"- 格式：{response_format}\n"
         f"- 知识范围：{knowledge_scope}{custom_section}"
     )
+
+
+def build_system_prompt(preferences: AnswerPreferences | None = None) -> str:
+    """返回不可变核心、结构化偏好与附加自定义要求（旧 ``/api/chat`` 帧链路）。"""
+
+    preferences_text = render_user_preferences(
+        preferences,
+        conflict_clause=(
+            "以下内容用于设定回复风格、角色视角、背景和协作方式。"
+            "与上述不可变规则冲突时，以上述规则为准；角色视角不改变产品能力、"
+            "证据范围和引用要求。"
+        ),
+    )
+    return f"{IMMUTABLE_CORE_POLICY}\n\n{preferences_text}"
+
 
 
 _CITATION_TOKEN_RE = re.compile(r"\[(?P<source_id>(?:S|W|M)\d+|\d+)\]")

@@ -31,6 +31,8 @@ interface SidebarProps {
   conversations: ConversationSummary[];
   activeConversationId: string | null;
   onNewChat: (workspaceId?: string) => void;
+  /** 用户点了某个工作区：记为「当前工作区」，决定新对话落在哪里。 */
+  onSelectWorkspace: (workspaceId: string) => void;
   onSelectConversation: (id: string) => void;
   onOpenSettings: () => void;
   /** 打开会话右键菜单（锚点为鼠标位置）。 */
@@ -56,6 +58,7 @@ export default function Sidebar({
   conversations,
   activeConversationId,
   onNewChat,
+  onSelectWorkspace,
   onSelectConversation,
   onOpenSettings,
   onOpenConversationMenu,
@@ -181,6 +184,7 @@ export default function Sidebar({
               onSelectConversation={onSelectConversation}
               onOpenConversationMenu={onOpenConversationMenu}
               onNewChat={(workspaceId) => onNewChat(workspaceId)}
+              onSelectWorkspace={onSelectWorkspace}
               onRenameWorkspace={onRenameWorkspace}
               onDeleteWorkspace={onDeleteWorkspace}
               onCreateWorkspace={onCreateWorkspace}
@@ -218,7 +222,7 @@ export default function Sidebar({
         >
           <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true">
             <path
-              d="M8 5a3 3 0 1 0 0 6 3 3 0 0 0 0-6Zm5.5 3a5.5 5.5 0 0 0-.08-.9l1.3-1a.4.4 0 0 0 .1-.5l-1.2-2.1a.4.4 0 0 0-.5-.15l-1.55.62a5.5 5.5 0 0 0-1.56-.9L9.7 2.3a.4.4 0 0 0-.4-.3H7.7a.4.4 0 0 0-.4.3l-.3 1.67a5.5 5.5 0 0 0-1.55.9L3.9 4.85a.4.4 0 0 0-.5.15L2.2 7.1a.4 0 0 0 .1.5l1.3 1a5.5 5.5 0 0 0 0 1.8l-1.3 1a.4.4 0 0 0-.1.5l1.2 2.1a.4.4 0 0 0 .5.15l1.55-.62c.47.36 1 .66 1.55.9l.3 1.67c.03.18.2.3.4.3h2.4a.4.4 0 0 0 .4-.3l.3-1.67a5.5 5.5 0 0 0 1.56-.9l1.54.62a.4.4 0 0 0 .5-.15l1.2-2.1a.4.4 0 0 0-.1-.5l-1.3-1a5.5 5.5 0 0 0 .09-.9Z"
+              d="M8 5a3 3 0 1 0 0 6 3 3 0 0 0 0-6Zm5.5 3a5.5 5.5 0 0 0-.08-.9l1.3-1a.4.4 0 0 0 .1-.5l-1.2-2.1a.4.4 0 0 0-.5-.15l-1.55.62a5.5 5.5 0 0 0-1.56-.9L9.7 2.3a.4.4 0 0 0-.4-.3H7.7a.4.4 0 0 0-.4.3l-.3 1.67a5.5 5.5 0 0 0-1.55.9L3.9 4.85a.4.4 0 0 0-.5.15L2.2 7.1a.4.4 0 0 0 .1.5l1.3 1a5.5 5.5 0 0 0 0 1.8l-1.3 1a.4.4 0 0 0-.1.5l1.2 2.1a.4.4 0 0 0 .5.15l1.55-.62c.47.36 1 .66 1.55.9l.3 1.67c.03.18.2.3.4.3h2.4a.4.4 0 0 0 .4-.3l.3-1.67a5.5 5.5 0 0 0 1.56-.9l1.54.62a.4.4 0 0 0 .5-.15l1.2-2.1a.4.4 0 0 0-.1-.5l-1.3-1a5.5 5.5 0 0 0 .09-.9Z"
               stroke="currentColor"
               strokeWidth="1.2"
             />

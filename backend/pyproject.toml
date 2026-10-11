@@ -38,12 +38,27 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+deepseek-budget = [
+    "deepseek-recipe @ git+https://github.com/deepseek-ai/deepseek-recipe.git@8cadfede7063c896b944e7bae05daa3549ae97ea#subdirectory=deepseek-recipe-python",
+]
 dev = [
     "pytest>=8.3",
     "pytest-asyncio>=0.24",
     "httpx>=0.27",
     "ruff>=0.8",
 ]
+
+# 分发内容 = **只有** `app` 包（一切顶层目录都是平铺布局：app / tests / live_tests / scripts）。
+# 不写这一段时 setuptools 自动发现会因为「Multiple top-level packages discovered in a
+# flat-layout: ['app', 'live_tests']」直接拒绝构建 —— `pip install -e .` 失败会让启动脚本的
+# 依赖校验中止，项目起不来（2026-09-21 实测）。显式声明后，今后再新增顶层目录
+# （例如新的 live 用例目录）也不会再破坏安装。
+[tool.setuptools.packages.find]
+include = ["app*"]
+exclude = ["tests*", "live_tests*", "scripts*"]
+
+[tool.setuptools.package-data]
+"app.generation" = ["resources/deepseek-v41/tokenizer.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

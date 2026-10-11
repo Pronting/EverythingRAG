@@ -1,4 +1,4 @@
-import type { RerankTestResult, SettingsUpdate, SettingsView } from "../types";
+import type { ProviderModelsResult, RerankTestResult, SettingsUpdate, SettingsView } from "../types";
 
 /** 设置 API 客户端：GET/PUT /api/settings（key 脱敏视图）。 */
 
@@ -68,6 +68,71 @@ export async function testRerankConnection(
     throw new Error(await readErrorDetail(response));
   }
   return (await response.json()) as RerankTestResult;
+}
+
+/** 连接测试结果：只说明服务可达与协议匹配，不代表能力/质量结论。 */
+export interface ModelConnectionResult {
+  success: boolean;
+  message: string;
+  latency_ms?: number;
+}
+
+/**
+ * POST /api/settings/test-connection：用未保存的表单值做一次真实连通性测试。
+ *
+ * `api_key` 省略时服务端只在地址与已保存配置一致时复用密钥（换地址不复用）。
+ */
+export async function testModelConnection(request: {
+  kind: "chat" | "embed" | "vision";
+  base_url: string;
+  model: string;
+  api_key?: string;
+}): Promise<ModelConnectionResult> {
+  let response: Response;
+  try {
+    response = await fetch("/api/settings/test-connection", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(request),
+    });
+  } catch {
+    throw new Error("无法连接本地服务，请确认后端已启动");
+  }
+  if (!response.ok) {
+    throw new Error(
+      response.status === 404 || response.status === 405
+        ? "请更新并重启本地服务后重试"
+        : "测试请求失败，请检查配置后重试",
+    );
+  }
+  return (await response.json()) as ModelConnectionResult;
+}
+
+/**
+ * POST /api/settings/providers/models：按 OpenAI 兼容端点拉取可用模型（「获取可用模型」）。
+ *
+ * 真实出网（服务端经唯一 OutboundClient 审计）；`api_key` 省略时服务端只在地址与已保存
+ * 供应商一致时复用密钥，换地址不复用。失败返回 `success:false` + 稳定文案（不回显密钥）。
+ */
+export async function fetchProviderModels(request: {
+  provider_id?: string;
+  base_url: string;
+  api_key?: string;
+}): Promise<ProviderModelsResult> {
+  let response: Response;
+  try {
+    response = await fetch("/api/settings/providers/models", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(request),
+    });
+  } catch {
+    throw new Error("无法连接本地服务，请确认后端已启动");
+  }
+  if (!response.ok) {
+    throw new Error(await readErrorDetail(response));
+  }
+  return (await response.json()) as ProviderModelsResult;
 }
 
 /** 头像类型：user=用户，agent=Agent 助手。 */

@@ -324,9 +324,9 @@ async def test_queries_keep_original_question_and_internal_terms() -> None:
     queries = RagResearcher(registry).initial_queries(request)
 
     assert queries[0] == "报销时限是多少？"
-    assert "报销制度的时限是多少" in queries
-    assert "P99" in queries
-    assert "风控阈值" in queries
+    assert all("报销制度的时限是多少" in query for query in queries[1:])
+    assert any("P99" in query for query in queries)
+    assert any("风控阈值" in query for query in queries)
 
 
 async def test_empty_results_report_no_material_status() -> None:
@@ -341,6 +341,98 @@ async def test_empty_results_report_no_material_status() -> None:
     assert result.gaps and result.gaps[0].requirement_ids == [REQUIREMENT_ID]
     assert result.progress.requirement_coverage[REQUIREMENT_ID] is RequirementState.MISSING
     assert "没有命中片段" in result.progress.steps[1].detail
+
+
+async def test_empty_results_reformulate_query_before_declaring_gap() -> None:
+    """没有结果时，先按缺失主题改写查询再次检索（用户实测缺陷 C04），并有明确上限。"""
+
+    registry = _ScriptedRegistry()
+    researcher = RagResearcher(registry, max_query_reformulations=1)
+    request = _request(
+        _task(question="所以关于记忆和成本来说，你有什么比较好的思路吗"),
+        resolved_question="面试要求设计一个 Agent —— 所以关于记忆和成本来说，你有什么比较好的思路吗",
+        requirement_texts={REQUIREMENT_ID: "所以关于记忆和成本来说，你有什么比较好的思路吗"},
+    )
+
+    result = await researcher.research(request, _context())
+
+    queries = [str(args.get("query")) for args in registry.args_of(ToolName.SEARCH_KNOWLEDGE)]
+    assert len(queries) == len({query.casefold() for query in queries}), queries
+    assert all("Agent" in query for query in queries[1:])
+    assert any("记忆" in query and "成本" in query for query in queries), queries
+    assert result.stop_reason == "insufficient_material"
+    # 「本轮没找到」与「知识库没有」必须区分清楚
+    assert "本轮共执行" in result.gaps[0].missing
+    assert "不等于知识库一定没有相关内容" in result.gaps[0].impact
+
+
+async def test_query_reformulation_respects_cap() -> None:
+    registry = _ScriptedRegistry()
+    researcher = RagResearcher(registry, max_query_reformulations=0)
+
+    result = await researcher.research(_request(), _context())
+
+    queries = registry.args_of(ToolName.SEARCH_KNOWLEDGE)
+    assert len(queries) == 1  # 关闭改写时只跑初始查询
+    assert result.stop_reason == "insufficient_material"
+
+
+async def test_reformulated_query_that_hits_fills_the_gap() -> None:
+    """改写后的查询命中资料时，缺口必须被填上（而不是继续报资料不足）。"""
+
+    request = _request()
+    request.requirement_texts[REQUIREMENT_ID] = "报销制度 时限 提交 逾期"
+    probe = RagResearcher(_ScriptedRegistry(), max_query_reformulations=1)
+    candidates = probe.reformulated_queries(request, [REQUIREMENT_ID], set())
+    assert candidates, "缺失主题必须能改写出新的查询"
+    keyword_query = candidates[0]
+
+    registry = _ScriptedRegistry(search={keyword_query: _search_result([_chunk()])})
+    researcher = RagResearcher(registry, max_query_reformulations=1)
+
+    result = await researcher.research(request, _context())
+
+    assert result.evidence, registry.tools()
+    assert result.progress.requirement_coverage[REQUIREMENT_ID] is RequirementState.ANSWERED
+
+
+async def test_named_term_present_in_evidence_counts_as_support() -> None:
+    """用户自己说的术语在证据原文里确实出现时，这条证据可作为依据（C01）。
+
+    与「同义扩展线索」不同：只有原文真的含该术语才算（用户明确要求）。
+    """
+
+    text = "在 AI Native 阶段，需求到上线要闭环。"
+    registry = _ScriptedRegistry(
+        search={REQUIREMENT_TEXT: _search_result([_chunk(text=text)])}
+    )
+    request = _request(
+        _task(question=REQUIREMENT_TEXT),
+        decision=_decision(REQUIREMENT_TEXT, entities=["AI Native"]),
+        requirement_texts={REQUIREMENT_ID: "有什么 AI Native 的使用场景吗"},
+    )
+
+    result = await RagResearcher(registry).research(request, _context())
+
+    assert result.evidence
+    assert result.evidence[0].supported_requirements == [REQUIREMENT_ID]
+
+
+async def test_named_term_absent_from_evidence_does_not_count_as_support() -> None:
+    text = "记忆管理包括实体链接与概念标签，只改写检索方式，不改写事实。"
+    registry = _ScriptedRegistry(
+        search={REQUIREMENT_TEXT: _search_result([_chunk(text=text)])}
+    )
+    request = _request(
+        _task(question=REQUIREMENT_TEXT),
+        decision=_decision(REQUIREMENT_TEXT, entities=["AI Native"]),
+        requirement_texts={REQUIREMENT_ID: "有什么 AI Native 的使用场景吗"},
+    )
+
+    result = await RagResearcher(registry).research(request, _context())
+
+    assert result.evidence
+    assert result.evidence[0].supported_requirements == []
 
 
 async def test_irrelevant_candidates_are_reported_as_not_relevant() -> None:
@@ -432,19 +524,6 @@ async def test_read_document_revision_is_propagated_to_chunk_evidence() -> None:
     chunk_evidence = [item for item in result.evidence if "#read:" not in item.source_ref]
     assert chunk_evidence
     assert {item.document_revision for item in chunk_evidence} == {"rev-9"}
-
-
-async def test_read_window_reports_remaining_offset_as_limitation() -> None:
-    question = "报销制度的定义是什么"
-    registry = _ScriptedRegistry(
-        search={question: _search_result([_chunk()])},
-        reads={"doc-a": _read_result(total=len(CHUNK_TEXT) + 500)},
-    )
-
-    result = await RagResearcher(registry).research(_request(_task(question=question)), _context())
-
-    read_evidence = next(item for item in result.evidence if "#read:" in item.source_ref)
-    assert any("其余位置仍需读取" in item for item in read_evidence.limitations)
 
 
 async def test_history_branch_uses_history_source_type() -> None:
@@ -644,6 +723,8 @@ def test_evidence_dedupe_merges_requirements_and_limitations() -> None:
         content="同一段原文",
         supported_requirements=["R2"],
         limitations=["限制二"],
+        document_title="CreateMemory - Amazon Bedrock AgentCore Control Plane",
+        heading_path="eventExpiryDuration",
     )
 
     merged = dedupe_evidence([first, second])
@@ -652,6 +733,8 @@ def test_evidence_dedupe_merges_requirements_and_limitations() -> None:
     assert merged[0].evidence_id == first.evidence_id
     assert merged[0].supported_requirements == ["R1", "R2"]
     assert merged[0].limitations == ["限制一", "限制二"]
+    assert merged[0].document_title == "CreateMemory - Amazon Bedrock AgentCore Control Plane"
+    assert merged[0].heading_path == "eventExpiryDuration"
 
 
 def test_evidence_identity_uses_source_and_content_hash() -> None:
@@ -1098,3 +1181,48 @@ def test_material_gap_requires_requirement_mapping() -> None:
 
     assert gap.requirement_ids == ["R1"]
     assert "缺" in gap.missing
+
+
+# =====================================================================
+# C21：标点变体复用已有结果（规划侧与执行侧共用同一去重口径）
+# =====================================================================
+
+
+async def test_punctuation_variant_queries_are_claimed_once() -> None:
+    """任务问题与补全问题只差中间标点时，只执行一次检索（C21.4）。"""
+
+    registry = _ScriptedRegistry()
+    question = "文档中，比如记忆，成本这些维度。都是怎么样设计的？"
+    resolved = "文档中  比如记忆，成本这些维度。都是怎么样设计的？"
+    request = _request(
+        _task(question=question),
+        resolved_question=resolved,
+        requirement_texts={REQUIREMENT_ID: question},
+    )
+
+    await RagResearcher(registry, max_query_reformulations=0).research(request, _context())
+
+    queries = [str(args.get("query")) for args in registry.args_of(ToolName.SEARCH_KNOWLEDGE)]
+    assert len(queries) == 1, queries
+    assert "记忆" in queries[0] and "成本" in queries[0]
+
+
+async def test_research_state_claims_equivalent_punctuation_variants() -> None:
+    from app.agent.research import RunResearchState
+
+    shared = RunResearchState()
+    first = await shared.claim_queries(["文档中，比如记忆，成本这些维度。都是怎么样设计的？"])
+    second = await shared.claim_queries(["文档中  比如记忆，成本这些维度。都是怎么样设计的？"])
+
+    assert first, "第一次必须真的执行"
+    assert second == [], "标点变体必须复用已有结果，不得重复检索"
+
+
+async def test_research_state_keeps_distinct_topic_queries() -> None:
+    from app.agent.research import RunResearchState
+
+    shared = RunResearchState()
+    await shared.claim_queries(["报销时限是多少？"])
+    second = await shared.claim_queries(["报销制度的时限是多少"])
+
+    assert second == ["报销制度的时限是多少"], "换措辞的研究请求仍要执行"

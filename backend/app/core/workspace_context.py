@@ -1,4 +1,4 @@
-"""每工作区不可变上下文、目录解析与缓存键（PRD 5.1–5.3，Owner: T01）。
+"""工作区不可变上下文、目录解析与缓存键（Owner: T01；知识库布局见 D-KB）。
 
 职责
 ----
@@ -7,12 +7,16 @@
 2. **不可变上下文**：:class:`WorkspaceContext` 持有数据视图（身份 / 目录 / 知识版本 /
    工作区默认设置）与**服务实例**，并实现 ``contracts.WorkspaceServiceHub``
    （``view`` + ``app_store`` 两个成员名由 t2 冻结）。
-3. **布局版本**：迁移完成前按 V1.1.0 的 ``data_dir`` 根布局解析（旧数据原地不动，
-   应用照常可用）；迁移在 PRD 15.2 第 10 步提交 ``storage_schema_version=2`` 后，
-   一律按 PRD 5.1 的 ``workspaces/<storage_key>/`` 解析。判定只依据
-   ``data_dir/storage.json`` 一个标记，**不会因为某次写入而自动翻转**。
-4. **缓存键**：向量句柄（PRD 5.3.3）与 BM25 / 目录 / 术语（PRD 5.3.4）缓存键的
-   唯一构造函数 —— 只此一处，避免各调用方自行拼键导致跨区串读。
+3. **布局（D-KB，2026-09-20 用户决策，取代 PRD 5.1 的「每工作区知识库」）**：
+   **所有工作区共享同一个知识库** —— 知识类路径一律落在 ``data_dir`` 根：文档
+   （``documents/``）、Chroma（``data_dir`` 本身）、增量同步指纹库（``state.db``）、
+   图片任务库（``image_state.db``）。工作区只保留**私有**件：``memory.json``、
+   ``checkpoints.db``、``artifacts/``、jieba 缓存（含历史检索的术语词典与索引标记）。
+   判定**不再**依赖 ``data_dir/storage.json``：该标记现在只记录工作区记录
+   （JSON ↔ app.db 权威，D25/D29）的迁移状态，**改不动知识库布局**。
+4. **缓存键**：向量句柄与 BM25 / 目录 / 术语缓存键的唯一构造函数 —— 只此一处。
+   知识库共享后，向量句柄键**不再**含 ``workspace_id``：同一个 ``data_dir`` 只应存在
+   **一个**句柄实例。
 5. **jieba 工厂**：每工作区独立 ``Tokenizer``，``tmp_dir`` / ``cache_file`` 落在本区
     ``cache/jieba/``（PRD 11.5）。历史检索的内容实现由 T08 负责，这里只提供工厂。
 """
@@ -46,6 +50,7 @@ __all__ = [
     "JIEBA_DICT_VERSION",
     "JIEBA_GENERATOR_VERSION",
     "JIEBA_TOKENIZER_MODE",
+    "SHARED_KNOWLEDGE_DIRS",
     "STORAGE_MARKER_FILENAME",
     "AppDbWorkspaceReader",
     "BackgroundTaskScope",
@@ -99,12 +104,12 @@ AppDbWorkspaceReader = Callable[[], Sequence[Mapping[str, Any]]]
 
 
 class LayoutMode(StrEnum):
-    """本区实际使用的目录布局。"""
+    """本区实际使用的目录布局（D-KB 后只剩一种）。"""
 
-    #: V1.1.0：知识数据直接放在 ``data_dir`` 根（迁移前的既有安装）。
-    LEGACY = "legacy"
-    #: PRD 5.1：``data_dir/workspaces/<storage_key>/``。
-    WORKSPACE = "workspace"
+    #: 知识库**全局共享**：知识数据直接放在 ``data_dir`` 根，所有工作区读写同一份；
+    #: 工作区私有件（记忆 / 检查点 / 工件 / jieba 缓存）在
+    #: ``data_dir/workspaces/<storage_key>/``。
+    SHARED = "shared"
 
 
 def _now_iso() -> str:
@@ -142,13 +147,17 @@ def commit_storage_version(
     version: int = WORKSPACE_LAYOUT_VERSION,
     extra: Mapping[str, Any] | None = None,
 ) -> Path:
-    """原子提交 ``storage_schema_version``（PRD 15.2 第 10 步，校验通过后调用）。"""
+    """原子提交 ``storage_schema_version``（PRD 15.2 第 10 步，校验通过后调用）。
+
+    D-KB 之后本标记**只**表达「工作区记录已迁移到 app.db 权威（D25/D29）」，
+    **不再**影响知识库布局（知识永远在 ``data_dir`` 根、所有工作区共享）。
+    """
 
     base = Path(data_dir)
     base.mkdir(parents=True, exist_ok=True)
     payload: dict[str, Any] = {
         "storage_schema_version": version,
-        "layout": LayoutMode.WORKSPACE.value,
+        "layout": LayoutMode.SHARED.value,
         "committed_at": _now_iso(),
     }
     payload.update(dict(extra or {}))
@@ -160,10 +169,10 @@ def commit_storage_version(
 
 
 def _legacy_layout_present(data_dir: Path) -> bool:
-    """``data_dir`` 根布局下是否已有真实知识数据（决定要不要走兼容读取）。
+    """``data_dir`` 根下是否已有知识数据（D-KB 后仅用于**诊断/测试**，不再判定布局）。
 
-    只看**知识级**产物，不看 ``workspaces.json`` / ``conversations.json``：后者在全新
-    安装里也会立刻出现，用它判定会让新安装误判成旧布局。
+    知识永远在 ``data_dir`` 根，所以本函数不再参与任何解析分支；保留它是因为
+    「这个目录里到底有没有既有知识」仍是导入/迁移报告与排障要回答的问题。
     """
 
     base = Path(data_dir)
@@ -182,92 +191,99 @@ def _legacy_layout_present(data_dir: Path) -> bool:
 # ---------------------------------------------------------------------------
 
 
+#: 知识类目录（**全局共享**）：全部在 ``data_dir`` 根，任何工作区读写同一份。
+SHARED_KNOWLEDGE_DIRS: tuple[str, ...] = ("documents", "cache/jieba")
+
+
 @dataclass(frozen=True, slots=True)
 class WorkspacePaths:
-    """本区**实际读写**使用的路径（PRD 5.1）。
+    """本区**实际读写**使用的路径（D-KB：知识库全局共享）。
 
-    ``view`` 描述 PRD 5.1 的目标目录形状；本对象描述当下真实的落盘位置 ——
-    迁移完成前两者不同（``layout=LEGACY``），迁移提交后一致
-    （``layout=WORKSPACE``）。所有服务句柄一律以本对象为准。
+    分两类：
+
+    - **共享知识路径**（``documents_dir`` / ``state_db`` / ``image_state_db`` /
+      ``chroma_dir``）：永远在 ``data_dir`` 根，所有工作区解析结果**逐字段相同**；
+    - **工作区私有路径**（``memory_json`` / ``checkpoints_db`` / ``artifacts_dir`` /
+      ``jieba_cache_dir``）：在 ``root_dir`` = ``data_dir/workspaces/<storage_key>/``。
+
+    所有服务句柄一律以本对象为准（``path`` 与 ``view`` 的派生属性必须一致）。
     """
 
     layout: LayoutMode
     data_dir: Path
+    #: 本区私有根：``data_dir/workspaces/<storage_key>/``（记忆 / 检查点 / 工件 / 分词缓存）。
     root_dir: Path
+    #: 共享知识：上传/导入的原始 Markdown 规范根。
     documents_dir: Path
+    #: 共享知识：增量同步指纹库。
     state_db: Path
+    #: 共享知识：图片任务 + 内容去重库。
     image_state_db: Path
+    #: 本区私有：工作区记忆文件。
     memory_json: Path
+    #: 本区私有：LangGraph 运行检查点库。
     checkpoints_db: Path
+    #: 本区私有：运行产物。
     artifacts_dir: Path
-    #: Chroma ``PersistentClient`` 的 persist 根（旧布局是 ``data_dir`` 本身，
-    #: 因为 ``chroma.sqlite3`` 与全部分段目录都在根上）。
+    #: 共享知识：Chroma ``PersistentClient`` 的 persist 根 = ``data_dir`` 本身
+    #: （``chroma.sqlite3`` 与全部分段目录都在根上）。
     chroma_dir: Path
+    #: 本区私有：jieba 分词缓存 + 历史检索术语词典与索引标记。
     jieba_cache_dir: Path
 
 
-def _workspace_paths(data_dir: Path, storage_key: str) -> WorkspacePaths:
-    root = Path(data_dir) / "workspaces" / storage_key
+def _shared_paths(data_dir: Path, storage_key: str) -> WorkspacePaths:
+    """构造某个 ``storage_key`` 的路径对象：知识共享 + 私有件按区。"""
+
+    base = Path(data_dir)
+    root = base / "workspaces" / storage_key
     return WorkspacePaths(
-        layout=LayoutMode.WORKSPACE,
-        data_dir=Path(data_dir),
+        layout=LayoutMode.SHARED,
+        data_dir=base,
         root_dir=root,
-        documents_dir=root / "documents",
-        state_db=root / "state.db",
-        image_state_db=root / "image_state.db",
+        documents_dir=base / "documents",
+        state_db=base / "state.db",
+        image_state_db=base / "image_state.db",
         memory_json=root / "memory.json",
         checkpoints_db=root / "checkpoints.db",
         artifacts_dir=root / "artifacts",
-        chroma_dir=root / "chroma",
+        chroma_dir=base,
         jieba_cache_dir=root / "cache" / "jieba",
     )
 
 
-def _legacy_paths(data_dir: Path) -> WorkspacePaths:
-    base = Path(data_dir)
-    return WorkspacePaths(
-        layout=LayoutMode.LEGACY,
-        data_dir=base,
-        root_dir=base,
-        documents_dir=base / "documents",
-        state_db=base / "state.db",
-        image_state_db=base / "image_state.db",
-        memory_json=base / "memory.json",
-        checkpoints_db=base / "checkpoints.db",
-        artifacts_dir=base / "artifacts",
-        # 旧布局的 Chroma persist 根就是 data_dir：chroma.sqlite3 与 HNSW 分段目录
-        # 与 state.db 同层（见 docs/tech/v1.2.0-architecture.md §6.2c）。
-        chroma_dir=base,
-        jieba_cache_dir=base / "cache" / "jieba",
-    )
-
-
 def ensure_layout_dirs(paths: WorkspacePaths) -> WorkspacePaths:
-    """创建本区目录树（幂等）；旧布局只补 ``cache/`` 等新目录，不动既有文件。"""
+    """创建共享知识目录与本区私有目录（幂等，已有文件一律不动）。"""
 
+    for relative in SHARED_KNOWLEDGE_DIRS:
+        (paths.data_dir / relative).mkdir(parents=True, exist_ok=True)
     for relative in WORKSPACE_SUBDIRS:
         (paths.root_dir / relative).mkdir(parents=True, exist_ok=True)
     return paths
 
 
 # ---------------------------------------------------------------------------
-# 缓存键（PRD 5.3.3 / 5.3.4）
+# 缓存键
 # ---------------------------------------------------------------------------
 
 
 def vector_handle_cache_key(
     *,
-    workspace_id: str,
+    data_dir: Path | str,
     provider_digest: str,
     collection_identity: str,
 ) -> str:
-    """向量句柄缓存键（PRD 5.3.3）：``workspace_id`` + Provider 配置摘要 + collection 身份。
+    """向量句柄缓存键：共享数据根 + Provider 配置摘要 + collection 身份。
 
-    三者缺一都会串读：缺 workspace 会跨区复用句柄，缺摘要会在换凭证/端点后继续用旧
-    客户端，缺 collection 身份会在入库版本变化后继续读旧 ANN 段。
+    D-KB（知识库全局共享）后**刻意不含** ``workspace_id``：语料只有一份，
+    同一个 ``data_dir`` 里应当只存在**一个** Chroma 句柄实例；再按区建句柄会在同一
+    persist 根上开出多个 ``PersistentClient``（并发写句柄互踩的已知崩溃源）。
+    含 ``data_dir`` 是因为句柄绑定 persist 根：换数据目录（测试隔离、多实例）后
+    旧句柄绝不能被复用；缺摘要会在换凭证/端点后继续用旧客户端，缺 collection 身份
+    会在入库版本变化后继续读旧 ANN 段 —— 这两项同样是必需成分。
     """
 
-    return f"vec-v2:{workspace_id}:{provider_digest}:{collection_identity}"
+    return f"vec-v3:{Path(data_dir)}:{provider_digest}:{collection_identity}"
 
 
 def index_cache_key(
@@ -433,8 +449,14 @@ class WorkspaceContext:
     # ---- 缓存键 ----
 
     def vector_cache_key(self, *, provider_digest: str, collection_identity: str) -> str:
+        """共享知识库的向量句柄键（D-KB：共享数据根 + Provider 摘要 + collection 身份）。
+
+        因此所有工作区拿到**同一个**键（同一个 ``data_dir`` 只应有一个句柄实例）——
+        这正是「共享一个知识库」的落点。
+        """
+
         return vector_handle_cache_key(
-            workspace_id=self.workspace_id,
+            data_dir=self.paths.data_dir,
             provider_digest=provider_digest,
             collection_identity=collection_identity,
         )
@@ -542,12 +564,12 @@ def is_service_hub(context: object) -> bool:
 
 
 class WorkspaceContextFactory:
-    """由 ``workspace_id`` 解析目录并构造 :class:`WorkspaceContext`（PRD 5.1 / 5.2）。
+    """由 ``workspace_id`` 解析路径并构造 :class:`WorkspaceContext`。
 
-    - 归属校验：非 ServiceHub 的调用方（HTTP 依赖、迁移）一律走本工厂，因此
+    - 归属校验：非 ServiceHub 的调用方（HTTP 依赖、后台任务）一律走本工厂，因此
       「客户端提交的 id 是否真的存在」只有一处判定。
-    - 布局：见 :class:`LayoutMode`。``data_dir/storage.json`` 提交
-      ``storage_schema_version>=2`` 后自动切到每工作区布局。
+    - 布局：见 :class:`LayoutMode` —— D-KB 之后**只有共享布局**：知识路径与
+      ``storage.json`` 无关，所有工作区逐字段相同；工作区只影响私有件路径。
     """
 
     def __init__(
@@ -556,13 +578,11 @@ class WorkspaceContextFactory:
         workspace_store: WorkspaceStore,
         *,
         app_store: Any = None,
-        allow_legacy_layout: bool = True,
         app_db_reader: AppDbWorkspaceReader | None = None,
     ) -> None:
         self._data_dir = Path(data_dir)
         self._workspaces = workspace_store
         self._app_store = app_store
-        self._allow_legacy_layout = allow_legacy_layout
         self._app_db_reader = app_db_reader
         self._archive_checked = False
 
@@ -672,31 +692,26 @@ class WorkspaceContextFactory:
     # ---- 解析 ----
 
     def layout_mode(self, workspace_id: str) -> LayoutMode:
-        """本区应使用的布局（只依据已提交的 ``storage_schema_version``）。"""
+        """本区应使用的布局：**永远**是共享布局（D-KB）。
 
-        workspace = self._require_workspace(workspace_id)
-        if committed_storage_version(self._data_dir) >= WORKSPACE_LAYOUT_VERSION:
-            return LayoutMode.WORKSPACE
-        if (
-            self._allow_legacy_layout
-            and workspace.id == DEFAULT_WORKSPACE_ID
-            and _legacy_layout_present(self._data_dir)
-        ):
-            # 迁移尚未执行：全局知识仍在 data_dir 根布局里，原地继续读写，
-            # 避免升级后用户的知识库"消失"。迁移完成后由 storage.json 翻转。
-            return LayoutMode.LEGACY
-        return LayoutMode.WORKSPACE
+        仍然校验归属（未知 id 抛 ``WorkspaceNotFoundError``），但结果与
+        ``storage.json`` / 工作区身份**无关** —— 知识库全局共享，不再按区划分。
+        """
+
+        self._require_workspace(workspace_id)
+        return LayoutMode.SHARED
 
     def paths_for(self, workspace_id: str) -> WorkspacePaths:
+        """本区路径：共享知识（所有区相同）+ 私有件（按 ``storage_key``）。"""
+
         workspace = self._require_workspace(workspace_id)
-        if self.layout_mode(workspace_id) is LayoutMode.LEGACY:
-            return _legacy_paths(self._data_dir)
-        return _workspace_paths(self._data_dir, workspace.storage_key)
+        return _shared_paths(self._data_dir, workspace.storage_key)
 
     def view_for(self, workspace_id: str) -> WorkspaceContextView:
         """构造 PRD 5.2 的数据视图（身份 / 目录 / 知识版本 / 默认设置）。
 
-        目录取 PRD 5.1 的**目标**形状；实际读写位置见 :meth:`paths_for`。
+        ``root_dir`` 是**本区私有根**；共享知识路径由 ``data_dir`` 派生
+        （与 :class:`WorkspacePaths` 的定义逐字段一致）。
         """
 
         workspace = self._require_workspace(workspace_id)

@@ -37,9 +37,9 @@ DECLARED = {
 # ---------------------------------------------------------------- 能力位取值表
 
 
-def test_default_reasoning_level_is_high() -> None:
-    """PRD 18.1 工程默认值：思考强度默认 high。"""
-    assert DEFAULT_REASONING_LEVEL is ReasoningLevel.HIGH
+def test_default_reasoning_level_is_off() -> None:
+    """PRD 18.1 工程默认值：思考强度默认 off（关闭思考）。"""
+    assert DEFAULT_REASONING_LEVEL is ReasoningLevel.OFF
 
 
 @pytest.mark.parametrize(
@@ -219,12 +219,13 @@ def test_four_reasoning_levels_map_to_deepseek_params(
         assert request["reasoning_effort"] == effort
 
 
-def test_reasoning_level_defaults_to_high() -> None:
-    """未指定档位 -> 默认 high（PRD 18.1），而不是 off。"""
+def test_reasoning_level_defaults_to_off() -> None:
+    """未指定档位 -> 默认 off（PRD 18.1，用户裁定：默认关闭思考）。"""
     caps = resolve_capabilities("deepseek-flash", OFFICIAL)
     params = resolve_reasoning_params(caps, None)
-    assert params.level is ReasoningLevel.HIGH
-    assert params.reasoning_effort == "high"
+    assert params.level is ReasoningLevel.OFF
+    assert params.thinking_type == "disabled"
+    assert params.reasoning_effort is None
 
 
 def test_reasoning_level_accepts_plain_string() -> None:

@@ -1,32 +1,7 @@
-"""LangGraph 拓扑：主图与研究子图（PRD 4.3 流程图、10.3 暂停恢复、12.2 RunManager）。Owner: T09。
-
-职责：
-- ``StateGraph`` 主图：加载快照 → 意图识别 → 计划 → 研究分支 → 汇集 → 核对 → 发布。
-- 研究子图：单个 ``ResearchTask`` 的检索/联网循环（一个任务一个 ``thread_id``）。
-- 条件跳转：``verdict`` 驱动 revise / research / clarify 回边（PRD 8.2）。
-- ``recursion_limit`` 属运行保护（PRD 7.4），触发时由运行层保存为可继续的错误状态。
-
-节点实现分散在 routing.py / planner.py / research.py / tools.py / approval.py /
-verification.py，本模块只负责**接线与编译**：节点函数只从
-:class:`app.agent.models.GraphServices` 取能力（不 import runtime / app_store 的
-实现细节），因此同一套节点既能被 LangGraph 驱动，也能被下面的离线驱动
-:func:`run_pipeline` 驱动。
-
-关键取舍（写进架构文档 §6 D34）：
-
-1. **两套驱动、同一批节点**：LangGraph 路径（带 ``AsyncSqliteSaver`` 检查点与
-   ``interrupt()`` 暂停）与 :func:`run_pipeline`（离线/无检查点场景）共用节点函数与
-   边表 :data:`MAIN_GRAPH_EDGES`，不会出现「图里一条边、测试里另一条边」的双实现漂移。
-2. **暂停只发生在两个节点**：``approval``（PRD 10.3 批准）与 ``clarify``（PRD 5.4 澄清）。
-   其余节点必须一次性跑完，否则恢复语义无法解释。
-3. **失败即收敛**：任一子任务失败时研究节点返回带 ``error`` 的状态，主图直接结束
-   （``failed``），不进入合成与核对 —— 子任务失败绝不能让父图停在 ``waiting_children``
-   （PRD 12.2 末段）。
-"""
-
 from __future__ import annotations
 
 import asyncio
+import logging
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from typing import Any, Final
 
@@ -43,12 +18,12 @@ from app.agent.contracts import (
     RouteDecision,
     RunStatus,
     TaskStatus,
-    VerificationResult,
-    VerifierVerdict,
     utc_now_iso,
 )
 from app.agent.models import AgentState, GraphServices, NodeOutcome, ResearchState
 from app.agent.planner import Plan
+
+logger = logging.getLogger(__name__)
 
 __all__ = [
     "CLARIFY_MAX_ROUNDS",
@@ -56,9 +31,7 @@ __all__ = [
     "MAIN_GRAPH_NODES",
     "RESEARCH_GRAPH_EDGES",
     "RESEARCH_GRAPH_NODES",
-    "REVISION_MAX_ROUNDS",
     "after_research",
-    "after_verification",
     "build_main_graph",
     "build_research_graph",
     "clarify_node",
@@ -67,8 +40,6 @@ __all__ = [
 ]
 
 #: 主图节点（PRD 4.3 mermaid 的节点名，一一对应）。
-#: ``revise`` 是 t31 追加的**回边计数**节点（不是 PRD 的业务节点）：两条驱动都必须递增
-#: ``revisions``，否则 LangGraph 路径的 revise/research 回边会绕到 ``recursion_limit``。
 MAIN_GRAPH_NODES: Final[tuple[str, ...]] = (
     "load_snapshot",
     "route",
@@ -76,8 +47,6 @@ MAIN_GRAPH_NODES: Final[tuple[str, ...]] = (
     "research",
     "approval",
     "synthesis",
-    "verification",
-    "revise",
     "clarify",
     "publish",
 )
@@ -92,9 +61,7 @@ MAIN_GRAPH_EDGES: Final[tuple[tuple[str, str], ...]] = (
     ("plan", "research"),
     ("research", "after_research"),
     ("approval", "research"),
-    ("synthesis", "verification"),
-    ("verification", "after_verification"),
-    ("revise", "after_revision"),
+    ("synthesis", "publish"),
     ("clarify", "research"),
     ("publish", "END"),
 )
@@ -107,8 +74,6 @@ RESEARCH_GRAPH_EDGES: Final[tuple[tuple[str, str], ...]] = (
     ("collect", "END"),
 )
 
-#: 回边次数上限（PRD 7.4 运行保护）：超过即按资料不足收敛，不再无限重试。
-REVISION_MAX_ROUNDS: Final[int] = 2
 CLARIFY_MAX_ROUNDS: Final[int] = 1
 
 
@@ -117,9 +82,6 @@ def main_edges() -> dict[str, tuple[str, ...]]:
 
     return {
         "after_research": ("synthesis", "approval", "failed"),
-        # 回边统一先经过 ``revise`` 计数，再由 ``after_revision`` 分派到三条回边之一。
-        "after_verification": ("publish", "revise"),
-        "after_revision": ("synthesis", "research", "clarify"),
         "after_assess": ("collect", "run"),
     }
 
@@ -163,9 +125,13 @@ def make_load_snapshot_node(services: GraphServices) -> Callable[[AgentState], A
     """读取工作区记忆固定快照（PRD 9.3 输入顺序第 3 位）。"""
 
     async def node(state: AgentState) -> dict[str, Any]:
+        if services.memory_context is None:
+            return {
+                "memory_context": "",
+                **_phase_update(state, "load_snapshot", "记忆功能已关闭"),
+            }
         text = ""
-        if services.memory_context is not None:
-            text = str(await _maybe_await(services.memory_context(state)) or "")
+        text = str(await _maybe_await(services.memory_context(state)) or "")
         await _emit(
             services,
             state,
@@ -224,6 +190,8 @@ def make_plan_node(services: GraphServices) -> Callable[[AgentState], Awaitable[
                         "status": task.status.value,
                         "depends_on": list(task.depends_on),
                         "requirement_ids": list(task.requirement_ids),
+                        "query_identity": task.query_identity,
+                        "query_reuse_reason": task.query_reuse_reason,
                     }
                     for task in plan.tasks
                 ],
@@ -281,11 +249,19 @@ def make_research_node(
                     task_id=task_id,
                 )
             semaphore = asyncio.Semaphore(max(1, int(concurrency)))
+            batch_state = dict(state)
+            batch_state["task_results"] = dict(results)
+            batch_state["completed_task_ids"] = list(completed)
+            batch_state["failed_task_ids"] = list(failed)
 
             # 默认参数把信号量绑进闭包（否则所有闭包共享循环末尾的那个变量）。
-            async def guarded(task_id: str, gate: asyncio.Semaphore = semaphore) -> Any:
+            async def guarded(
+                task_id: str,
+                gate: asyncio.Semaphore = semaphore,
+                current: AgentState = batch_state,  # type: ignore[assignment]
+            ) -> Any:
                 async with gate:
-                    return await _run_one(services, state, tasks[task_id])
+                    return await _run_one(services, current, tasks[task_id])
 
             produced = await asyncio.gather(
                 *(guarded(task_id) for task_id in batch),
@@ -301,6 +277,10 @@ def make_research_node(
                     await _save_task(services, state, tasks[task_id], TaskStatus.QUEUED)
                     continue
                 if isinstance(outcome, BaseException):
+                    logger.error(
+                        "research task %s failed", task_id,
+                        exc_info=(type(outcome), outcome, outcome.__traceback__),
+                    )
                     failed.append(task_id)
                     await _save_task(
                         services, state, tasks[task_id], TaskStatus.FAILED, error=outcome
@@ -334,7 +314,7 @@ def make_research_node(
                     {
                         "agent_kind": tasks[task_id].agent_kind.value,
                         "status": TaskStatus.COMPLETED.value,
-                        "summary": f"{len(result.get('evidence') or [])} 条证据",
+                        "summary": f"已完成查询：{tasks[task_id].question}",
                     },
                     task_id=task_id,
                 )
@@ -373,42 +353,19 @@ def make_research_node(
 
 
 def make_synthesis_node(services: GraphServices) -> Callable[[AgentState], Awaitable[dict]]:
-    """汇集子任务结果，产出候选答案（PRD 8.1）。
-
-    ``revise`` 回边再次进入本节点时复用同一批 ``task_results``，因此合成是**幂等**的：
-    候选答案只由结果与要求文本决定。
-    """
+    """汇集研究结果并生成答案。"""
 
     async def node(state: AgentState) -> dict[str, Any]:
         results = list((state.get("task_results") or {}).values())
+        await _emit(services, state, EventType.RUN_STATUS, {
+            "status": "running", "phase": "synthesis", "message": "正在整理回答",
+        })
         candidate: ContractModel = await _maybe_await(
             services.synthesize(state, results, dict(state.get("requirement_texts") or {}))
         )
         return {
             "candidate": candidate.model_dump(mode="json"),
             **_phase_update(state, "synthesis", "候选答案已生成"),
-        }
-
-    return node
-
-
-def make_verification_node(services: GraphServices) -> Callable[[AgentState], Awaitable[dict]]:
-    """核对候选答案（PRD 8.2），并发布 ``verification.updated``。"""
-
-    async def node(state: AgentState) -> dict[str, Any]:
-        verification = VerificationResult.model_validate(await services.verify(state))
-        await _emit(
-            services,
-            state,
-            EventType.VERIFICATION_UPDATED,
-            {
-                "result": verification.model_dump(mode="json"),
-                "pending": list(verification.uncovered_requirements),
-            },
-        )
-        return {
-            "verification": verification.model_dump(mode="json"),
-            **_phase_update(state, "verification", f"结论={verification.verdict.value}"),
         }
 
     return node
@@ -452,15 +409,9 @@ def _clarify_payload(request: InputRequest) -> dict[str, Any]:
 
 
 def make_publish_node(services: GraphServices) -> Callable[[AgentState], Awaitable[dict]]:
-    """发布：把已核对候选答案落库（单事务，PRD 13.1 末段），由运行层实现写事务。
-
-    回边次数用尽（:data:`REVISION_MAX_ROUNDS`）而结论仍是 revise/research/clarify 时，
-    按 PRD 8.3 收敛为 **``completed_with_gaps`` 并说明缺少的依据**，而不是把整次运行
-    判死：那是「资料确实拿不到」的正常结局，用户仍应看到答案与缺口清单。
-    """
+    """保存答案并发送完成事件。"""
 
     async def node(state: AgentState) -> dict[str, Any]:
-        state = _converge_exhausted(state)
         artifact = await _maybe_await(services.publish(state))
         if artifact is None:
             return _failed_update(
@@ -474,40 +425,10 @@ def make_publish_node(services: GraphServices) -> Callable[[AgentState], Awaitab
         return {
             "answer_id": artifact.answer_id,
             "answer_status": artifact.status.value,
-            "verification": (state.get("verification") or {}),
             **_phase_update(state, "publish", "答案已保存"),
         }
 
     return node
-
-
-def _converge_exhausted(state: AgentState) -> AgentState:
-    """回边用尽时把不可发布的核对结论降级为 ``insufficient``（带说明，PRD 8.3）。"""
-
-    verification = VerificationResult.model_validate(state.get("verification") or {})
-    if verification.verdict in {VerifierVerdict.PASS, VerifierVerdict.INSUFFICIENT}:
-        return state
-    if int(state.get("revisions") or 0) < REVISION_MAX_ROUNDS:
-        return state
-    from app.agent.contracts import VerificationCheck, VerificationIssue, VerificationSeverity
-
-    downgraded = verification.model_copy(
-        update={
-            "verdict": VerifierVerdict.INSUFFICIENT,
-            "issues": [
-                *verification.issues,
-                VerificationIssue(
-                    check=VerificationCheck.MATERIAL_STATUS,
-                    statement="修订与补研次数已用尽，按资料不足发布",
-                    required_action="稍后可用「继续」补充研究，或补充资料后重问",
-                    severity=VerificationSeverity.MEDIUM,
-                ),
-            ],
-        }
-    )
-    merged = dict(state)
-    merged["verification"] = downgraded.model_dump(mode="json")
-    return merged  # type: ignore[return-value]
 
 
 # =====================================================================
@@ -522,25 +443,6 @@ def after_research(state: AgentState) -> str:
         return "failed"
     if state.get("pending_approval"):
         return "approval"
-    return "synthesis"
-
-
-def after_verification(state: AgentState) -> str:
-    """核对之后（PRD 8.2）：pass/insufficient → 发布；revise/research/clarify → 回边。
-
-    回边次数达到 :data:`REVISION_MAX_ROUNDS` 时回到 ``publish``：由发布节点按
-    ``verdict`` 决定能否带缺口发布，不能则收敛为**可继续的错误状态**（PRD 7.4 / 8.3）。
-    """
-
-    verification = VerificationResult.model_validate(state.get("verification") or {})
-    if verification.verdict in {VerifierVerdict.PASS, VerifierVerdict.INSUFFICIENT}:
-        return "publish"
-    if int(state.get("revisions") or 0) >= REVISION_MAX_ROUNDS:
-        return "publish"
-    if verification.verdict is VerifierVerdict.CLARIFY:
-        return "clarify"
-    if verification.verdict is VerifierVerdict.RESEARCH:
-        return "research"
     return "synthesis"
 
 
@@ -580,14 +482,19 @@ def _failed_update(
         or _error_field(error, "error_code", "")
         or type(error).__name__
     )
-    message = str(_error_field(error, "message", "") or "")
+    message = str(
+        _error_field(error, "user_message", "") or _error_field(error, "message", "") or ""
+    )
     agent_error = AgentError(
         error_code=error_code,
         message=message or f"研究子任务失败：{type(error).__name__}",
         node=str(_error_field(error, "node", "") or "research"),
         operation_id=_error_field(error, "operation_id", None),
         resumable=bool(_error_field(error, "resumable", True)),
-        required_action="POST /api/workspaces/{workspace_id}/runs/{run_id}/resume 继续",
+        required_action=str(_error_field(error, "required_action", "") or (
+            "点击“继续执行”重试当前任务"
+            if bool(_error_field(error, "resumable", True)) else "请重新发送问题"
+        )),
         created_at=utc_now_iso(),
     )
     return {
@@ -620,7 +527,7 @@ def build_research_graph(services: GraphServices, *, checkpointer: Any = None) -
     async def run(state: ResearchState) -> dict[str, Any]:
         payload = await _maybe_await(
             services.research(
-                {
+                state.get("context") or {
                     "run_id": state.get("run_id", ""),
                     "workspace_id": state.get("workspace_id", ""),
                     "question": state.get("question", ""),
@@ -681,30 +588,8 @@ def build_main_graph(services: GraphServices, *, checkpointer: Any = None) -> An
 
     graph.add_node("approval", approval)
     graph.add_node("synthesis", make_synthesis_node(services))
-    graph.add_node("verification", make_verification_node(services))
     graph.add_node("clarify", clarify)
     graph.add_node("publish", make_publish_node(services))
-
-    async def revise(state: AgentState) -> dict[str, Any]:
-        """回边递增 ``revisions``（与离线驱动 :func:`run_pipeline` 同一语义）。
-
-        **为什么需要这个节点**：``after_verification`` 靠 ``state["revisions"]`` 判定
-        「修订/补研次数是否用尽」，而早先只有离线驱动会递增它 —— LangGraph 路径下计数器
-        永远是 0，于是 ``revise``/``research`` 回边会一直绕到 ``recursion_limit``，
-        用户看到的是 ``GraphRecursionError`` 而不是 PRD 8.3 的「按资料不足发布」。
-        """
-
-        return {"revisions": int(state.get("revisions") or 0) + 1}
-
-    def after_revision(state: AgentState) -> str:
-        verification = VerificationResult.model_validate(state.get("verification") or {})
-        if verification.verdict is VerifierVerdict.CLARIFY:
-            return "clarify"
-        if verification.verdict is VerifierVerdict.RESEARCH:
-            return "research"
-        return "synthesis"
-
-    graph.add_node("revise", revise)
 
     graph.add_edge(START, "load_snapshot")
     graph.add_edge("load_snapshot", "route")
@@ -716,19 +601,7 @@ def build_main_graph(services: GraphServices, *, checkpointer: Any = None) -> An
         {"approval": "approval", "synthesis": "synthesis", "failed": END},
     )
     graph.add_edge("approval", "research")
-    graph.add_edge("synthesis", "verification")
-    graph.add_conditional_edges(
-        "verification",
-        after_verification,
-        # 回边一律先经过 ``revise`` 计数，再由 ``after_revision`` 分派 —— 两条驱动
-        # 因此共享同一套「次数用尽」语义。
-        {"publish": "publish", "synthesis": "revise", "research": "revise", "clarify": "revise"},
-    )
-    graph.add_conditional_edges(
-        "revise",
-        after_revision,
-        {"synthesis": "synthesis", "research": "research", "clarify": "clarify"},
-    )
+    graph.add_edge("synthesis", "publish")
     graph.add_edge("clarify", "research")
     graph.add_edge("publish", END)
     return graph.compile(checkpointer=checkpointer)
@@ -758,14 +631,12 @@ async def run_pipeline(
         "plan": make_plan_node(services),
         "research": make_research_node(services, concurrency=concurrency or 3),
         "synthesis": make_synthesis_node(services),
-        "verification": make_verification_node(services),
         "publish": make_publish_node(services),
     }
     for name in ("load_snapshot", "route", "plan", "research"):
         state = await _step(nodes[name], state)
 
-    guard = 2 * REVISION_MAX_ROUNDS + 4
-    for _ in range(guard):
+    while True:
         branch = after_research(state)
         if branch == "failed":
             return state
@@ -779,23 +650,10 @@ async def run_pipeline(
             if request is None or str(getattr(request, "status", "pending")) == "pending":
                 return state
             state = await _merge(state, await approval_node(state, services=services))
+            state = await _step(nodes["research"], state)
             continue
         state = await _step(nodes["synthesis"], state)
-        state = await _step(nodes["verification"], state)
-        follow = after_verification(state)
-        if follow == "publish":
-            return await _step(nodes["publish"], state)
-        state = dict(state)  # type: ignore[assignment]
-        state["revisions"] = int(state.get("revisions") or 0) + 1
-        if follow == "clarify":
-            clarification = dict(state.get("clarification") or {})
-            if not clarification or clarification.get("status") == "pending":
-                state["phase"] = "clarify"
-                return state
-            state["clarification"] = {}
-            continue
-        state = await _step(nodes["research"], state)
-    return state
+        return await _step(nodes["publish"], state)
 
 
 async def _step(
@@ -847,6 +705,7 @@ async def _run_subgraph(
         "workspace_id": str(state.get("workspace_id") or ""),
         "task": task.model_dump(mode="json"),
         "request": {},
+        "context": dict(state),
     }
     config = {"configurable": {"thread_id": _task_thread(state, task.task_id)}}
     produced = await services.research_graph.ainvoke(research_state, config=config)
@@ -909,16 +768,27 @@ def _task_thread(state: Mapping[str, Any], task_id: str) -> str:
 
 
 def _evidence_summaries(result: Mapping[str, Any]) -> list[dict[str, Any]]:
+    from app.agent.evidence_text import split_evidence_content
+
     items: list[dict[str, Any]] = []
     for raw in result.get("evidence") or []:
         evidence = Evidence.model_validate(raw)
+        heading, body = split_evidence_content(evidence.content)
+        # ``evidence.added`` 的 item 形状是**冻结契约**（只认 evidence_id / source_type /
+        # title / source_ref / snippet），因此文档标题在这里拼进 ``title``：只显示章节名时，
+        # 界面会把章节名当成文章名，用户无法确认这段来自哪篇文章（用户实测缺陷 F13）。
+        # 完整的文档标题另有到达路径：``Evidence.document_title`` → 引用条目的
+        # ``document_title`` / ``heading_path``（见 verification.assign_citation_ids）。
+        title = evidence.document_title or heading or "已读取的资料"
+        if evidence.document_title and heading and heading not in evidence.document_title:
+            title = f"{evidence.document_title} · {heading}"
         items.append(
             {
                 "evidence_id": evidence.evidence_id,
                 "source_type": evidence.source_type.value,
-                "title": evidence.source_ref,
+                "title": title,
                 "source_ref": evidence.source_ref,
-                "snippet": (evidence.content or "")[:200],
+                "snippet": body[:200],
             }
         )
     return items

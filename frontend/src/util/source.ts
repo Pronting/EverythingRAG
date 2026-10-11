@@ -21,7 +21,9 @@ export function sourceMatchLabel(source: Source): string {
   if (isRelevanceChecked(source)) return "已筛选";
   if (source.match_type === "expanded") return "章节补充";
   if (source.match_type === "memory") return "记忆";
-  if (source.similarity === null || source.similarity === undefined) return "词法命中";
+  if (source.match_type === "read") return "章节读取";
+  if (source.match_type === "lexical") return "词法命中";
+  if (source.similarity === null || source.similarity === undefined) return "来源资料";
   return `${Math.round(source.similarity * 100)}%`;
 }
 
@@ -32,9 +34,7 @@ export function sourceMatchDescription(source: Source): string {
     return score === null ? "已筛选资料" : `已筛选资料 · 排序分数 ${score}`;
   }
   const label = sourceMatchLabel(source);
-  return source.similarity === null || source.similarity === undefined
-    ? label
-    : `向量相似度 ${label}`;
+  return label.endsWith("%") ? `向量相似度 ${label}` : label;
 }
 
 /** 原始向量分数标签：旧记录的数值一旦展示，就明确叫「向量相似度」（PRD §8.3）。 */

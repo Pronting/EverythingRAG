@@ -11,13 +11,20 @@
 from __future__ import annotations
 
 import hashlib
+import json
+import logging
+from sys import exception
 from threading import BoundedSemaphore, Lock
+from time import monotonic
 from typing import Protocol
 
+import httpx
 from openai import OpenAI
 
 from app.core.config import settings
 from app.core.settings_store import EmbedModelConfig
+
+logger = logging.getLogger(__name__)
 
 
 class Embedder(Protocol):
@@ -132,21 +139,51 @@ class CloudEmbedder:
         """Batch query embeddings, applying Qwen3 instructions to each query only."""
 
         formatted = [format_query_for_embedding(text, self._model) for text in texts]
-        return self._embed_inputs(formatted)
+        return self._embed_inputs(formatted, query=True)
 
     def embed_texts(self, texts: list[str]) -> list[list[float]]:
         """Backward-compatible alias for document ingestion callers."""
 
         return self.embed_documents(texts)
 
-    def _embed_inputs(self, texts: list[str]) -> list[list[float]]:
+    def _embed_inputs(self, texts: list[str], *, query: bool = False) -> list[list[float]]:
         """Call the compatible /embeddings endpoint and resolve vector dimension once."""
 
         if not texts:
             return []
         client = self._ensure_client()
-        with self._request_slots:
+        submitted_at = monotonic()
+        wait_limit = settings.query_embed_timeout_seconds if query else None
+        acquired = self._request_slots.acquire(timeout=wait_limit)
+        started_at = monotonic()
+        succeeded = False
+        try:
+            if not acquired:
+                raise TimeoutError("查询嵌入等待执行名额超时")
+            if query:
+                remaining = settings.query_embed_timeout_seconds - (started_at - submitted_at)
+                if remaining <= 0:
+                    raise TimeoutError("查询嵌入等待执行名额超时")
+                client = client.with_options(
+                    timeout=httpx.Timeout(remaining, connect=min(5.0, remaining)),
+                    max_retries=0,
+                )
             response = client.embeddings.create(model=self._model, input=texts)
+            succeeded = True
+        finally:
+            if acquired:
+                self._request_slots.release()
+            if query:
+                error = exception() if not succeeded else None
+                cause = error.__cause__ if error is not None else None
+                logger.warning("query_embedding_timing %s", json.dumps({
+                    "batch_size": len(texts),
+                    "queue_seconds": round(started_at - submitted_at, 3),
+                    "request_seconds": round(monotonic() - started_at, 3),
+                    "outcome": "completed" if succeeded else "failed",
+                    "error_type": type(error).__name__ if error is not None else None,
+                    "cause_type": type(cause).__name__ if cause is not None else None,
+                }))
         # Providers may return batch items out of order. Preserve text-to-vector identity.
         data = list(response.data)
         if all(hasattr(item, "index") for item in data):

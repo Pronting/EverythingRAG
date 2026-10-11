@@ -13,7 +13,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from app.core.workspace_context import WorkspacePaths, _workspace_paths
+from app.core.workspace_context import WorkspacePaths, _shared_paths
 from app.generation.base import ChatChunk
 from app.memory.workspace_memory import WorkspaceMemory
 
@@ -28,9 +28,12 @@ __all__ = [
 
 
 def workspace_paths_for(tmp_path: Path, storage_key: str = "default") -> WorkspacePaths:
-    """构造某个 ``storage_key`` 的真实目录形状（``tmp_path`` 下的隔离数据目录）。"""
+    """构造某个 ``storage_key`` 的真实路径形状（``tmp_path`` 下的隔离数据目录）。
 
-    paths = _workspace_paths(tmp_path / "erag-data", storage_key)
+    D-KB：知识路径共享、私有件按区 —— 本替身直接复用生产构造函数，避免两处形状漂移。
+    """
+
+    paths = _shared_paths(tmp_path / "erag-data", storage_key)
     paths.jieba_cache_dir.mkdir(parents=True, exist_ok=True)
     paths.memory_json.parent.mkdir(parents=True, exist_ok=True)
     return paths

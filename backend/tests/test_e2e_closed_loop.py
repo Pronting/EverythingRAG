@@ -25,7 +25,6 @@ from app.agent import events as agent_events
 from app.agent.app_store import AppStore
 from app.agent.contracts import EventType, RunStatus
 from app.agent.runtime import RunManager
-from app.agent.verification import ModelVerification
 from app.ingestion.pipeline import IngestionPipeline
 from app.retrieval.vector_retriever import VectorRetriever
 from app.vectorstore.chroma_store import ChromaVectorStore
@@ -75,17 +74,6 @@ class FakeEmbedder:
         return out
 
 
-class FakeModelVerifier:
-    """模型核对替身：语义支持永远通过（程序检查仍然全真实执行，PRD 8.2）。"""
-
-    def __init__(self) -> None:
-        self.calls = 0
-
-    async def review(self, request: Any) -> ModelVerification:
-        self.calls += 1
-        return ModelVerification(issues=[], ambiguity_questions=[], notes=["fake-verifier"])
-
-
 class StubContext:
     """``RunManager`` 需要的只读上下文（真实布局：每区一个 checkpoints.db）。"""
 
@@ -123,6 +111,45 @@ def _write_fixture(root: Path) -> None:
 
 
 # ---------------------------------------------------------------- 夹具
+
+
+class _EchoChatModel:
+    """确定性离线对话模型：把提示词里给出的证据占位符原样抄成正文（零出网）。
+
+    闭环用例必须真的走「模型撰写候选答案」这条链路：``synthesize_answer`` 在没有可用
+    模型时抛 ``SynthesisUnavailable``（不再回落确定性拼接稿，见 ``verification`` 的说明），
+    因此这里按真实用户已配置模型的情形注入一个假模型，而不是让链路走已删除的兜底路径。
+    """
+
+    supports_image_input = False
+
+    async def stream_chat(self, messages: list[dict[str, Any]], **_kwargs: Any) -> Any:
+        from app.generation.base import ChatChunk
+
+        text = "\n".join(str(item.get("content") or "") for item in messages)
+        # 只认真实证据占位符（`ev-` + 24 位十六进制）：提示词里的示例 `{{ev-xxxx}}` 不算。
+        evidence = [
+            (match.group(1), match.group(2).strip())
+            for match in re.finditer(
+                r"\{\{(ev-[0-9a-f]{8,})\}\}\s*←\s*([^\n]+)", text
+            )
+        ]
+        if evidence:
+            # 正文确实用上召回原文（而不是只抄占位符），引用编号仍由程序分配。
+            body = "；".join(f"{snippet}{{{{{eid}}}}}" for eid, snippet in evidence)
+        else:
+            body = "据通用知识作答。"
+        yield ChatChunk("content", body)
+
+
+@pytest.fixture(autouse=True)
+def _offline_chat_provider(monkeypatch: pytest.MonkeyPatch) -> None:
+    """闭环用例统一注入离线假对话模型（真实链路 + 零出网）。"""
+
+    monkeypatch.setattr(
+        "app.generation.providers.create_chat_model_from_config",
+        lambda _config: _EchoChatModel(),
+    )
 
 
 class ClosedLoop:

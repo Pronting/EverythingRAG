@@ -79,6 +79,7 @@ def test_save_and_load_roundtrip(monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     saved = AppSettings(
         chat=ChatModelConfig(base_url="http://file.test/v1", model="file-model", api_key=SecretStr("sk-custom")),
         embed=EmbedModelConfig(mode="cloud", base_url="http://embed.test/v1", model="BAAI/bge-m3", api_key=SecretStr("sk-embed")),
+        memory_enabled=False,
         answer_preferences=AnswerPreferences(
             language="zh-CN", verbosity="concise", knowledge_only=True
         ),
@@ -92,6 +93,7 @@ def test_save_and_load_roundtrip(monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     assert "system_prompt" not in raw
     assert raw["schema_version"] == 2
     assert raw["answer_preferences"]["knowledge_only"] is True
+    assert raw["memory_enabled"] is False
 
     # 重载一致
     reloaded = store.load()
@@ -101,6 +103,7 @@ def test_save_and_load_roundtrip(monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     assert reloaded.embed.model == "BAAI/bge-m3"
     assert reloaded.answer_preferences.verbosity == "concise"
     assert reloaded.answer_preferences.knowledge_only is True
+    assert reloaded.memory_enabled is False
 
 
 def test_config_authoritative_when_present(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

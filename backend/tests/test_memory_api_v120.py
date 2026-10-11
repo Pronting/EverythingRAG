@@ -17,7 +17,7 @@ from fastapi.testclient import TestClient
 
 from app.agent.app_store import SCHEMA_STATEMENTS
 from app.core.config import settings
-from app.core.workspace_context import _workspace_paths
+from app.core.workspace_context import _shared_paths
 from app.main import app
 from app.memory.history import history_tokenizer, tokenize_for_index
 
@@ -29,7 +29,7 @@ def _client() -> TestClient:
 
 
 def _memory_path() -> Path:
-    return _workspace_paths(Path(settings.data_dir), "default").memory_json
+    return _shared_paths(Path(settings.data_dir), "default").memory_json
 
 
 def _raw() -> dict:
@@ -48,7 +48,7 @@ def _seed_history_db() -> None:
     db = data_dir / "app.db"
     if db.exists():
         db.unlink()
-    paths = _workspace_paths(data_dir, "default")
+    paths = _shared_paths(data_dir, "default")
     paths.jieba_cache_dir.mkdir(parents=True, exist_ok=True)
     tokenizer = history_tokenizer(paths, terms=TERMS)
 

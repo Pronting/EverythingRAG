@@ -30,12 +30,16 @@ class ConversationMessage(BaseModel):
     """
 
     role: str  # "user" | "assistant"
+    message_id: str | None = None
     content: str
     sources: list[dict[str, Any]] | None = None
     answer_basis: str | None = None
     policy_version: str | None = None
     reasoning: str | None = None
     created_at: str = ""
+
+    run_id: str | None = None
+    citations: list[dict[str, Any]] | None = None
 
 
 class Conversation(BaseModel):
@@ -55,8 +59,6 @@ class Conversation(BaseModel):
     forked_from_title: str | None = None
     #: 所属工作区（对话分区）；旧数据缺省落到默认工作区。
     workspace_id: str = DEFAULT_WORKSPACE_ID
-    #: 工作区内手工排序位（拖拽排序）；None = 未排序，按 updated_at 倒序。
-    sort_index: float | None = None
     #: 创建/更新序号（仅用于同毫秒时间戳下的稳定排序，不进 UI）。
     sort_seq: int = 0
 
@@ -73,38 +75,28 @@ def _now() -> str:
     return datetime.now(UTC).isoformat()
 
 
-def _midpoint(low: float | None, high: float | None) -> float:
-    """插入到 low / high 之间所需的排序位（任一侧为空则向该侧外扩 1.0）。"""
-
-    if low is None and high is None:
-        return 0.0
-    if low is None:
-        return float(high) - 1.0  # type: ignore[arg-type]
-    if high is None:
-        return float(low) + 1.0
-    return (float(low) + float(high)) / 2.0
-
-
-def _sidebar_sort_key(conv: Conversation) -> tuple[float, float, float, str]:
+def _sidebar_sort_key(conv: Conversation) -> tuple[float, float, str]:
     """侧边栏排序键（按**升序**排序即可得到显示顺序）。
 
-    - 手工拖拽过的：``(0, sort_index)``（位次越小越靠前）；
-    - 没拖过的：``(1, -updated_at)`` 排在其后，组内越新越靠前；
-    - 末位用创建序号**倒序**兜底：同一时刻（时间戳打平）活动过的会话必须仍然
-      「越新越靠前」，因此取 ``-sort_seq``。这里若用升序，打平时会退化成
-      「创建顺序」，与 recency 语义相反（Windows 时钟粒度约 15.6ms 时，
-      连续创建的会话极易打平 → 表现为全量测试下的顺序 flake）。
+    **唯一口径：最近活动优先**（用户 2026-09-22 需求 2，对齐 ChatGPT / Codex）。
+    无论是用户消息还是 agent 消息，只要 ``updated_at`` 被刷新，该会话就排到最前。
+
+    历史沿革：旧实现有一条「手工拖拽过的排在前并按 ``sort_index``」的高优先级档位，
+    结果是一旦拖过一次，整个工作区的会话都被 ``_ensure_sort_indexes`` 写死位次、永远
+    压在新会话之上。该档位与 ``sort_index`` 字段已一并移除（旧存档里的 ``sort_index``
+    键在读入时被忽略，不影响任何行为）。
+
+    末位用创建序号**倒序**兜底：同一时刻（Windows 时钟粒度约 15.6ms，时间戳极易打平）
+    活动过的会话必须仍然「越新越靠前」；若用升序会退化成「创建顺序」，与 recency 语义相反。
     """
 
-    if conv.sort_index is not None:
-        return (0.0, float(conv.sort_index), 0.0, "")
     try:
         parsed = datetime.fromisoformat(conv.updated_at)
     except ValueError:
-        return (1.0, 0.0, 0.0, conv.updated_at)
+        return (0.0, 0.0, conv.updated_at)
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=UTC)
-    return (1.0, -parsed.timestamp(), -float(conv.sort_seq), conv.updated_at)
+    return (-parsed.timestamp(), -float(conv.sort_seq), conv.updated_at)
 
 
 class ConversationStore:
@@ -141,7 +133,7 @@ class ConversationStore:
     def list_summaries(self, workspace_id: str | None = None) -> list[dict[str, Any]]:
         """活跃会话摘要列表（侧边栏顺序）。
 
-        排序：手工拖拽过的（有 sort_index）在前并按其顺序，其余按最近更新倒序；
+        排序：**一律按最近活动倒序**（谁最后收到消息谁在最前，用户 2026-09-22 需求 2）；
         - 已归档的不返回（归档页用 list_archived_summaries）；
         - 空会话（从未交换过消息）不返回，避免侧边栏堆满「新对话」；
         - 给定 workspace_id 时只返回该工作区。
@@ -188,8 +180,6 @@ class ConversationStore:
             if conv is None:
                 return None
             conv.workspace_id = workspace_id
-            # 换工作区后排到目标区末尾：清除手工位，让它按更新时间自然落位
-            conv.sort_index = None
             conv.updated_at = _now()
             conv.sort_seq = _next_seq()
             self._persist()
@@ -199,65 +189,28 @@ class ConversationStore:
         self,
         conversation_id: str,
         workspace_id: str | None = None,
-        target_index: int | None = None,
     ) -> Conversation | None:
-        """侧边栏拖拽落点：把会话移到（可选的）目标工作区，并放到该区第 target_index 位。
+        """侧边栏拖拽落点 / 同区分支：把会话归到（可选的）目标工作区。
 
-        排序位取插入点前后邻居 sort_index 的中点（浮点插入），无需重排整个区；
-        放到末尾或目标区为空时给一个末尾值。目标区里若还有没排过序（sort_index=None）
-        的会话，会先给它们按当前显示顺序补上位次，避免新旧顺序互相插队。
+        自 2026-09-22（需求 2）起侧边栏**一律最近活动优先**，工作区内手工排序已取消：
+        这里不再接受 ``target_index``，也不再写任何排序位——刷新 ``updated_at`` 后会话
+        自然出现在目标区最前。
+
+        仍然必须保留这个入口：同区拖拽是「把存档归属拉回 app.db 权威值」的自愈路径
+        （见 ``tests/test_acceptance_t37_move_entry.py`` 的分叉用例），只是它不再排序。
         """
 
         with self._lock:
             conv = self._conversations.get(conversation_id)
             if conv is None:
                 return None
-            target_workspace = workspace_id or conv.workspace_id
             if workspace_id is not None:
                 conv.workspace_id = workspace_id
 
-            siblings = self._siblings_in_order(target_workspace, exclude_id=conversation_id)
-            self._ensure_sort_indexes(siblings)
-            ordered = [item.id for item in siblings]
-            index = len(ordered) if target_index is None else max(0, min(int(target_index), len(ordered)))
-            low = ordered[index - 1] if index - 1 >= 0 else None
-            high = ordered[index] if index < len(ordered) else None
-            conv.sort_index = _midpoint(
-                self._index_of(low),
-                self._index_of(high),
-            )
             conv.updated_at = _now()
             conv.sort_seq = _next_seq()
             self._persist()
             return conv
-
-    def _siblings_in_order(self, workspace_id: str, exclude_id: str) -> list[Conversation]:
-        """目标工作区里可见（活跃非空）的会话，按当前侧边栏顺序排列。"""
-
-        return sorted(
-            (
-                item
-                for item in self._conversations.values()
-                if item.workspace_id == workspace_id
-                and item.id != exclude_id
-                and not item.archived
-                and item.messages
-            ),
-            key=_sidebar_sort_key,
-        )
-
-    def _ensure_sort_indexes(self, conversations: list[Conversation]) -> None:
-        """给还没手工排序的会话按当前显示顺序补 sort_index（保持视觉顺序不变）。"""
-
-        for position, conv in enumerate(conversations):
-            if conv.sort_index is None:
-                conv.sort_index = float(position)
-
-    def _index_of(self, conversation_id: str | None) -> float | None:
-        if conversation_id is None:
-            return None
-        conv = self._conversations.get(conversation_id)
-        return conv.sort_index if conv is not None else None
 
     def archive_workspace(self, workspace_id: str) -> int:
         """归档某工作区下的全部活跃会话，返回归档条数（删除工作区时调用）。
@@ -359,6 +312,19 @@ class ConversationStore:
             conv.sort_seq = _next_seq()
             self._persist()
             return conv
+
+    def replace_messages(
+        self, conversation_id: str, messages: list[ConversationMessage]
+    ) -> None:
+        with self._lock:
+            conv = self._conversations.get(conversation_id)
+            if conv is None or conv.messages == messages:
+                return
+            conv.messages = messages
+            if messages:
+                conv.updated_at = messages[-1].created_at
+            conv.sort_seq = _next_seq()
+            self._persist()
 
     def set_title(self, conversation_id: str, title: str) -> Conversation | None:
         """设置标题（截断到 60 字）。"""
@@ -468,5 +434,4 @@ class ConversationStore:
             "parent_id": conv.parent_id,
             "forked_from_title": conv.forked_from_title,
             "workspace_id": conv.workspace_id,
-            "sort_index": conv.sort_index,
         }

@@ -65,6 +65,43 @@ def get_workspace_store() -> WorkspaceStore:
     return workspace_store
 
 
+async def _refresh_messages(store: ConversationStore, conversation_id: str | None = None) -> None:
+    from app.agent.runtime import get_run_manager
+    from app.api.deps import get_app_store
+
+    app_store = get_app_store()
+    manager = get_run_manager()
+    if app_store is None or manager is None:
+        return
+    async with manager.db():
+        if conversation_id is not None:
+            record = await app_store.get_conversation(conversation_id)
+            records = [record] if record is not None else []
+        else:
+            records = []
+            for workspace in await app_store.list_workspaces():
+                records.extend(await app_store.list_conversations(workspace.id))
+        for record in records:
+            messages = await app_store.list_messages(record.id)
+            input_runs = {
+                run.input_message_id: run.id for run in await app_store.list_runs(record.id)
+                if run.input_message_id is not None
+            }
+            store.replace_messages(record.id, [
+                ConversationMessage(
+                    role=item.role,
+                    message_id=item.id,
+                    content=item.content,
+                    created_at=item.created_at,
+                    run_id=item.run_id or input_runs.get(item.id),
+                    sources=item.source_snapshot.get("sources"),
+                    citations=item.source_snapshot.get("citations"),
+                    answer_basis=item.source_snapshot.get("answer_basis"),
+                    policy_version=item.source_snapshot.get("policy_version"),
+                ) for item in messages
+            ])
+
+
 # =====================================================================
 # D25 / D29：工作区写路径的权威源（过渡期双源 → app.db 唯一权威）
 # =====================================================================
@@ -220,15 +257,16 @@ class TruncateRequest(BaseModel):
 
 
 class MoveRequest(BaseModel):
-    """侧边栏拖拽落点：目标工作区（可选）+ 目标位置（该区第几条）。
+    """侧边栏拖拽落点：目标工作区（可选）。
 
     **跨区**拖拽与 ``POST /{id}/workspace`` 是同一条状态机（PRD 5.4），因此同样接受
-    ``confirm`` 与 ``expected_context_epoch``（PRD 13.2 末段）。仅``target_index`` 的
-    同区排序不涉及归属，不需要确认。
+    ``confirm`` 与 ``expected_context_epoch``（PRD 13.2 末段）。
+
+    2026-09-22（需求 2）起不再有 ``target_index``：侧边栏一律「最近活动优先」，
+    工作区内手工排序已取消，服务端也不再接受落点位次。
     """
 
     workspace_id: str | None = Field(default=None, max_length=40)
-    target_index: int | None = Field(default=None, ge=0)
     confirm: bool = False
     expected_context_epoch: int | None = Field(default=None, ge=1)
 
@@ -478,6 +516,7 @@ async def list_conversations(
 
     给定 ``workspace`` 时只返回该工作区的会话（侧边栏分区切换）。
     """
+    await _refresh_messages(store)
     if q.strip():
         return store.search(q, workspace)
     return store.list_summaries(workspace)
@@ -541,10 +580,52 @@ async def get_conversation(
     store: ConversationStore = Depends(get_conversation_store),  # noqa: B008
 ) -> dict[str, Any]:
     """返回完整会话（含消息列表）。"""
+    await _refresh_messages(store, conversation_id)
     conv = store.get(conversation_id)
     if conv is None:
         raise HTTPException(status_code=404, detail="会话不存在")
-    return conv.model_dump()
+    payload = conv.model_dump()
+    from app.api.deps import get_app_store
+
+    app_store = get_app_store()
+    record = await app_store.get_conversation(conversation_id) if app_store is not None else None
+    if record is not None:
+        payload.update(permission_mode=record.permission_mode, reasoning_level=record.reasoning_level)
+    return payload
+
+
+@router.put("/api/conversations/{conversation_id}/settings")
+async def update_conversation_settings(
+    conversation_id: str,
+    request: WorkspaceDefaultsRequest,
+) -> dict[str, Any]:
+    from app.agent.runtime import get_run_manager
+
+    manager = get_run_manager()
+    if manager is None:
+        raise HTTPException(status_code=503, detail="对话服务尚未就绪")
+    from app.api.routes.runs import _ensure_conversation_row
+
+    legacy_store = get_conversation_store()
+    legacy = legacy_store.get(conversation_id)
+    if legacy is None:
+        raise HTTPException(status_code=404, detail="会话不存在")
+    await _ensure_conversation_row(manager, legacy.workspace_id, conversation_id, legacy_store)
+    async with manager.db():
+        conversation = await manager.store.get_conversation(conversation_id)
+        if conversation is None:
+            raise HTTPException(status_code=404, detail="会话不存在")
+        updated = await manager.store.update_conversation(
+            conversation_id,
+            permission_mode=request.permission_mode,
+            reasoning_level=request.reasoning_level,
+        )
+        for run in await manager.store.list_runs(conversation_id):
+            if run.status.value in {"queued", "running", "waiting_approval", "waiting_input", "waiting_children"}:
+                await manager.store.update_run_settings(
+                    run.id, updated.permission_mode, updated.reasoning_level
+                )
+    return {"permission_mode": updated.permission_mode, "reasoning_level": updated.reasoning_level}
 
 
 @router.post("/api/conversations/{conversation_id}/messages")
@@ -591,6 +672,17 @@ async def truncate_conversation(
     store: ConversationStore = Depends(get_conversation_store),  # noqa: B008
 ) -> dict[str, Any]:
     """从第 index 条消息起截断会话（前端「编辑重发」：该条及其之后的轮次作废）。"""
+    from app.agent.app_store import ConflictError
+    from app.agent.runtime import get_run_manager
+
+    manager = get_run_manager()
+    if manager is not None:
+        async with manager.db():
+            if await manager.store.get_conversation(conversation_id) is not None:
+                try:
+                    await manager.store.truncate_messages(conversation_id, request.index)
+                except ConflictError as exc:
+                    raise HTTPException(status_code=409, detail=str(exc)) from exc
     conv = store.truncate_from(conversation_id, request.index)
     if conv is None:
         raise HTTPException(status_code=404, detail="会话不存在")
@@ -605,13 +697,17 @@ async def move_conversation_in_sidebar(
     store: ConversationStore = Depends(get_conversation_store),  # noqa: B008
     workspaces: WorkspaceStore = Depends(get_workspace_store),  # noqa: B008
 ) -> dict[str, Any]:
-    """侧边栏拖拽落点：**同区排序** 或 **跨区移动**（PRD 5.4 / 13.2）。
+    """侧边栏拖拽落点：**跨区移动**（PRD 5.4 / 13.2）。
+
+    2026-09-22（需求 2）起**不再有同区排序分支**：侧边栏一律「最近活动优先」，工作区内
+    拖拽不产生任何调用。同一个工作区的请求仍走 ``store.move_in_sidebar`` 做**存档自愈**
+    （把归属拉回 app.db 权威值），但不改任何位次、不写权威行 —— 它是 `t35` 之后唯一的
+    自愈路径，删掉会让「存档与权威行分叉」无法通过拖拽恢复。
 
     ⚠️ **跨区必须与 ``POST /api/conversations/{id}/workspace`` 走同一条状态机**
     （``_move_via_state_machine``）。早先这里直接 ``store.move_in_sidebar`` 改存档归属：
     不停止 run、不递增 ``context_epoch``、不 supersede 批准/澄清、不写 app.db ⇒
     **侧边栏与 app.db 权威行分叉**，A27 在**最常用的拖拽路径**上被整条绕过（t35 修正）。
-    仅同区 ``target_index`` 排序不含归属变更，因此不触发状态机（也不会碰权威行）。
     """
 
     current = store.get(conversation_id)
@@ -623,15 +719,13 @@ async def move_conversation_in_sidebar(
     if source is None:
         raise HTTPException(status_code=404, detail="会话不存在")
     if target is None or target == source:
-        # 同区：只改侧边栏顺序（PRD 5.4 的「移动」语义不成立）。
-        conv = store.move_in_sidebar(
-            conversation_id, workspace_id=source, target_index=request.target_index
-        )
+        # 同区：只做存档自愈（不排序、不换归属），状态机不适用。
+        conv = store.move_in_sidebar(conversation_id, workspace_id=source)
         if conv is None:
             raise HTTPException(status_code=404, detail="会话不存在")
         return _summary(conv)
 
-    payload = await _move_via_state_machine(
+    return await _move_via_state_machine(
         conversation_id=conversation_id,
         request=http_request,
         target_workspace_id=str(target),
@@ -640,16 +734,6 @@ async def move_conversation_in_sidebar(
         store=store,
         workspaces=workspaces,
     )
-    if request.target_index is not None:
-        # 落点位置在同区生效（归属已由状态机在 app.db 权威 + 存档镜像改完）。
-        placed = store.move_in_sidebar(
-            conversation_id, workspace_id=str(target), target_index=request.target_index
-        )
-        if placed is not None:
-            summary = _summary(placed)
-            summary.update({key: value for key, value in payload.items() if key not in summary})
-            return summary
-    return payload
 
 
 async def _authoritative_workspace_id(
@@ -835,6 +919,7 @@ async def generate_title(
     store: ConversationStore = Depends(get_conversation_store),  # noqa: B008
 ) -> dict[str, str]:
     """用对话模型从前 2 条用户消息总结标题；模型不可用时回退首个用户消息截断。"""
+    await _refresh_messages(store, conversation_id)
     conv = store.get(conversation_id)
     if conv is None:
         raise HTTPException(status_code=404, detail="会话不存在")
@@ -888,7 +973,6 @@ def _summary(conv: Any) -> dict[str, Any]:
         "parent_id": conv.parent_id,
         "forked_from_title": conv.forked_from_title,
         "workspace_id": conv.workspace_id,
-        "sort_index": conv.sort_index,
     }
 
 
@@ -911,4 +995,6 @@ def _workspace_payload(
         "order_index": workspace.order_index,
         "status": str(workspace.status if view is None else view.status),
         "conversation_count": conversation_count,
+        "default_permission_mode": str(workspace.default_permission_mode),
+        "default_reasoning_level": str(workspace.default_reasoning_level),
     }

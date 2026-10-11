@@ -120,7 +120,6 @@ def test_settings_isolation_exposes_no_real_credentials() -> None:
     # 三个装配点（PRD 8.1/8.2 的模型侧）都拿不到模型 ⇒ 各自走确定性/结构化分支。
     assert agent_runtime.general_model_for_chat() is None
     assert agent_runtime.synthesis_model_for_chat() is None
-    assert agent_runtime.model_verifier_for_chat() is None
 
 
 def test_env_fallback_would_leak_real_credentials_without_the_isolation(

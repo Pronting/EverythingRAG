@@ -428,11 +428,11 @@ test("拖拽跨区也受同一确认门约束（不再是不经状态机的旁�
   expect(stub.calls[0].path).toBe("/api/conversations/c1/move");
   expect(stub.calls[0].body.confirm).toBe(false);
   expect(stub.calls[0].body.workspace_id).toBe("research");
-  // 字段集合与右键完全一致（两处同一契约）
+  // 字段集合与右键完全一致（两处同一契约）；2026-09-22 起不再有 `target_index`
+  // （侧边栏恒为最近活动优先，工作区内手工排序已取消）
   expect(Object.keys(stub.calls[0].body).sort()).toEqual([
     "confirm",
     "expected_context_epoch",
-    "target_index",
     "workspace_id",
   ]);
 
@@ -443,8 +443,9 @@ test("拖拽跨区也受同一确认门约束（不再是不经状态机的旁�
   await expect(page.locator(".toast")).toContainText("已移动到「研究」");
 });
 
-// 同区拖拽「只排序、不弹确认」由 `workspaces.spec.ts::拖拽会话可排序，也可拖进另一个
-// 工作区文件夹` 覆盖（那里 step 1 显式断言同区不出现确认弹窗）；此处不重复实现脆弱的
+// 同区拖拽「不排序、不弹确认」由
+// `workspaces.spec.ts::拖拽会话只能跨工作区移动，同区内拖拽不再排序` 覆盖
+// （那里显式断言同区拖拽不产生任何请求、也不出现确认弹窗）；此处不重复实现脆弱的
 // 物理拖拽，避免同一行为两处维护。
 
 test("移动后在目标区继续提问：新 run 携带 origin_run_id 并在过程区域展示承接关系", async ({ page }) => {
@@ -471,8 +472,7 @@ test("移动后在目标区继续提问：新 run 携带 origin_run_id 并在过
     .toBe(1);
   expect(stub.runBodies[0].origin_run_id).toBe("run-7");
 
-  // 过程区域如实展示承接关系，避免用户以为历史凭空消失
-  await page.getByTestId("process-toggle").first().click();
+  // 过程时间线如实展示承接关系，避免用户以为历史凭空消失（环节行默认可见）
   await expect(page.getByTestId("process-entries").first()).toContainText(
     "本次执行承接自原工作区的执行 run-7",
   );
@@ -490,7 +490,9 @@ test("未发生移动时不携带 origin_run_id（不编造承接关系）", asy
 
   await expect.poll(() => stub.runBodies.length).toBe(1);
   expect(stub.runBodies[0].origin_run_id).toBeNull();
-  await expect(page.getByTestId("process-entries")).toHaveCount(0);
+  // 没有承接关系：过程时间线里不得出现「承接自原工作区」这一环节
+  // （环节行默认可见，因此断言内容而不是断言容器不存在）
+  await expect(page.getByTestId("process-entries")).not.toContainText("承接自原工作区");
   expectRunOnlyTraffic(paths);
 });
 

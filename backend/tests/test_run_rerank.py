@@ -762,13 +762,17 @@ def _zero_outbound(monkeypatch: pytest.MonkeyPatch) -> None:
 
 @pytest.fixture(autouse=True)
 def _isolate_settings(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """隔离设置读取 **与** 三个模型装配点（PRD 隐私红线：测试绝不真出网）。
+    """隔离设置读取 **与** 模型装配点（PRD 隐私红线：测试绝不真出网）。
 
     只隔离 ``get_settings_store()`` **不够**：config.json 缺失时 ``load()`` 会回退到
     本机 ``.env``（后端仓库里确实存在真实 provider 凭证），于是 run 链路的
     synthesis / verify 会真的构造 provider 并发起外呼（本工作流实测到
-    ``AuthenticationError``）。因此这里把三个装配点直接置为「未配置」，走确定性渲染与
-    纯程序核对——与 ``test_seam_assembly`` / ``test_lifespan_assembly`` 同一做法。
+    ``AuthenticationError``）。因此这里把设置存储与对话 provider 都换成**离线假实现**。
+
+    ⚠️ 这里**不能**再把 ``synthesis_model_for_chat`` 置为 ``None``：候选答案现在必须由
+    模型撰写，没有模型时 ``synthesize_answer`` 会抛 ``SynthesisUnavailable``（不再回落
+    确定性拼接稿，见 ``verification`` 的说明），于是所有 run 会以
+    ``synthesis_model_unavailable`` 失败 —— 那些用例本来验证的是检索 / 筛选，不是生成。
     """
 
     from app.core import settings_store as settings_store_mod
@@ -776,8 +780,27 @@ def _isolate_settings(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     empty = settings_store_mod.SettingsStore(tmp_path / "isolated-settings")
     monkeypatch.setattr(settings_store_mod, "get_settings_store", lambda: empty)
     monkeypatch.setattr(agent_runtime, "general_model_for_chat", lambda *a, **k: None)
-    monkeypatch.setattr(agent_runtime, "synthesis_model_for_chat", lambda *a, **k: None)
-    monkeypatch.setattr(agent_runtime, "model_verifier_for_chat", lambda *a, **k: None)
+
+    def _offline_synthesis(*_args: Any, **_kwargs: Any) -> Any:
+        """离线候选答案模型：把本轮可用证据的占位符抄成正文（零出网）。
+
+        ⚠️ 必须返回**可调用模型**而不是 ``None``：候选答案现在必须由模型撰写，
+        ``synthesize_answer`` 在没有模型时抛 ``SynthesisUnavailable``（不再回落确定性
+        拼接稿），于是所有 run 会以 ``synthesis_model_unavailable`` 失败 —— 这些用例
+        验证的是检索 / 筛选行为，不该被生成阶段的兜底移除牵连。
+        """
+
+        def call(request: Any) -> str:
+            markers = [
+                f"{{{{{item.evidence_id}}}}}"
+                for item in getattr(request, "evidence", ()) or ()
+                if getattr(item, "supported_requirements", None)
+            ]
+            return f"依据如下：{' '.join(dict.fromkeys(markers))}" if markers else "据通用知识作答。"
+
+        return call
+
+    monkeypatch.setattr(agent_runtime, "synthesis_model_for_chat", _offline_synthesis)
 
 
 def _rag_services_factory(runtime: Any) -> Any:
@@ -884,6 +907,22 @@ def _events_of(events: Any, event_type: EventType) -> list[Any]:
     return [event for event in events if event.type is event_type]
 
 
+def _tool_events(events: Any, event_type: EventType, tool_name: str = "rerank") -> list[Any]:
+    """按工具名收窄的过程事件（默认 ``rerank``）。
+
+    过程时间线自 2026-09-20 起由 ``ApprovalGate`` 给**每一次**工具调用发
+    ``tool.started`` / ``tool.completed``（PRD 14.2 的逐工具环节行），所以
+    「只发 rerank 进度事件」「disabled 不得有筛选事件」这类判据必须按 ``tool_name``
+    收窄 —— 否则同一次 run 里 search_knowledge / read_document 的环节行会污染判据。
+    """
+
+    return [
+        event
+        for event in _events_of(events, event_type)
+        if str(event.payload.get("tool_name") or "") == tool_name
+    ]
+
+
 def _evidence_texts(events: Any) -> str:
     return " ".join(
         str(item.get("snippet") or "")
@@ -925,8 +964,8 @@ async def test_run_api_reports_rerank_progress_and_filters_evidence(tmp_path: Pa
             (event.type.value, event.payload) for event in events
         ]
 
-        started = _events_of(events, EventType.TOOL_STARTED)
-        completed = _events_of(events, EventType.TOOL_COMPLETED)
+        started = _tool_events(events, EventType.TOOL_STARTED)
+        completed = _tool_events(events, EventType.TOOL_COMPLETED)
         assert started, [event.type.value for event in events]
         assert completed
         assert {item.payload.get("tool_name") for item in started} == {"rerank"}
@@ -959,8 +998,8 @@ async def test_run_api_without_rerank_emits_no_rerank_progress(tmp_path: Path) -
         run_id, events = await _run(env)
         run = await env.store.get_run(run_id)
         assert run.status in {RunStatus.COMPLETED, RunStatus.COMPLETED_WITH_GAPS}
-        assert not _events_of(events, EventType.TOOL_STARTED)
-        assert not _events_of(events, EventType.TOOL_COMPLETED)
+        assert not _tool_events(events, EventType.TOOL_STARTED)
+        assert not _tool_events(events, EventType.TOOL_COMPLETED)
         # 旧路径：两条候选都在
         texts = _evidence_texts(events)
         assert "橘子" in texts
@@ -986,10 +1025,10 @@ async def test_run_api_answer_meta_citations_carry_relevance_fields(tmp_path: Pa
         assert run.status in {RunStatus.COMPLETED, RunStatus.COMPLETED_WITH_GAPS}
 
         # ① 工具事件的真实计数：筛选出 1 条（>0 ⇒ filtered；0 ⇒ empty）
-        started = _events_of(events, EventType.TOOL_STARTED)
+        started = _tool_events(events, EventType.TOOL_STARTED)
         completed = [
             item
-            for item in _events_of(events, EventType.TOOL_COMPLETED)
+            for item in _tool_events(events, EventType.TOOL_COMPLETED)
             if item.payload.get("status") == "succeeded"
         ]
         assert completed and completed[-1].payload["result_count"] == 1
@@ -1095,8 +1134,8 @@ async def test_run_api_disabled_sources_keep_vector_similarity_without_rerank_ev
         run = await env.store.get_run(run_id)
         assert run.status in {RunStatus.COMPLETED, RunStatus.COMPLETED_WITH_GAPS}
 
-        assert not _events_of(events, EventType.TOOL_STARTED), "disabled 不得有筛选开始事件"
-        assert not _events_of(events, EventType.TOOL_COMPLETED), "disabled 不得有筛选完成事件"
+        assert not _tool_events(events, EventType.TOOL_STARTED), "disabled 不得有筛选开始事件"
+        assert not _tool_events(events, EventType.TOOL_COMPLETED), "disabled 不得有筛选完成事件"
         assert _retrieval_status_from_events(events) == "disabled"
 
         citations = _events_of(events, EventType.ANSWER_META)[-1].payload["citations"]
@@ -1133,7 +1172,7 @@ async def test_run_api_emits_empty_counts_when_nothing_passes_the_filter(tmp_pat
         _run_id, events = await _run(env)
         completed = [
             item
-            for item in _events_of(events, EventType.TOOL_COMPLETED)
+            for item in _tool_events(events, EventType.TOOL_COMPLETED)
             if item.payload.get("status") == "succeeded"
         ]
         assert completed, [event.type.value for event in events]
@@ -1167,10 +1206,11 @@ async def test_run_api_fails_the_run_when_rerank_is_misconfigured(tmp_path: Path
         error = failures[-1].payload["error"]
         assert error["error_code"] == ToolErrorCode.NOT_CONFIGURED.value
         assert "设置" in error["message"]
-        # 具体筛选错误码经进度事件透出（供前端指向设置页）
+        # 具体筛选错误码经进度事件透出（供前端指向设置页）；
+        # 过程时间线里还有其它工具的失败行，这里按 tool_name 取 rerank 那一行。
         failed_tool = [
             item
-            for item in _events_of(events, EventType.TOOL_COMPLETED)
+            for item in _tool_events(events, EventType.TOOL_COMPLETED)
             if item.payload.get("status") == "failed"
         ]
         assert failed_tool and failed_tool[-1].payload["error_code"] == "RERANK_NOT_CONFIGURED"

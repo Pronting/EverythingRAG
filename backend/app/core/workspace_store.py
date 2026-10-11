@@ -50,10 +50,13 @@ DEFAULT_WORKSPACE_NAME = "默认"
 DEFAULT_STORAGE_KEY = "default"
 #: 名称长度上限（与前端 maxLength 对齐）。
 MAX_WORKSPACE_NAME_CHARS = 20
-#: 每工作区目录树（PRD 5.1）中**必须存在**的子目录；``state.db`` / ``image_state.db`` /
+#: 每工作区**私有**目录（D-KB：知识库全局共享，工作区只留私有件）。
+#: ``documents`` / ``chroma`` / ``state.db`` / ``image_state.db`` 已改为共享，
+#: 落在 ``data_dir`` 根；这里只剩运行产物与分词缓存。
 #: ``memory.json`` / ``checkpoints.db`` 是文件，由各自拥有者在首次写入时创建。
-WORKSPACE_SUBDIRS: tuple[str, ...] = ("documents", "chroma", "artifacts", "cache/jieba")
-#: 目录布局版本：1 = V1.1.0 的 ``data_dir`` 根布局；2 = PRD 5.1 的每工作区布局。
+WORKSPACE_SUBDIRS: tuple[str, ...] = ("artifacts", "cache/jieba")
+#: 工作区记录迁移版本（D25/D29）：>=2 表示工作区记录以 app.db 为权威、JSON 为存档。
+#: **与知识库布局无关**（知识库自 D-KB 起永远在 ``data_dir`` 根、所有工作区共享）。
 WORKSPACE_LAYOUT_VERSION = 2
 
 
@@ -97,7 +100,7 @@ class Workspace(BaseModel):
     status: WorkspaceStatus = WorkspaceStatus.ACTIVE
     #: 工作区默认权限模式（PRD 10.1 / 18.1，默认 ask）。
     default_permission_mode: PermissionMode = DEFAULT_PERMISSION_MODE
-    #: 工作区默认思考强度（PRD 9.1 / 18.1，默认 high）。
+    #: 工作区默认思考强度（PRD 9.1 / 18.1，默认 off）。
     default_reasoning_level: ReasoningLevel = DEFAULT_REASONING_LEVEL
     #: 本区知识版本（PRD 5.3.6）：导入/同步/删除提交成功后递增；缓存键的一部分。
     knowledge_revision: int = 0
@@ -390,13 +393,17 @@ class WorkspaceStore:
         return None if workspace is None else workspace.storage_key
 
     def workspace_root(self, data_dir: Path, workspace_id: str) -> Path | None:
-        """``data_dir/workspaces/<storage_key>/``（PRD 5.1）；工作区不存在返回 None。"""
+        """``data_dir/workspaces/<storage_key>/``（本区**私有**根）；工作区不存在返回 None。"""
 
         key = self.storage_key(workspace_id)
         return None if key is None else Path(data_dir) / "workspaces" / key
 
     def ensure_dirs(self, data_dir: Path, workspace_id: str) -> Path:
-        """创建并返回本工作区目录树（幂等）；工作区不存在时抛 ``KeyError``。"""
+        """创建并返回本工作区**私有**目录树（幂等）；工作区不存在时抛 ``KeyError``。
+
+        知识目录（``documents`` / ``chroma``）自 D-KB 起是共享的，由
+        ``workspace_context.ensure_layout_dirs`` 在 ``data_dir`` 根创建。
+        """
 
         root = self.workspace_root(data_dir, workspace_id)
         if root is None:

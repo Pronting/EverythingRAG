@@ -1,6 +1,6 @@
 """SSE 事件与 `run_events` 的统一事件对象（PRD 13.3）。Owner: T00b（契约部分）。
 
-本模块只定义**事件契约**：统一事件对象、20 类 ``type`` 的 payload 模型、以及
+本模块定义统一事件对象、各类 ``type`` 的 payload 模型、以及
 编解码与校验入口。事件发布器与 SSE 序列化（帧拼装、断线补读）归 approval-privacy
 （见 `docs/tech/v1.2.0-architecture.md` §2.1 / §2.6），他们只在上方追加，不改本文件
 的定义。
@@ -100,6 +100,7 @@ class RunStatusPayload(EventPayload):
     status: RunStatus
     phase: str = ""
     message: str = ""
+    model_call: dict[str, Any] | None = None
 
 
 class RouteDecidedPayload(EventPayload):
@@ -117,6 +118,8 @@ class PlanTaskSummary(ContractModel):
     status: TaskStatus
     depends_on: list[str] = Field(default_factory=list)
     requirement_ids: list[str] = Field(default_factory=list)
+    query_identity: str = ""
+    query_reuse_reason: str = ""
 
 
 class PlanUpdatedPayload(EventPayload):
@@ -151,6 +154,19 @@ class ToolStartedPayload(EventPayload):
     args_summary: str = ""
     operation_id: str = ""
     task_id: str | None = None
+    summary: str = ""
+
+
+class ProcessSource(ContractModel):
+    title: str
+    text: str = ""
+
+
+class ModelReasoningPayload(EventPayload):
+    step_id: str
+    stream_id: str
+    text: str
+    title: str
 
 
 class ToolCompletedPayload(EventPayload):
@@ -162,6 +178,9 @@ class ToolCompletedPayload(EventPayload):
     result_count: int = Field(default=0, ge=0)
     source_count: int = Field(default=0, ge=0)
     error_code: str = ""
+    summary: str = ""
+    details: list[str] = Field(default_factory=list)
+    sources: list[ProcessSource] = Field(default_factory=list)
 
 
 class ApprovalRequestedPayload(EventPayload):
@@ -237,6 +256,8 @@ class UsagePayload(ContractModel):
     """用量（PRD 9.3：输入、输出、推理 token 与缓存命中）。"""
 
     prompt_tokens: int = Field(default=0, ge=0)
+    recorded_calls: int = Field(default=0, ge=0)
+    missing_calls: int = Field(default=0, ge=0)
     completion_tokens: int = Field(default=0, ge=0)
     total_tokens: int = Field(default=0, ge=0)
     reasoning_tokens: int = Field(default=0, ge=0)
@@ -283,8 +304,9 @@ class MemoryFailedPayload(EventPayload):
     retryable: bool = True
 
 
-#: ``type`` → payload 模型。20 个取值一个不缺（PRD 13.3 表 13 行展开，见 D1）。
+#: 每种事件均有对应的 payload 模型。
 EVENT_PAYLOAD_MODELS: Final[dict[EventType, type[EventPayload]]] = {
+    EventType.MODEL_REASONING: ModelReasoningPayload,
     EventType.RUN_STATUS: RunStatusPayload,
     EventType.ROUTE_DECIDED: RouteDecidedPayload,
     EventType.PLAN_UPDATED: PlanUpdatedPayload,

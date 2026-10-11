@@ -38,6 +38,7 @@ __all__ = [
     "model_history_view",
     "render_invalidation_note",
     "revoked_requirement_message_ids",
+    "revoked_response_requirements",
     "user_history_view",
 ]
 
@@ -139,6 +140,23 @@ def invalidated_memory_ids(memory: MemoryFile) -> frozenset[str]:
     return frozenset(
         invalidation.memory_id for invalidation in memory.invalidations if invalidation.memory_id
     )
+
+
+def revoked_response_requirements(memory: MemoryFile) -> list[str]:
+    """返回已撤销的回答要求，供模型区分历史表达与当前有效要求。"""
+
+    entries = _entry_index(memory)
+    requirements: list[str] = []
+    for invalidation in memory.invalidations:
+        if invalidation.kind not in _REVOKING_KINDS:
+            continue
+        entry = entries.get(invalidation.memory_id)
+        if entry is not None and entry.kind not in _INSTRUCTION_KINDS:
+            continue
+        requirement = invalidation.quote.strip()
+        if requirement and requirement not in requirements:
+            requirements.append(requirement)
+    return requirements
 
 
 def render_invalidation_note(invalidation: MemoryInvalidation) -> str:

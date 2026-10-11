@@ -209,8 +209,7 @@ test("问答显示「正在筛选资料」进度，停止后进度关闭", async
   // 夹具随后吐出正文片段：进度提示不得挡住正文
   await expect(page.getByText("已经生成的前半")).toBeVisible();
 
-  // 过程区域同步显示筛选这一步（文案来自真实事件，不是预置）
-  await page.getByTestId("process-toggle").click();
+  // 过程时间线同步显示筛选这一步（文案来自真实事件，不是预置；环节行默认可见）
   await expect(page.getByTestId("process-entries")).toContainText("正在筛选资料");
 
   // 停止生成后进度关闭，已吐出的正文保留
@@ -280,8 +279,7 @@ test("已筛选来源渲染真实排序分数、组合成员与证据哈希", as
   await expect(page.locator(".source-chip-sim")).toHaveText("已筛选");
   await expect(page.locator(".source-chip-filtered")).toHaveCount(1);
 
-  // 过程区域如实收口筛选这一步（真实入选/候选计数）
-  await page.getByTestId("process-toggle").click();
+  // 过程时间线如实收口筛选这一步（真实入选/候选计数；环节行默认可见）
   await expect(page.getByTestId("process-entries")).toContainText("筛选资料：入选 1 条资料（候选 30 条）");
 
   // 悬停预览：两个口径并存（PRD §306：原始数值明确叫「向量相似度」）。
@@ -359,8 +357,7 @@ test("有候选但一条都没入选：显示 empty 态说明，来源为空", a
   await expect(note).toBeVisible();
   await expect(note).toHaveText("本轮没有资料通过相关性筛选（候选 3 条全部未入选）。");
 
-  // 过程区域同步说清这一步的真实结果
-  await page.getByTestId("process-toggle").click();
+  // 过程时间线同步说清这一步的真实结果（环节行默认可见）
   await expect(page.getByTestId("process-entries")).toContainText("筛选资料：候选 3 条全部未入选");
 
   // 没有来源 ⇒ 不出现脚注/徽标；empty ≠「已筛选出资料」，也不得伪造分数

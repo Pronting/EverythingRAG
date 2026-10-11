@@ -5,6 +5,7 @@
  * 本文件直接在页面里 `import` 客户端模块调用两个导出函数，断言：
  * 1. 两个入口（`/move` 拖拽、`/workspace` 右键）的**请求体形状**：字段始终存在，
  *    `confirm` 缺省为 `false`（绝不静默 true）、`expected_context_epoch` 缺省为 `null`；
+ *    2026-09-22（需求 2）起拖拽入口**不再发 `target_index`**（侧边栏恒为最近活动优先）；
  * 2. 显式传入 `confirm` / `expectedContextEpoch` 时如实发出；
  * 3. **两种 409 的分类**（缺确认 vs epoch 过期）——这是界面分支的依据，直接测它比只测
  *    「界面上弹了窗」更接近契约本身；
@@ -54,7 +55,6 @@ test("两入口请求体形状：confirm 缺省 false、expected_context_epoch �
     const viaWorkspace = await mod.moveConversationToWorkspace("c1", "ws-2");
     const viaDrag = await mod.moveConversationInSidebar("c1", {
       workspaceId: "ws-2",
-      targetIndex: 3,
     });
     return { summary, viaWorkspace, viaDrag };
   });
@@ -74,7 +74,7 @@ test("两入口请求体形状：confirm 缺省 false、expected_context_epoch �
     ).toBe(true);
     expect(call.body.expected_context_epoch).toBeNull();
   }
-  expect(dragCall.body.target_index).toBe(3);
+  expect(dragCall.body.target_index).toBeUndefined();
   // 响应里的权威 epoch 会被记下（供后续乐观并发使用）
   expect(result.viaWorkspace.context_epoch).toBe(2);
 });

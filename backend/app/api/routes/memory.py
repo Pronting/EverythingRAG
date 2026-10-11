@@ -29,6 +29,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Body, HTTPException, Query
@@ -48,6 +49,7 @@ from app.api.deps import (
 from app.core.workspace_context import WorkspaceNotFoundError
 from app.memory.extractor import resolve_kind
 from app.memory.history import HistorySearchError
+from app.memory.locking import workspace_async_lock
 from app.memory.workspace_memory import (
     MemoryDisabledError,
     MemoryFileError,
@@ -108,17 +110,28 @@ async def _apply_runtime(
     mutation: MemoryMutationResult,
     reason: str,
 ) -> InvalidationRuntimeOutcome:
-    """把文件侧的失效同步到 ``app.db``（未注册 app_store 时降级为只改文件）。"""
+    """把文件侧的失效同步到 ``app.db``。"""
 
     app_store = get_app_store()
     if app_store is None:
-        return InvalidationRuntimeOutcome(
-            affected_conversations=mutation.affected_conversation_ids,
-            disabled=not mutation.memory.enabled,
-        )
+        raise RuntimeError("工作区记忆需要已初始化的 AppStore")
     return await apply_invalidation_to_runtime(
         app_store=app_store, memory=memory, mutation=mutation, reason=reason
     )
+
+
+async def _commit_invalidation(
+    *,
+    memory: WorkspaceMemory,
+    mutate: Callable[[], MemoryMutationResult],
+    reason: str,
+) -> tuple[MemoryMutationResult, InvalidationRuntimeOutcome]:
+    if get_app_store() is None:
+        raise RuntimeError("工作区记忆需要已初始化的 AppStore")
+    async with workspace_async_lock(memory.storage_key):
+        result = mutate()
+        outcome = await _apply_runtime(memory=memory, mutation=result, reason=reason)
+        return result, outcome
 
 
 # ===========================================================================
@@ -248,17 +261,18 @@ async def update_memory_switch(
         raise HTTPException(status_code=422, detail="enabled 必须是布尔值")
     enabled = bool(payload["enabled"])
     try:
-        result = memory.set_enabled(enabled, expected_revision=payload.get("expected_revision"))
+        result, outcome = await _commit_invalidation(
+            memory=memory,
+            mutate=lambda: memory.set_enabled(
+                enabled, expected_revision=payload.get("expected_revision")
+            ),
+            reason="用户关闭工作区记忆" if not enabled else "用户开启工作区记忆",
+        )
     except MemoryRevisionConflict as exc:
         raise _conflict(str(exc)) from exc
     except MemoryFileError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
-    outcome = await _apply_runtime(
-        memory=memory,
-        mutation=result,
-        reason="用户关闭工作区记忆" if not enabled else "用户开启工作区记忆",
-    )
     return {
         "applied": result.applied,
         "reason": result.reason,
@@ -290,12 +304,16 @@ async def correct_memory(
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=f"未知 kind：{kind}") from exc
     try:
-        result = memory.update_entry(
-            memory_id,
-            text=payload.get("text"),
-            kind=kind,
-            expected_revision=payload.get("expected_revision"),
-            replacement=str(payload.get("replacement") or ""),
+        result, outcome = await _commit_invalidation(
+            memory=memory,
+            mutate=lambda: memory.update_entry(
+                memory_id,
+                text=payload.get("text"),
+                kind=kind,
+                expected_revision=payload.get("expected_revision"),
+                replacement=str(payload.get("replacement") or ""),
+            ),
+            reason=f"用户纠正记忆 {memory_id}",
         )
     except MemoryRevisionConflict as exc:
         raise _conflict(str(exc)) from exc
@@ -304,9 +322,6 @@ async def correct_memory(
     except MemoryFileError as exc:
         raise _entry_error(exc) from exc
 
-    outcome = await _apply_runtime(
-        memory=memory, mutation=result, reason=f"用户纠正记忆 {memory_id}"
-    )
     return {
         "applied": result.applied,
         "reason": result.reason,
@@ -332,15 +347,18 @@ async def forget_memory(
 
     memory = _memory_for(workspace_id)
     try:
-        result = memory.forget_entry(memory_id, expected_revision=expected_revision)
+        result, outcome = await _commit_invalidation(
+            memory=memory,
+            mutate=lambda: memory.forget_entry(
+                memory_id, expected_revision=expected_revision
+            ),
+            reason=f"用户遗忘记忆 {memory_id}",
+        )
     except MemoryRevisionConflict as exc:
         raise _conflict(str(exc)) from exc
     except MemoryFileError as exc:
         raise _entry_error(exc) from exc
 
-    outcome = await _apply_runtime(
-        memory=memory, mutation=result, reason=f"用户遗忘记忆 {memory_id}"
-    )
     return {
         "applied": result.applied,
         "reason": result.reason,

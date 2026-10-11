@@ -35,6 +35,7 @@ __all__ = [
     "memory_maintenance_locks",
     "ordered_storage_keys",
     "session_lock",
+    "workspace_async_lock",
     "workspace_lock",
     "workspace_write_locks",
 ]
@@ -146,6 +147,21 @@ def memory_maintenance_locks(
 # ---------------------------------------------------------------------------
 
 _conversation_async_locks: dict[str, asyncio.Lock] = {}
+_workspace_async_locks: dict[str, asyncio.Lock] = {}
+
+
+def workspace_async_lock(storage_key: str) -> asyncio.Lock:
+    """工作区记忆修改、快照读取和答案提交共用的异步锁。"""
+
+    key = str(storage_key)
+    if not key:
+        raise ValueError("工作区 storage_key 不能为空")
+    with _registry_guard:
+        lock = _workspace_async_locks.get(key)
+        if lock is None:
+            lock = asyncio.Lock()
+            _workspace_async_locks[key] = lock
+        return lock
 
 
 def conversation_async_lock(conversation_id: str) -> asyncio.Lock:

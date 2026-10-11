@@ -1,3 +1,4 @@
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import type { MemberRef, Source } from "../types";
 import { basename } from "../util/path";
 import {
@@ -59,6 +60,47 @@ function MemberList({
   );
 }
 
+function SearchableSource({ text }: { text: string }) {
+  const [query, setQuery] = useState("");
+  const [active, setActive] = useState(0);
+  const current = useRef<HTMLElement>(null);
+  const matches = useMemo(() => {
+    if (!query) return [];
+    const pattern = new RegExp(query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "giu");
+    return Array.from(text.matchAll(pattern), match => ({ start: match.index, text: match[0] }));
+  }, [text, query]);
+  useEffect(() => {
+    current.current?.scrollIntoView({ block: "nearest" });
+  }, [matches, active]);
+  const move = (direction: number) => {
+    if (matches.length) setActive(value => (value + direction + matches.length) % matches.length);
+  };
+  return <>
+    {text.length > 2000 && <div className="citation-search" role="search" aria-label="查找来源文字">
+      <input
+        aria-label="查找来源文字"
+        placeholder="查找来源中的文字"
+        value={query}
+        onChange={event => { setQuery(event.target.value); setActive(0); }}
+        onKeyDown={event => {
+          if (event.key === "Enter") { event.preventDefault(); move(event.shiftKey ? -1 : 1); }
+          if (event.key === "Escape") { setQuery(""); setActive(0); }
+        }}
+      />
+      <span role="status">{query ? `${matches.length ? active + 1 : 0} / ${matches.length}` : ""}</span>
+      <button type="button" aria-label="上一个匹配" disabled={!matches.length} onClick={() => move(-1)}>↑</button>
+      <button type="button" aria-label="下一个匹配" disabled={!matches.length} onClick={() => move(1)}>↓</button>
+    </div>}
+    <p className="citation-panel-text">
+      {matches.map((match, index) => <Fragment key={match.start}>
+        {text.slice(index ? matches[index - 1].start + matches[index - 1].text.length : 0, match.start)}
+        <mark ref={index === active ? current : undefined} className={index === active ? "citation-match-active" : undefined}>{match.text}</mark>
+      </Fragment>)}
+      {text.slice(matches.length ? matches[matches.length - 1].start + matches[matches.length - 1].text.length : 0)}
+    </p>
+  </>;
+}
+
 /** 右侧来源详情面板：展示选中 chunk 全文 + 元数据，支持上/下一个来源切换与关闭。 */
 export function CitationPanel({
   sources,
@@ -74,6 +116,7 @@ export function CitationPanel({
   // 旧记录 / 未启用筛选的来源：原始数值只叫「向量相似度」（PRD §8.3）。
   const similarity = vectorSimilarityLabel(source);
   const members = filtered ? source.member_refs ?? [] : [];
+  const displayTitle = source.document_title || (isWeb ? source.source_file : basename(source.source_file));
 
   // 诊断属性（PRD 12.5：实现参数只进诊断，不占日常可见文案）：本轮筛选的校准档案 id 与
   // 证据视图载荷哈希自 t5 起随引用到达界面，这里挂成 data-* 便于排障与 E2E 核对
@@ -123,7 +166,7 @@ export function CitationPanel({
         )}
         {isWeb ? (
           <>
-            <div className="citation-panel-file">{source.source_file}</div>
+            <div className="citation-panel-file">{displayTitle}</div>
             {source.url !== null && source.url !== undefined && source.url !== "" && (
               <a
                 className="citation-panel-link"
@@ -134,13 +177,18 @@ export function CitationPanel({
                 {source.url}
               </a>
             )}
+            {source.heading_path !== null && source.heading_path !== "" && (
+              <div className="citation-panel-heading">{source.heading_path}</div>
+            )}
           </>
         ) : (
           <>
-            <div className="citation-panel-file">{basename(source.source_file)}</div>
-            <div className="citation-panel-path" title={source.source_file}>
-              {source.source_file}
-            </div>
+            <div className="citation-panel-file">{displayTitle}</div>
+            {source.source_file !== displayTitle && !/^[a-f0-9]{24,}(?:#|$)/i.test(source.source_file) && (
+              <div className="citation-panel-path" title={source.source_file}>
+                {source.source_file}
+              </div>
+            )}
             {source.heading_path !== null && source.heading_path !== "" && (
               <div className="citation-panel-heading">{source.heading_path}</div>
             )}
@@ -151,14 +199,8 @@ export function CitationPanel({
               </div>
             )}
             <div className="citation-panel-meta">
-              {/*
-                已筛选来源的分数行（PRD RAG-relevance §52/§306）：
-                * 有原始向量分数 ⇒ `vectorSimilarityLabel` 的「向量相似度 38%」（×100 取整）；
-                * **没有**向量分数（纯词法入选，例如 lexical_reserve）⇒ 「词法命中」，
-                  绝不是 0%，也不是含糊的「未记录向量相似度」。
-                * 未筛选来源仍走 `sourceMatchDescription`（匹配方式 / 旧记录口径）。
-              */}
-              {filtered ? (similarity ?? "词法命中") : sourceMatchDescription(source)}
+              {/* 分数与来源类型分别依据记录中的字段展示。 */}
+              {filtered ? (similarity ?? (source.match_type === "lexical" ? "词法命中" : "未提供向量分数")) : sourceMatchDescription(source)}
             </div>
             {filtered && members.length > 0 && (
               <div className="citation-panel-composition">
@@ -179,7 +221,7 @@ export function CitationPanel({
         )}
         {source.chunk_type === "image_description" ? (
           <div className="citation-panel-evidence"><MarkdownContent content={source.text} /></div>
-        ) : <p className="citation-panel-text">{source.text}</p>}
+        ) : <SearchableSource key={`${index}-${source.block_id}`} text={source.text} />}
       </div>
     </aside>
   );

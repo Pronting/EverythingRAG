@@ -1,34 +1,15 @@
-"""答案组织与依据核对：Synthesis / Verifier / AnswerArtifact 发布（PRD 8）。Owner: T07。
-
-职责：
-
-- **Synthesis**（:func:`synthesize_answer`）：汇集全部子任务结果与证据，去重后产出
-  候选答案，并保留「关键结论 → 证据 ID」的映射（PRD 8.1/8.2）。
-- **引用编号**（:func:`assign_citation_ids`）：候选正文用 ``{{ev-…}}`` 占位符表达来源，
-  编号在**最终候选答案形成时**分配（``[S1]/[W1]/[M1]/[H1]``，PRD 8.3）；同一来源复用
-  同一编号，通用解释/建议（``general_knowledge``/``proposal``）**不能**生成编号。
-- **Verifier**（:func:`verify_answer`）：按 PRD 8.2 表逐项核对八项检查，程序负责引用身份、
-  字段、数字格式与要求覆盖，模型负责语义支持（通过注入的 :class:`ModelVerifier`），
-  返回 ``verdict`` 与每项含「受影响要求、陈述位置、证据 ID、建议动作」的 ``issues``。
-- **发布**（:func:`publish_answer`）：仅 ``pass`` → ``completed``；资料不足
-  （``insufficient``）→ ``completed_with_gaps``，正文包含已核实内容、缺少的依据与影响；
-  其余结论一律拒绝发布。运行错误用 :func:`build_failure_outcome` 产出 ``failed`` 并保留
-  已完成研究记录与继续入口（PRD 8.3）。
-
-契约字段来自 :mod:`app.agent.contracts`（只读）：``VerificationIssue`` /
-``VerificationResult`` / ``AnswerArtifact`` / ``CitationEntry`` 直接复用，不另建同义模型。
-本版 ``AnswerArtifact`` 没有独立的版本字段，因此「版本」以
-:func:`answer_version`（内容 hash + 状态）表达，已在交付说明中记录为字段缺口。
-"""
-
 from __future__ import annotations
 
+import ast
 import hashlib
-import inspect
+import math
 import re
-from collections.abc import Awaitable, Callable, Mapping, Sequence
-from typing import Any, Final, Protocol
+import textwrap
+from collections.abc import Callable, Mapping, Sequence
+from typing import Any, Final
+from urllib.parse import urlsplit
 
+from markdown_it import MarkdownIt
 from pydantic import Field
 
 from app.agent.contracts import (
@@ -42,84 +23,22 @@ from app.agent.contracts import (
     RunStatus,
     SourceType,
     TaskStatus,
-    VerificationCheck,
-    VerificationIssue,
-    VerificationResult,
-    VerificationSeverity,
-    VerifierVerdict,
     citation_prefix,
     utc_now_iso,
 )
+from app.agent.evidence_text import evidence_location_text, split_evidence_content
 from app.agent.research import (
     ConclusionBasis,
     MaterialGap,
     ResearchConclusion,
     ResearchResult,
     dedupe_evidence,
-    detect_numeric_conflicts,
     evidence_index,
-    numeric_claims,
+    evidence_ready_for_answer,
 )
 
-__all__ = [
-    "ANSWER_BASIS_LABELS",
-    "LABEL_PATTERN",
-    "PLACEHOLDER_PATTERN",
-    "AnswerVersionError",
-    "CandidateAnswer",
-    "CitationAssignment",
-    "CitationError",
-    "MaterialStatusCheck",
-    "MaterialStatusReport",
-    "ModelVerification",
-    "ModelVerificationIssue",
-    "ModelVerifier",
-    "ProgramCheckResult",
-    "PublicationError",
-    "RunFailure",
-    "answer_basis_display",
-    "answer_version",
-    "assign_citation_ids",
-    "build_failure_outcome",
-    "collect_evidence",
-    "compute_answer_basis",
-    "decide_verdict",
-    "parse_answer_basis",
-    "publish_answer",
-    "render_candidate",
-    "render_gap_section",
-    "run_program_checks",
-    "synthesize_answer",
-    "verify_answer",
-]
-
-#: 候选正文里的来源占位符（编号在最终候选答案形成时分配，PRD 8.3）。
 PLACEHOLDER_PATTERN: Final[re.Pattern[str]] = re.compile(r"\{\{(ev-[A-Za-z0-9_-]+)\}\}")
-
-#: 正文里的引用标注（``[S1]`` / ``[W2]`` / ``[M1]`` / ``[H1]``）。
 LABEL_PATTERN: Final[re.Pattern[str]] = re.compile(r"\[([SWMH])(\d+)\]")
-
-_VERSION_TOKEN: Final[re.Pattern[str]] = re.compile(r"v?\d+\.\d+(?:\.\d+)?")
-_WHITESPACE: Final[re.Pattern[str]] = re.compile(r"\s+")
-_SENTENCE_SPLIT: Final[re.Pattern[str]] = re.compile(r"[^\n。！？!?；;]+")
-
-#: 判定「内部事实」的线索（PRD 8.2 内部事实：公司定义、现有实现、既定方案）。
-_INTERNAL_MARKERS: Final[tuple[str, ...]] = (
-    "我们",
-    "内部",
-    "本项目",
-    "本工作区",
-    "既有方案",
-    "现有方案",
-    "我们的实现",
-)
-
-#: 内部资料来源（只有这些来源能支撑内部事实）。
-_INTERNAL_SOURCES: Final[frozenset[SourceType]] = frozenset(
-    {SourceType.KNOWLEDGE, SourceType.MEMORY, SourceType.HISTORY, SourceType.CATALOG}
-)
-
-#: ``answer_basis`` 的展示名；未知的旧取值原样展示（PRD 8.3 末句）。
 ANSWER_BASIS_LABELS: Final[dict[AnswerBasis, str]] = {
     AnswerBasis.KNOWLEDGE: "本工作区知识",
     AnswerBasis.WEB: "网页来源",
@@ -131,9 +50,7 @@ ANSWER_BASIS_LABELS: Final[dict[AnswerBasis, str]] = {
     AnswerBasis.MIXED: "多来源综合",
     AnswerBasis.INSUFFICIENT: "资料不足",
 }
-
-#: 单一来源 → ``answer_basis`` 取值。
-_SINGLE_BASIS: Final[dict[SourceType, AnswerBasis]] = {
+_SINGLE_BASIS = {
     SourceType.KNOWLEDGE: AnswerBasis.KNOWLEDGE,
     SourceType.WEB: AnswerBasis.WEB,
     SourceType.MEMORY: AnswerBasis.MEMORY,
@@ -144,29 +61,26 @@ _SINGLE_BASIS: Final[dict[SourceType, AnswerBasis]] = {
 
 
 class CitationError(ValueError):
-    """引用编号分配失败（未知占位符 / 非文档来源试图生成编号）。"""
-
     def __init__(self, problems: Sequence[str]) -> None:
-        self.problems: list[str] = [str(problem) for problem in problems]
+        self.problems = [str(problem) for problem in problems]
         super().__init__("; ".join(self.problems) or "引用编号分配失败")
 
 
-class PublicationError(ValueError):
-    """答案不满足发布条件（只有 ``pass`` 与资料不足的 ``insufficient`` 可以发布）。"""
-
-
 class AnswerVersionError(ValueError):
-    """答案版本无法确定。"""
+    pass
 
 
-# =====================================================================
-# 1. 候选答案与核对输入
-# =====================================================================
+class SynthesisUnavailable(RuntimeError):
+    """候选答案无法由模型产出：run 必须明确失败（不再回落到确定性拼接）。"""
+
+    code = "synthesis_model_unavailable"
+
+    def __init__(self, message: str) -> None:
+        super().__init__(message)
+        self.user_message = message
 
 
 class CandidateAnswer(ContractModel):
-    """Synthesis 产出的候选答案（正文 + 来源映射 + 覆盖账目 + 缺口）。"""
-
     question: str
     content: str = ""
     workspace_id: str = ""
@@ -181,8 +95,6 @@ class CandidateAnswer(ContractModel):
     gaps: list[MaterialGap] = Field(default_factory=list)
     answer_basis: AnswerBasis = AnswerBasis.INSUFFICIENT
     basis_components: list[SourceType] = Field(default_factory=list)
-    #: 需要用户确认才能继续的阻塞性歧义（→ ``clarify``）。
-    blocking_questions: list[str] = Field(default_factory=list)
 
     def evidence_by_id(self) -> dict[str, Evidence]:
         return evidence_index(self.evidence)
@@ -192,8 +104,6 @@ class CandidateAnswer(ContractModel):
 
 
 class CitationAssignment(ContractModel):
-    """一次引用编号分配的结果（PRD 8.3）。"""
-
     content: str
     citations: list[CitationEntry] = Field(default_factory=list)
     labels: dict[str, str] = Field(default_factory=dict)
@@ -201,69 +111,524 @@ class CitationAssignment(ContractModel):
     unused_evidence_ids: list[str] = Field(default_factory=list)
 
 
-class MaterialStatusReport(ContractModel):
-    """发布前的资料状态（PRD 5.3 第 6 条 / 8.2 资料状态）。
-
-    由运行层注入：它知道知识是否被删除、记忆是否失效、工作区是否归档。
-    """
-
-    invalid_evidence_ids: list[str] = Field(default_factory=list)
-    knowledge_revision_changed: bool = False
-    notes: list[str] = Field(default_factory=list)
-
-
-MaterialStatusCheck = Callable[
-    [Sequence[Evidence]], "MaterialStatusReport | Awaitable[MaterialStatusReport]"
-]
-"""资料状态检查入口（同步或异步均可）。"""
+class CitationGrounding(ContractModel):
+    marker: str
+    claim: str
+    evidence_id: str
+    quote: str
+    calculation: str = ""
+    inputs: dict[str, float] = Field(default_factory=dict)
+    result: float | None = None
 
 
-class ModelVerificationIssue(ContractModel):
-    """模型语义核对发现的问题（映射进 :class:`VerificationIssue`）。"""
-
-    check: VerificationCheck = VerificationCheck.FACTUAL_SUPPORT
-    statement: str = ""
-    evidence_ids: list[str] = Field(default_factory=list)
-    requirement_ids: list[str] = Field(default_factory=list)
-    required_action: str = ""
-    severity: VerificationSeverity = VerificationSeverity.MEDIUM
+class CitationSpan(ContractModel):
+    evidence_id: str
+    start_line: int = Field(ge=1)
+    end_line: int = Field(ge=1)
 
 
-class ModelVerification(ContractModel):
-    """模型核对输出（语义支持 / 冲突 / 需要澄清的问题）。"""
+class GroundedParagraph(ContractModel):
+    text: str = Field(description="一个自然段或一个列表项；各自然段分别建立正文项并就地绑定引用")
+    citations: list[CitationSpan] = Field(default_factory=list)
+    calculation: str = Field(default="", description="仅数值演算填写使用inputs变量的Python算式；普通事实与文字推断保持空字符串")
+    inputs: dict[str, float] = Field(default_factory=dict)
+    result: float | None = None
 
-    issues: list[ModelVerificationIssue] = Field(default_factory=list)
-    ambiguity_questions: list[str] = Field(default_factory=list)
-    notes: list[str] = Field(default_factory=list)
+
+class SourceScope(ContractModel):
+    subject: str
+    requested_operation: str
+    documented_operation: str
+    matches_request: bool
+    evidence_ids: list[str]
+    requested_dimensions: list[str] = Field(default_factory=list, description="用户明确指定的比较维度，未指定时为空")
+    provided_dimensions: list[str] = Field(default_factory=list, description="原文直接提供所问操作具体内容的比较维度；仅提及职责或相关操作不算提供该维度")
 
 
-class VerificationRequest(ContractModel):
-    """交给模型核对的材料（PRD 8.2：程序检查字段，模型判断语义支持）。"""
+class SourceScopeReview(ContractModel):
+    source_scope: list[SourceScope] = Field(min_length=1)
 
+
+class SynthesisReview(ContractModel):
+    source_scope: list[SourceScope] = Field(default_factory=list)
+    content: str = ""
+    covered_requirements: list[str]
+    gaps: list[MaterialGap]
+    citations: list[CitationGrounding] = Field(default_factory=list)
+    paragraphs: list[GroundedParagraph] = Field(default_factory=list)
+
+
+class ParagraphSynthesisReview(ContractModel):
+    paragraphs: list[GroundedParagraph]
+    covered_requirements: list[str]
+    gaps: list[MaterialGap]
+
+
+class GeneralAnswerAssessment(ContractModel):
+    issues: list[str] = Field(description="候选回答中确定的事实、成立条件或示例错误；无错误时为空")
+    corrected_answer: str = Field(default="", description="存在错误时给出修正后的完整回答，保持用户语言、字数、格式及角色要求；无错误时为空")
+
+
+class SemanticIssue(ContractModel):
+    paragraph_index: int = Field(ge=0)
+    reason: str = Field(min_length=1)
+
+
+class ScopeAssessment(ContractModel):
+    requested_scope: str = Field(min_length=1)
+    answer_scope: str = Field(min_length=1)
+    narrower_than_requested: bool
+    paragraph_indices: list[int]
+    reason: str = Field(min_length=1)
+    substitutes_operation: bool = Field(default=False, description="是否用同一对象的其他操作或阶段的规则回答用户指定操作")
+    broader_than_requested: bool = Field(default=False, description="是否展开用户未要求的相邻流程或实现细节，并将其未提供的内容登记为缺口")
+
+
+class SemanticAssessment(ContractModel):
+    scope_check: ScopeAssessment
+    issues: list[SemanticIssue]
+    covered_requirements: list[str]
+    gaps: list[MaterialGap]
+
+
+def apply_semantic_assessment(
+    review: SynthesisReview, assessment: SemanticAssessment, requirement_ids: set[str],
+) -> dict[int, str]:
+    covered = set(assessment.covered_requirements)
+    missing = {rid for gap in assessment.gaps for rid in gap.requirement_ids}
+    if covered | missing != requirement_ids or any(not gap.requirement_ids for gap in assessment.gaps):
+        raise SynthesisUnavailable("语义验收未完整对应用户要求")
+    issues: dict[int, str] = {}
+    scope = assessment.scope_check
+    scope_issue = scope.narrower_than_requested or scope.substitutes_operation or scope.broader_than_requested
+    if scope_issue and not scope.paragraph_indices:
+        raise SynthesisUnavailable("语义验收指出范围问题但未指定对应正文")
+    for position in scope.paragraph_indices:
+        if not 0 <= position < len(review.paragraphs):
+            raise SynthesisUnavailable("语义验收引用了不存在的正文项")
+        if scope_issue:
+            issues[position] = scope.reason
+    for item in assessment.issues:
+        if item.paragraph_index >= len(review.paragraphs):
+            raise SynthesisUnavailable("语义验收引用了不存在的正文项")
+        issues[item.paragraph_index] = "; ".join(filter(None, [issues.get(item.paragraph_index), item.reason]))
+    review.covered_requirements = [rid for rid in assessment.covered_requirements if rid not in missing]
+    review.gaps = list(assessment.gaps)
+    return issues
+
+
+class ParagraphBindingError(SynthesisUnavailable):
+    def __init__(self, issues: Mapping[int, str]) -> None:
+        self.issues = dict(issues)
+        super().__init__("；".join(f"正文项 {index}: {issue}" for index, issue in issues.items()))
+
+
+class ParagraphCorrection(ContractModel):
+    index: int = Field(ge=0)
+    paragraph: GroundedParagraph
+    gaps: list[MaterialGap] = Field(default_factory=list)
+
+
+class ParagraphCorrections(ContractModel):
+    corrections: list[ParagraphCorrection]
+
+
+_GAP_DISCLOSURE_MARKERS: Final[tuple[str, ...]] = (
+    "未取得", "未找到", "未提供", "未说明", "未覆盖", "未确认", "没有取得",
+    "没有找到", "没有提供", "没有说明", "未写出", "没有写出", "未出现", "没有出现",
+    "缺少", "不足", "无法确认", "不能确认", "未给出", "没有给出",
+    "cannot confirm", "not found", "not provided", "missing", "insufficient",
+)
+_HYPOTHETICAL_MARKERS: Final[tuple[str, ...]] = (
+    "假设示例", "假定示例", "举例说明", "以下是假设", "示例中假设", "hypothetical example",
+)
+
+
+def _cjk_bigrams(text: str) -> set[str]:
+    values: set[str] = set()
+    for run in re.findall(r"[\u4e00-\u9fff]+", text):
+        values.update(run[index:index + 2] for index in range(len(run) - 1))
+    return values
+
+
+def _ascii_identity_terms(text: str) -> set[str]:
+    return {
+        item.casefold() for item in re.findall(r"[A-Za-z][A-Za-z0-9_.+/#-]{1,}", text)
+        if item.casefold() not in {"the", "and", "for", "with", "from"}
+    }
+
+
+def _gap_is_explicit(paragraph: str, missing: str) -> bool:
+    """缺口允许同义表达，同时要求正文明确表达资料不足。"""
+
+    folded = paragraph.casefold()
+    if not any(marker in folded for marker in _GAP_DISCLOSURE_MARKERS):
+        return False
+    compact_paragraph = re.sub(r"[^0-9A-Za-z\u4e00-\u9fff]+", "", folded)
+    compact_missing = re.sub(r"[^0-9A-Za-z\u4e00-\u9fff]+", "", missing.casefold())
+    if compact_missing and compact_missing in compact_paragraph:
+        return True
+    missing_ascii = _ascii_identity_terms(missing)
+    paragraph_ascii = _ascii_identity_terms(paragraph)
+    shared_ascii = missing_ascii & paragraph_ascii
+    missing_cjk = _cjk_bigrams(missing)
+    shared_cjk = missing_cjk & _cjk_bigrams(paragraph)
+    if missing_ascii and len(shared_ascii) / len(missing_ascii) >= 0.5:
+        return True
+    return bool(missing_cjk) and len(shared_cjk) >= 2 and (
+        len(shared_cjk) / len(missing_cjk) >= 0.25
+    )
+
+
+def _is_explicit_hypothetical(text: str) -> bool:
+    folded = text.casefold()
+    return any(marker in folded for marker in _HYPOTHETICAL_MARKERS)
+
+
+def apply_paragraph_corrections(
+    review: SynthesisReview, corrections: ParagraphCorrections,
+    positions: set[int], requirement_ids: set[str],
+) -> SynthesisReview:
+    supplied = [item.index for item in corrections.corrections]
+    if len(supplied) != len(set(supplied)) or set(supplied) != positions:
+        raise SynthesisUnavailable("修正内容未准确对应需要核验的正文项")
+    result = review.model_copy(deep=True)
+    for item in corrections.corrections:
+        previous = review.paragraphs[item.index]
+        if (
+            previous.citations
+            and not item.paragraph.citations
+            and not item.gaps
+            and not _is_explicit_hypothetical(item.paragraph.text)
+        ):
+            raise SynthesisUnavailable("带来源的正文修正后缺少来源及明确缺口")
+        for gap in item.gaps:
+            if not gap.requirement_ids or not set(gap.requirement_ids) <= requirement_ids:
+                raise SynthesisUnavailable(
+                    f"正文项{item.index}的gaps.requirement_ids={gap.requirement_ids!r}无效；"
+                    f"允许的ID为{sorted(requirement_ids)!r}。仅登记用户明确要求且未能回答的内容；"
+                    "未要求的补充细节不登记gaps。"
+                )
+            if not gap.missing.strip() or not _gap_is_explicit(item.paragraph.text, gap.missing):
+                raise SynthesisUnavailable(f"正文项{item.index}未明确说明所登记的缺口：{gap.missing}；请在该项正文直接说明这一内容未获确认")
+        result.paragraphs[item.index] = item.paragraph
+        result.gaps.extend(item.gaps)
+    return result
+
+
+def citation_source_lines(item: Evidence) -> list[str]:
+    body = evidence_location_text(body=split_evidence_content(item.content)[1])
+    return [
+        part for line in body.splitlines() if line.strip()
+        for part in textwrap.wrap(line, width=320, replace_whitespace=False,
+                                  drop_whitespace=False, break_long_words=True)
+    ]
+
+
+def _without_supported_source_metadata(text: str, sources: Sequence[Evidence]) -> str:
+    """仅排除已选来源的完整标题、URL 与版本文字，业务数字仍须检查原文。"""
+    titles = {item.document_title for item in sources if item.document_title}
+    headings = {item.heading_path for item in sources if item.heading_path}
+    urls = {item.source_ref for item in sources
+            if urlsplit(item.source_ref).scheme in {"http", "https"}}
+    for match in re.finditer(r"https?://[^\s<>\"'`）)，；。]+", text):
+        address = match.group(0).rstrip(").,;")
+        if address not in urls:
+            raise SynthesisUnavailable(f"正文URL未对应所选来源的实际地址：{address}")
+        text = text.replace(address, "来源地址")
+    for left, right in (("《", "》"), ("「", "」"), ("『", "』"), ("“", "”"), ('"', '"'), ("`", "`")):
+        for mention in re.findall(
+            re.escape(left) + r"([^\n" + re.escape(left + right) + r"]{2,240})" + re.escape(right),
+            text,
+        ):
+            if (len(mention) >= 8 and any(mention in title for title in titles)
+                    and (len(re.findall(r"[A-Za-z]{2,}", mention)) >= 2
+                         or len(re.findall(r"[\u4e00-\u9fff]", mention)) >= 4)):
+                text = text.replace(left + mention + right, "来源标题")
+            if re.match(r"\d+(?:\.\d+)+\s+\S", mention) and any(
+                re.search(rf"(?m)^{re.escape(mention)}\s*$", split_evidence_content(item.content)[1])
+                for item in sources
+            ):
+                text = text.replace(left + mention + right, "来源章节")
+            filenames = re.findall(r"[A-Za-z0-9_][A-Za-z0-9_.-]*\.(?:mdx?|pdf|docx?|txt|html?)\b", mention, re.IGNORECASE)
+            if not filenames and re.search(r"\.(?:mdx?|pdf|docx?|txt|html?)$", mention, re.IGNORECASE):
+                filenames = [mention]
+            for filename in filenames:
+                if filename not in titles and not any(filename in item.content for item in sources):
+                    raise SynthesisUnavailable(f"正文文件名未对应所选来源标题或原文：{filename}")
+    for title in sorted(titles, key=len, reverse=True):
+        if re.search(r"[A-Za-z\u4e00-\u9fff]", title):
+            text = text.replace(title, "来源标题")
+    for heading in sorted(headings, key=len, reverse=True):
+        if re.search(r"[A-Za-z\u4e00-\u9fff]", heading):
+            text = text.replace(heading, "来源章节")
+    versions: set[str] = set()
+    for address in urls:
+        parsed = urlsplit(address)
+        for part in [*(parsed.hostname or "").split("."), *parsed.path.split("/")]:
+            if re.fullmatch(r"v\d+(?:[.-]\d+)+", part):
+                versions.add(part.replace("-", "."))
+    for item in sources:
+        versions.update(re.findall(r"\bv\d+(?:\.\d+)+\b", f"{item.document_title} {item.document_revision}"))
+    for match in re.finditer(r"\bv\d+(?:\.\d+)+\b", text):
+        if match.group(0) in versions:
+            text = text.replace(match.group(0), "来源版本")
+    for match in list(re.finditer(r"(?<![A-Za-z0-9_])\d+(?:\.\d+)?", text)):
+        number = match.group(0)
+        window = text[max(0, match.start() - 48):min(len(text), match.end() + 48)]
+        for identity in [*titles, *headings]:
+            if number not in re.findall(r"(?<![A-Za-z0-9_])\d+(?:\.\d+)?", identity):
+                continue
+            shared_ascii = _ascii_identity_terms(window) & _ascii_identity_terms(identity)
+            shared_cjk = _cjk_bigrams(window) & _cjk_bigrams(identity)
+            if len(shared_cjk) >= 4 or (shared_ascii and len(shared_cjk) >= 2):
+                text = text[:match.start()] + (" " * len(number)) + text[match.end():]
+                break
+    return text
+
+
+def _check_quoted_terms(text: str, quote: str, sources: Sequence[Evidence]) -> None:
+    """原文中的明确引语应由选取的行支持，反馈可见原文的位置。"""
+    headings = {item.heading_path for item in sources} | {item.document_title for item in sources}
+    for item in sources:
+        tokens = MarkdownIt().parse(split_evidence_content(item.content)[1])
+        for index, token in enumerate(tokens[1:], 1):
+            if token.type == "inline" and tokens[index - 1].type == "heading_open":
+                headings.add("".join(child.content for child in token.children or []
+                                     if child.type in {"text", "code_inline"}))
+    terms = set()
+    for left, right in (("「", "」"), ("『", "』"), ("“", "”"), ('"', '"')):
+        for match in re.finditer(
+            re.escape(left) + r"([^\n" + re.escape(left + right) + r"]{2,120})" + re.escape(right),
+            text,
+        ):
+            if text[match.end():].lstrip().startswith(("一节", "章节", "小节", "一章")):
+                continue
+            terms.add(match.group(1))
+    for term in sorted(terms):
+        if term in quote or any(term in heading for heading in headings):
+            continue
+        locations = sorted({
+            f"{item.evidence_id}:L{number}"
+            for item in sources
+            for number, line in enumerate(citation_source_lines(item), 1)
+            if term in line
+        })
+        if locations:
+            raise SynthesisUnavailable(
+                f"引语{term!r}未被所选原文行覆盖；该引语位于{', '.join(locations)}。"
+                "保留这项陈述时请选择对应行；与用户问题无关的补充可以删除。"
+            )
+
+
+def bind_review_paragraphs(
+    review: SynthesisReview,
+    evidence: Sequence[Evidence],
+    *,
+    question: str,
+    verified_context: Sequence[str] = (),
+) -> str:
+    index = {item.evidence_id: item for item in evidence if citation_prefix(item.source_type)}
+    verified_numbers = set(re.findall(
+        r"(?<![A-Za-z0-9_])\d+(?:\.\d+)?", "\n".join(verified_context)
+    ))
+    issues: dict[int, str] = {}
+    rendered: list[str] = []
+    if not review.paragraphs:
+        raise SynthesisUnavailable("结构化正文没有内容")
+    for position, paragraph in enumerate(review.paragraphs):
+        try:
+            if re.search(r"(?:\[\d+\])+\s*[。.!！]?\s*$", paragraph.text):
+                raise SynthesisUnavailable(
+                    "text末尾含数字引用编号；引用仅填写citations字段，请删除text中的[1]等编号。"
+                    "正文中的业务数值应保留，并选择支持它们的原文行。"
+                )
+            if not paragraph.text.strip() or "{{" in paragraph.text or LABEL_PATTERN.search(paragraph.text):
+                raise SynthesisUnavailable("正文须为无内部引用标记的自然文本")
+            if paragraph.citations:
+                tokens = MarkdownIt().parse(paragraph.text)
+                multiple_paragraphs = sum(token.type == "paragraph_open" for token in tokens) > 1
+                escaped_breaks = any(
+                    "\\n\\n" in child.content
+                    for token in tokens if token.type == "inline"
+                    for child in token.children or [] if child.type == "text"
+                )
+                if multiple_paragraphs or escaped_breaks:
+                    raise SynthesisUnavailable(
+                        "一个有来源的正文项包含多个自然段或双重转义换行，末尾引用无法逐段对应。"
+                        "请将当前项写成一个连贯自然段并绑定支持该段的引用；正文无需添加开场概述。"
+                        "每个独立自然段应使用单独的paragraphs项及其citations，不要在text内放入字面的\\n\\n。"
+                    )
+            selected = []
+            quotes = []
+            for span in paragraph.citations:
+                item = index.get(span.evidence_id)
+                if item is None:
+                    raise SynthesisUnavailable("来源ID未出现在本轮证据中")
+                lines = citation_source_lines(item)
+                if not 1 <= span.start_line <= span.end_line <= len(lines):
+                    raise SynthesisUnavailable("原文行范围超出该来源正文")
+                if span.end_line - span.start_line >= 12:
+                    raise SynthesisUnavailable("原文范围过长，请按具体陈述分别选择支持行")
+                quotes.append("\n".join(lines[span.start_line - 1:span.end_line]))
+                selected.append(item.evidence_id)
+            quote = "\n".join(quotes)
+            if paragraph.citations:
+                numeric_text = _without_supported_source_metadata(
+                    paragraph.text, [index[key] for key in selected],
+                )
+                _check_quoted_terms(numeric_text, quote, [index[key] for key in selected])
+                for section in re.finditer(r"(?<![\d.])(\d+(?:\.\d+)+)\s*(?:章节|节)", paragraph.text):
+                    number = section.group(1)
+                    if any(re.search(
+                        rf"(?<![\d.]){re.escape(number)}(?![\d.])",
+                        split_evidence_content(index[key].content)[0],
+                    ) or re.search(
+                        rf"(?m)^{re.escape(number)}\s+[^\n]{{1,100}}$",
+                        split_evidence_content(index[key].content)[1],
+                    ) for key in selected):
+                        numeric_text = numeric_text.replace(section.group(0), "章节")
+                numbers = set(re.findall(r"(?<![A-Za-z0-9_])\d+(?:\.\d+)?", numeric_text))
+                quoted_numbers = set(re.findall(r"(?<![A-Za-z0-9_])\d+(?:\.\d+)?", quote))
+                if paragraph.calculation:
+                    _validate_calculation(CitationGrounding(
+                        marker=str(position), claim=paragraph.text, quote=quote,
+                        evidence_id=selected[0], calculation=paragraph.calculation,
+                        inputs=paragraph.inputs, result=paragraph.result,
+                    ), question)
+                elif not numbers <= quoted_numbers | verified_numbers:
+                    missing = sorted(numbers - quoted_numbers - verified_numbers)
+                    ranges = ", ".join(f"{span.evidence_id}:L{span.start_line}-L{span.end_line}" for span in paragraph.citations)
+                    raise SynthesisUnavailable(
+                        f"陈述数值{missing!r}未出现在所选原文行{ranges}；这些行包含数值{sorted(quoted_numbers)!r}。"
+                        "请为每个陈述选择包含对应数值及含义的原文行；来源没有的额外陈述应删除，"
+                        "用户要求的数值无法确认时明确说明。演算须提供可复算的输入与表达式。"
+                    )
+                if any(operator in paragraph.text for operator in ("=", "＝", "÷")):
+                    expression = re.split(r"[。；;\n，,）]", re.split(r"[=＝]", paragraph.text, maxsplit=1)[-1], maxsplit=1)[0]
+                    identifiers = set(re.findall(r"[A-Za-z_][A-Za-z_0-9]*", expression.casefold()))
+                    if not identifiers <= set(re.findall(r"[A-Za-z_][A-Za-z_0-9]*", quote.casefold())):
+                        raise SynthesisUnavailable("所选原文行未包含公式变量")
+            markers = "".join("{{" + key + "}}" for key in dict.fromkeys(selected))
+            rendered.append(paragraph.text + (" " + markers if markers else ""))
+        except (ValueError, SynthesisUnavailable) as exc:
+            issues[position] = str(exc)
+    if issues:
+        raise ParagraphBindingError(issues)
+    return "\n\n".join(rendered)
+
+
+def _validate_calculation(entry: CitationGrounding, question: str) -> None:
+    try:
+        tree = ast.parse(entry.calculation, mode="eval")
+    except SyntaxError as exc:
+        raise SynthesisUnavailable("calculation只能填写数值算式；文字推断应放在text，calculation保持空字符串") from exc
+    allowed = (ast.Expression, ast.BinOp, ast.UnaryOp, ast.Constant, ast.Name,
+               ast.Load, ast.Add, ast.Sub, ast.Mult, ast.Div, ast.USub, ast.UAdd)
+    nodes = list(ast.walk(tree))
+    if len(nodes) > 64 or any(not isinstance(node, allowed) for node in nodes):
+        raise SynthesisUnavailable("引用推导包含无法核验的运算")
+    if any(isinstance(node, ast.Constant) and type(node.value) not in (int, float) for node in nodes):
+        raise SynthesisUnavailable("引用推导只能包含数值运算")
+    names = {node.id for node in nodes if isinstance(node, ast.Name)}
+    if not names or names != set(entry.inputs):
+        raise SynthesisUnavailable("引用推导的输入与运算变量未对应")
+    source_numbers = {
+        float(value) for value in re.findall(r"(?<![A-Za-z0-9_])\d+(?:\.\d+)?", question + " " + entry.quote)
+    }
+    if any(value not in source_numbers for value in entry.inputs.values()):
+        raise SynthesisUnavailable("引用推导的输入未见于用户问题或来源原文")
+    try:
+        result = eval(compile(tree, "<citation-calculation>", "eval"), {"__builtins__": {}}, entry.inputs)
+    except ArithmeticError as exc:
+        raise SynthesisUnavailable("引用推导无法完成数值运算，请检查分母和输入") from exc
+    if entry.result is None or not math.isclose(result, entry.result, rel_tol=1e-9, abs_tol=1e-9):
+        raise SynthesisUnavailable("引用推导结果与所给运算不一致")
+    percent_scaled = any(
+        isinstance(node, ast.BinOp) and isinstance(node.op, ast.Mult)
+        and any(isinstance(operand, ast.Constant) and operand.value == 100
+                for operand in (node.left, node.right))
+        for node in nodes
+    )
+    claim_numbers = {
+        float(value) / (100 if percent and not percent_scaled else 1)
+        for value, percent in re.findall(r"(?<![A-Za-z0-9_])(\d+(?:\.\d+)?)(\s*[%％])?", entry.claim)
+    }
+    if not any(math.isclose(result, value, rel_tol=1e-9, abs_tol=1e-9) for value in claim_numbers):
+        raise SynthesisUnavailable("引用推导结果未体现在对应陈述中")
+
+
+def bind_review_citations(
+    review: SynthesisReview, evidence: Sequence[Evidence], *, question: str = "",
+) -> str:
+    markers = re.findall(r"\{\{(cite-\d+)\}\}", review.content)
+    entries = {entry.marker: entry for entry in review.citations}
+    if len(markers) != len(set(markers)) or len(entries) != len(review.citations) or set(markers) != set(entries):
+        raise SynthesisUnavailable("引用核查条目与正文引用未完整对应")
+    if PLACEHOLDER_PATTERN.search(review.content):
+        raise SynthesisUnavailable("正文仍包含未核验原文的引用")
+    citable = [item for item in evidence if citation_prefix(item.source_type)]
+    index = evidence_index(citable)
+    resolved: dict[str, str] = {}
+    for marker, entry in entries.items():
+        claim = " ".join(entry.claim.split())
+        preceding = review.content.split("{{" + marker + "}}", 1)[0]
+        preceding = re.sub(r"\{\{cite-\d+\}\}", "", preceding)
+        if not claim or not " ".join(preceding.split()).endswith(claim):
+            raise SynthesisUnavailable(f"引用 {marker} 未与所核查陈述对应")
+        quote = " ".join(evidence_location_text(body=entry.quote).split())
+        if not quote:
+            raise SynthesisUnavailable("引用核查没有提供对应原文")
+        matches = [
+            item for item in citable
+            if quote in " ".join(evidence_location_text(
+                body=split_evidence_content(item.content)[1],
+            ).split())
+        ]
+        if not matches:
+            raise SynthesisUnavailable("引用核查提供的摘录未出现在已取得的原文中")
+        numbers = set(re.findall(r"(?<![A-Za-z0-9_])\d+(?:\.\d+)?", claim))
+        quoted_numbers = set(re.findall(r"(?<![A-Za-z0-9_])\d+(?:\.\d+)?", quote))
+        if entry.calculation:
+            _validate_calculation(entry, question)
+        elif not numbers <= quoted_numbers:
+            raise SynthesisUnavailable(f"引用 {marker} 的原文摘录未包含所陈述的数值")
+        if any(operator in claim for operator in ("=", "＝", "÷")):
+            expression = re.split(r"[。；;\n，,）]", re.split(r"[=＝]", claim, maxsplit=1)[-1], maxsplit=1)[0]
+            identifiers = set(re.findall(r"[A-Za-z_][A-Za-z_0-9]*", expression.casefold()))
+            quoted_identifiers = set(re.findall(r"[A-Za-z_][A-Za-z_0-9]*", quote.casefold()))
+            if not identifiers <= quoted_identifiers:
+                raise SynthesisUnavailable(f"引用 {marker} 的原文摘录未包含公式中的变量")
+        requested = index.get(entry.evidence_id)
+        selected = next((item for item in matches if item.evidence_id == entry.evidence_id), None)
+        if selected is None:
+            same_document = [
+                item for item in matches
+                if requested is not None and requested.source_ref
+                and item.source_type == requested.source_type
+                and item.source_ref.split("#", 1)[0] == requested.source_ref.split("#", 1)[0]
+            ]
+            if not same_document:
+                raise SynthesisUnavailable("引用摘录与所声明的文档身份不一致")
+            selected = min(same_document, key=lambda item: len(item.content))
+        resolved[marker] = selected.evidence_id
+    return re.sub(
+        r"\{\{(cite-\d+)\}\}",
+        lambda match: "{{" + resolved[match.group(1)] + "}}",
+        review.content,
+    )
+
+
+class SynthesisRequest(ContractModel):
     question: str
-    content: str
+    content: str = ""
     conclusions: list[ResearchConclusion] = Field(default_factory=list)
     evidence: list[Evidence] = Field(default_factory=list)
     requirements: dict[str, str] = Field(default_factory=dict)
-
-
-class ModelVerifier(Protocol):
-    """模型核对入口（真实 Provider 或测试替身）。"""
-
-    async def review(self, request: VerificationRequest) -> ModelVerification: ...
-
-
-class ProgramCheckResult(ContractModel):
-    """程序核对结果（PRD 8.2：引用身份、字段、数字格式、要求覆盖）。"""
-
-    ok: bool = True
-    issues: list[VerificationIssue] = Field(default_factory=list)
-    notes: list[str] = Field(default_factory=list)
+    review: SynthesisReview | None = None
 
 
 class RunFailure(ContractModel):
-    """运行错误结果（PRD 8.3：``failed`` + 保留已完成研究记录与继续入口）。"""
-
     run_id: str
     status: RunStatus = RunStatus.FAILED
     error: AgentError
@@ -271,27 +636,18 @@ class RunFailure(ContractModel):
     failed_task_ids: list[str] = Field(default_factory=list)
     evidence_ids: list[str] = Field(default_factory=list)
     results: list[ResearchResult] = Field(default_factory=list)
-    resume_action: str = "POST /api/runs/{run_id}/resume：从失败位置继续并复用已完成研究"
+    resume_action: str = "从失败位置继续并复用已完成研究"
     created_at: str = Field(default_factory=utc_now_iso)
 
     def has_research_records(self) -> bool:
         return bool(self.results)
 
 
-# =====================================================================
-# 2. Synthesis（PRD 8.1 / 8.2）
-# =====================================================================
-
-
 def collect_evidence(results: Sequence[ResearchResult]) -> list[Evidence]:
-    """汇集全部子任务证据并按来源身份 + 内容 hash 去重（PRD 8.1）。"""
-
     return dedupe_evidence([item for result in results for item in result.evidence])
 
 
 def compute_answer_basis(evidences: Sequence[Evidence]) -> tuple[AnswerBasis, list[SourceType]]:
-    """由证据来源推导 ``answer_basis`` 与 ``basis_components``（PRD 8.3）。"""
-
     components: list[SourceType] = []
     general_only = False
     for item in evidences:
@@ -309,16 +665,12 @@ def compute_answer_basis(evidences: Sequence[Evidence]) -> tuple[AnswerBasis, li
     return AnswerBasis.MIXED, components
 
 
-def render_candidate(
-    conclusions: Sequence[ResearchConclusion],
-    requirement_texts: Mapping[str, str],
-) -> str:
-    """离线候选正文渲染：每项要求一节，已核实结论带来源占位符，缺口如实标注。
+def render_candidate(conclusions: Sequence[ResearchConclusion], requirement_texts: Mapping[str, str]) -> str:
+    """确定性拼接（**不再是回答的兜底路径**）。
 
-    有模型时由模型产出正文（同样使用 ``{{ev-…}}`` 占位符），本函数是**无模型回退**，
-    保证 Synthesis 在离线单测与模型不可用时仍产出可核对的结构。
+    仅用于离线核对/取证（例如人工查看「结论 + 占位符」的原始形态）。模型不可用或未按
+    引用格式作答时，答案链路不再调用它 —— 见 :class:`SynthesisUnavailable`。
     """
-
     blocks: list[str] = []
     seen: set[str] = set()
     for conclusion in conclusions:
@@ -326,8 +678,7 @@ def render_candidate(
             if requirement_id in seen:
                 continue
             seen.add(requirement_id)
-            title = requirement_texts.get(requirement_id, requirement_id)
-            blocks.append(f"### {title}")
+            blocks.append(f"### {requirement_texts.get(requirement_id, requirement_id)}")
             if conclusion.basis is ConclusionBasis.GAP:
                 blocks.append(f"（缺少依据：{conclusion.statement}）")
                 continue
@@ -337,851 +688,244 @@ def render_candidate(
 
 
 def synthesize_answer(
-    question: str,
-    results: Sequence[ResearchResult],
-    *,
-    requirements: Mapping[str, str],
-    extra_evidence: Sequence[Evidence] = (),
-    workspace_id: str = "",
-    run_id: str = "",
-    model: Callable[[VerificationRequest], str] | None = None,
+    question: str, results: Sequence[ResearchResult], *, requirements: Mapping[str, str],
+    extra_evidence: Sequence[Evidence] = (), workspace_id: str = "", run_id: str = "",
+    model: Callable[[SynthesisRequest], str] | None = None,
+    extra_gaps: Sequence[MaterialGap] = (),
 ) -> CandidateAnswer:
-    """汇集子任务结果，产出候选答案与「结论 → 证据」映射（PRD 8.1/8.2）。
-
-    ``model`` 给出时由模型撰写正文（仍用占位符标注来源）；否则用
-    :func:`render_candidate` 的结构化回退。**编号不在这里分配**（PRD 8.3：
-    编号在最终候选答案形成时由 :func:`assign_citation_ids` 分配）。
-    """
-
-    evidence = dedupe_evidence([*collect_evidence(results), *extra_evidence])
-    conclusions = [item for result in results for item in result.conclusions]
+    evidence = [
+        item for item in dedupe_evidence([*collect_evidence(results), *extra_evidence])
+        if evidence_ready_for_answer(item)
+    ]
+    aliases = {
+        member_id: item.evidence_id
+        for item in evidence
+        for member_id in [item.evidence_id, *item.member_evidence_ids]
+    }
+    conclusions = [
+        item.model_copy(update={
+            "evidence_ids": list(dict.fromkeys(aliases[evidence_id] for evidence_id in item.evidence_ids)),
+        })
+        for result in results
+        for item in result.conclusions
+        if all(evidence_id in aliases for evidence_id in item.evidence_ids)
+    ]
+    citable_ids = {item.evidence_id for item in evidence if citation_prefix(item.source_type)}
+    source_supported_requirements = {
+        rid for item in evidence if item.evidence_id in citable_ids
+        for rid in item.supported_requirements
+    }
     supported_requirements = {
-        requirement_id
-        for conclusion in conclusions
+        requirement_id for conclusion in conclusions
         if conclusion.basis is not ConclusionBasis.GAP and conclusion.evidence_ids
         for requirement_id in conclusion.requirement_ids
-    }
-    covered = [rid for rid in requirements if rid in supported_requirements]
-    uncovered = [rid for rid in requirements if rid not in supported_requirements]
-    gaps = [gap for result in results for gap in result.gaps]
-    open_questions = list(
-        dict.fromkeys(item for result in results for item in result.open_questions)
-    )
-    conflicts = list(
-        dict.fromkeys(item for result in results for item in result.progress.conflicts)
-    )
+    } | source_supported_requirements
+    conclusions = [
+        item for item in conclusions
+        if item.basis is not ConclusionBasis.GAP
+        or not item.requirement_ids
+        or any(rid not in source_supported_requirements for rid in item.requirement_ids)
+    ]
     basis, components = compute_answer_basis(evidence)
-    request = VerificationRequest(
-        question=question,
-        content="",
-        conclusions=conclusions,
-        evidence=evidence,
-        requirements=dict(requirements),
+    request = SynthesisRequest(
+        question=question, conclusions=conclusions, evidence=evidence, requirements=dict(requirements),
     )
-    if model is not None:
-        content = str(model(request) or "").strip()
-    else:
-        content = render_candidate(conclusions, requirements)
-    candidate = CandidateAnswer(
-        question=question,
-        content=content,
-        workspace_id=workspace_id,
-        run_id=run_id,
-        conclusions=conclusions,
-        evidence=evidence,
-        covered_requirements=covered,
-        uncovered_requirements=uncovered,
-        open_questions=open_questions,
-        conflicts=conflicts,
+    if model is None:
+        # 没有可用的对话模型 -> 明确失败。旧实现回落 ``render_candidate``，产出
+        # 「内部标识符＋原文首句」的拼接稿，看着像答案却答非所问（用户实测缺陷）。
+        raise SynthesisUnavailable(
+            "没有可用的对话模型，无法综合答案（不再用确定性拼接冒充回答）"
+        )
+    content = str(model(request) or "").strip()
+    # 缺口只报「没有被任何来源回答」的要求：同一项要求已由通用解释或其他任务回答时，
+    # 不能再列成「资料不足」（旧实现会因此反复输出资料不足说明，把正文挤满）。
+    gaps = [
+        gap
+        for result in results
+        for gap in result.gaps
+        if any(rid not in source_supported_requirements for rid in gap.requirement_ids)
+    ]
+    # 外部核查得出的**用户交付要求**缺口（例如「要求官方来源但没有取得官方页面」）一并
+    # 计入终态：否则答案已承认没交付，run 仍登记 completed、gaps=[]（缺陷 F19）。
+    gaps.extend(extra_gaps)
+    if request.review is not None:
+        supported_requirements = set(request.review.covered_requirements)
+        gaps = [*request.review.gaps, *extra_gaps]
+        supported_requirements.difference_update(
+            rid for gap in extra_gaps for rid in gap.requirement_ids
+        )
+    gaps = list({
+        (tuple(sorted(gap.requirement_ids)), gap.missing, gap.impact): gap
+        for gap in gaps
+    }.values())
+    return CandidateAnswer(
+        question=question, content=content, workspace_id=workspace_id, run_id=run_id,
+        conclusions=conclusions, evidence=evidence,
+        covered_requirements=[rid for rid in requirements if rid in supported_requirements],
+        uncovered_requirements=[rid for rid in requirements if rid not in supported_requirements],
+        open_questions=list(dict.fromkeys(item for result in results for item in result.open_questions)),
+        conflicts=list(dict.fromkeys(item for result in results for item in result.progress.conflicts)),
         gaps=gaps,
-        answer_basis=basis,
-        basis_components=components,
-        # 注意：``open_questions`` 是「要求未被覆盖」，对应资料不足（insufficient）；
-        # ``blocking_questions`` 是「需要用户确认才能继续」（clarify），由调用方显式给出，
-        # 两者不能互相顶替，否则会把资料缺口误判成需要澄清。
-        blocking_questions=[],
+        answer_basis=basis, basis_components=components,
     )
-    return candidate
 
 
-def render_gap_section(
-    gaps: Sequence[MaterialGap],
-    requirement_texts: Mapping[str, str],
-) -> str:
-    """资料不足时的说明段落：已核实内容 / 缺少的依据 / 对结论的影响（PRD 8.3）。"""
-
+def render_gap_section(gaps: Sequence[MaterialGap], requirement_texts: Mapping[str, str]) -> str:
     lines = ["### 资料不足说明"]
     if not gaps:
-        lines.append("缺少的依据：未获得可核对的关键资料。")
-        lines.append("对结论的影响：相关结论只作为待确认信息，不作为已核实内容。")
-        return "\n".join(lines)
+        lines.append("未获得回答所需的关键资料，相关结论仍需确认。")
     for gap in gaps:
-        titles = "、".join(
-            requirement_texts.get(rid, rid) for rid in gap.requirement_ids
-        ) or "当前问题"
-        lines.append(f"- 要求「{titles}」：缺少的依据——{gap.missing or '未取得'}。")
-        lines.append(f"  对结论的影响——{gap.impact or '相关陈述不能作为已核实内容发布。'}")
+        titles = "、".join(requirement_texts.get(rid, rid) for rid in gap.requirement_ids) or "当前问题"
+        missing = _gap_display_text(gap.missing or "未取得")
+        impact = _gap_display_text(gap.impact or "相关陈述仍需确认")
+        lines.append(f"- 要求「{titles}」：缺少的依据：{missing}")
+        lines.append(f"  对结论的影响：{impact}")
     return "\n".join(lines)
 
 
-# =====================================================================
-# 3. 引用编号（PRD 8.3）
-# =====================================================================
+def _gap_display_text(text: str) -> str:
+    terms = {
+        "confirmed_source_scope": "已核对的原文范围",
+        "provided_dimensions": "原文提供的内容",
+        "requested_dimensions": "所问项目",
+        "requirement_ids": "问题要求",
+        "evidence_ids": "来源依据",
+    }
+    pattern = "|".join(terms)
+    text = re.sub(rf"[（(][^（）()]*\b(?:{pattern})\b[^（）()]*[）)]", "", text)
+    for identifier, label in terms.items():
+        text = re.sub(rf"\b{identifier}\b", label, text)
+    return text.strip().rstrip("。.!！；;，,") + "。"
 
 
 def assign_citation_ids(
-    content: str,
-    evidence: Sequence[Evidence],
-    *,
-    existing: Sequence[CitationEntry] = (),
+    content: str, evidence: Sequence[Evidence], *, existing: Sequence[CitationEntry] = (),
     workspace_names: Mapping[str, str] | None = None,
     relevance_by_source: Mapping[str, Mapping[str, Any]] | None = None,
 ) -> CitationAssignment:
-    """把 ``{{ev-…}}`` 占位符替换为稳定编号并生成来源映射（PRD 8.3）。
-
-    规则：编号按**首次出现顺序**、按前缀分别编号（``S`` / ``W`` / ``M`` / ``H``）；
-    同一来源复用同一编号（含 ``existing`` 里已分配的编号，不重新编号）；
-    非文档来源（``general_knowledge`` / ``proposal``）不得生成编号，直接报错。
-
-    ``relevance_by_source``（纯追加的可选入参，集成 t5）：``{source_ref: 相关性筛选记录}``，
-    值来自**本次真实筛选结果**（``app.retrieval.rerank_pipeline`` 的选择产物，由运行层从
-    检索工具的入选来源收集）。命中时把 ``relevance_checked`` / ``rerank_score`` /
-    ``score_type`` / ``profile_id`` / ``evidence_hash`` / ``member_refs`` 原样写到该引用的
-    追加字段上；**未命中或未提供时保持默认值**（不伪造分数/概率/正确率，PRD §8.3）。
-    """
-
     index = evidence_index(evidence)
     relevance = relevance_by_source or {}
-    citations: dict[str, CitationEntry] = {item.label: item for item in existing}
-    # 已有编号先登记进 evidence → label 映射，重复调用时不会重新编号（PRD 8.3）。
-    labels: dict[str, str] = {
-        item.evidence_id: item.label for item in existing if item.evidence_id
-    }
+    citations = {item.label: item for item in existing}
+    labels = {item.evidence_id: item.label for item in existing if item.evidence_id}
     problems: list[str] = []
     counters: dict[str, int] = {}
     for citation in existing:
-        prefix = str(citation.label[:1])
         match = re.fullmatch(r"([SWMH])(\d+)", citation.label)
         if match:
+            prefix = match.group(1)
             counters[prefix] = max(counters.get(prefix, 0), int(match.group(2)))
 
     def label_for(evidence_id: str) -> str:
-        known = labels.get(evidence_id)
-        if known is not None:
-            return known
-        for citation in citations.values():
-            if citation.evidence_id == evidence_id:
-                labels[evidence_id] = citation.label
-                return citation.label
+        if evidence_id in labels:
+            return labels[evidence_id]
         item = index.get(evidence_id)
         if item is None:
-            problems.append(f"占位符 {{{{ {evidence_id} }}}} 没有对应证据")
+            problems.append(f"占位符 {evidence_id} 没有对应证据")
             return evidence_id
         prefix = citation_prefix(item.source_type)
         if prefix is None:
-            problems.append(
-                f"来源 {item.source_type.value} 不得生成文档引用编号（PRD 8.1）"
-            )
+            problems.append(f"来源 {item.source_type.value} 不得生成文档引用编号")
             return evidence_id
         counters[prefix] = counters.get(prefix, 0) + 1
         label = f"{prefix}{counters[prefix]}"
         labels[evidence_id] = label
+        heading, body = split_evidence_content(item.content)
         citations[label] = CitationEntry(
-            label=label,
-            source_type=SourceType(item.source_type.value),
-            evidence_id=item.evidence_id,
-            workspace_id=item.workspace_id,
-            workspace_name=(workspace_names or {}).get(item.workspace_id, ""),
-            source_ref=item.source_ref,
-            snippet=_first_sentence(item.content, 200),
+            label=label, source_type=SourceType(item.source_type.value), evidence_id=item.evidence_id,
+            workspace_id=item.workspace_id, workspace_name=(workspace_names or {}).get(item.workspace_id, ""),
+            # 来源面板展示**证据正文全文**（章节标题单独放在 heading_path；内部定位标识留在
+            # source_ref，只用于定位）。此前这里取「首句」，会把「标题：…\n内容：…」形态的
+            # 证据截成只剩标题 —— 用户实测的「引用只有几个字」就是这个截断。
+            source_ref=item.source_ref, snippet=body,
+            heading_path=item.heading_path or heading,
+            # 文档标题随证据一起到达引用面板（缺陷 F13）：只有章节名时，用户与模型都
+            # 无法确认这段来自哪篇文章。
+            document_title=item.document_title,
             source_status=CitationSourceStatus.ACTIVE,
             **_relevance_citation_fields(relevance.get(str(item.source_ref))),
         )
         return label
 
-    ordered: list[str] = []
-    referenced: list[str] = []
-    for match in PLACEHOLDER_PATTERN.finditer(content):
-        evidence_id = match.group(1)
-        referenced.append(evidence_id)
-        ordered.append(label_for(evidence_id))
+    referenced = [match.group(1) for match in PLACEHOLDER_PATTERN.finditer(content)]
+    ordered = [label_for(evidence_id) for evidence_id in referenced]
     if problems:
         raise CitationError(problems)
-    rendered = PLACEHOLDER_PATTERN.sub(
-        lambda match: f"[{label_for(match.group(1))}]", content
-    )
-    reused = [label for label in ordered if ordered.count(label) > 1]
-    unused = [item.evidence_id for item in evidence if item.evidence_id not in set(referenced)]
+    rendered = PLACEHOLDER_PATTERN.sub(lambda match: f"[{label_for(match.group(1))}]", content)
     return CitationAssignment(
-        content=rendered,
-        citations=sorted(citations.values(), key=lambda item: item.label),
-        labels=labels,
-        reused_labels=list(dict.fromkeys(reused)),
-        unused_evidence_ids=unused,
+        content=rendered, citations=sorted(
+            citations.values(), key=lambda item: (item.label[0], int(item.label[1:]))
+        ), labels=labels,
+        reused_labels=list(dict.fromkeys(label for label in ordered if ordered.count(label) > 1)),
+        unused_evidence_ids=[item.evidence_id for item in evidence if item.evidence_id not in set(referenced)],
     )
 
 
-#: 引用条目上「已筛选资料」的追加字段（集成 t5 的六个 + t7 的 ``similarity``；全部带默认值，纯追加）。
 _RELEVANCE_CITATION_KEYS = (
-    "relevance_checked",
-    "rerank_score",
-    "score_type",
-    "profile_id",
-    "evidence_hash",
-    "member_refs",
-    "similarity",
+    "relevance_checked", "rerank_score", "score_type", "profile_id", "evidence_hash", "member_refs", "similarity",
 )
 
 
 def _relevance_citation_fields(record: Mapping[str, Any] | None) -> dict[str, Any]:
-    """筛选记录 → 引用条目的追加字段（**只透传，不补造**）。
-
-    * 没有记录（未启用筛选 / 该来源未被筛选选中）→ 返回空 dict ⇒ 契约默认值生效；
-    * 有记录 → 只取 :data:`_RELEVANCE_CITATION_KEYS` 里**确实存在**的键，其余留默认。
-      这样记录里多出的诊断字段不会被误当成契约字段，也不会因为缺键而填 0。
-    * ``similarity`` 是**原始向量分数**（PRD RAG-relevance §7 `:304`），与 ``rerank_score``
-      是两条独立通路：本函数按记录里各自的键原值搬运，绝不互相代入。
-    """
-
     if not record:
         return {}
     return {key: record[key] for key in _RELEVANCE_CITATION_KEYS if key in record}
 
 
-# =====================================================================
-# 4. 程序核对：PRD 8.2 八项检查
-# =====================================================================
-
-
-def _issue(
-    check: VerificationCheck,
-    *,
-    requirement_ids: Sequence[str] = (),
-    statement: str = "",
-    evidence_ids: Sequence[str] = (),
-    required_action: str = "",
-    severity: VerificationSeverity = VerificationSeverity.MEDIUM,
-) -> VerificationIssue:
-    return VerificationIssue(
-        check=check,
-        requirement_ids=list(requirement_ids),
-        statement=statement,
-        evidence_ids=list(evidence_ids),
-        required_action=required_action,
-        severity=severity,
-    )
-
-
-def _statements(content: str) -> list[tuple[int, str]]:
-    """按句切分正文，返回 ``(序号, 句子)``，用于定位问题陈述。"""
-
-    result: list[tuple[int, str]] = []
-    for match in _SENTENCE_SPLIT.finditer(str(content or "")):
-        text = match.group(0).strip()
-        if text:
-            result.append((len(result) + 1, text))
-    return result
-
-
-def _normalized(text: str) -> str:
-    return _WHITESPACE.sub("", str(text or "")).casefold()
-
-
-def _first_sentence(text: str, limit: int = 200) -> str:
-    cleaned = _WHITESPACE.sub(" ", str(text or "")).strip()
-    if not cleaned:
-        return ""
-    match = re.search(r"[。！？!?；;\n]", cleaned)
-    candidate = cleaned[: match.start() + 1] if match else cleaned
-    return candidate if len(candidate) <= limit else candidate[:limit] + "…"
-
-
-def run_program_checks(
-    candidate: CandidateAnswer,
-    *,
-    requirements: Mapping[str, str],
-    material_status: MaterialStatusReport | None = None,
-) -> ProgramCheckResult:
-    """PRD 8.2 的八项检查（程序侧）：引用身份、字段、数字格式与要求覆盖。"""
-
-    index = candidate.evidence_by_id()
-    issues: list[VerificationIssue] = []
-    issues.extend(_check_requirement_coverage(candidate, requirements))
-    issues.extend(_check_factual_support(candidate, index))
-    issues.extend(_check_numbers_and_units(candidate, index))
-    issues.extend(_check_version_and_scope(candidate, index))
-    issues.extend(_check_source_conflict(candidate))
-    issues.extend(_check_internal_facts(candidate, index))
-    issues.extend(_check_citation_validity(candidate, index))
-    issues.extend(_check_material_status(candidate, index, material_status))
-    notes = [
-        f"程序核对 {len(issues)} 项问题",
-        f"证据 {len(candidate.evidence)} 条；引用 {len(candidate.citations)} 条",
-    ]
-    return ProgramCheckResult(ok=not issues, issues=issues, notes=notes)
-
-
-def _check_requirement_coverage(
-    candidate: CandidateAnswer, requirements: Mapping[str, str]
-) -> list[VerificationIssue]:
-    """问题覆盖：每项用户要求对应回答内容或明确资料缺口（PRD 8.2 第 1 行）。"""
-
-    issues: list[VerificationIssue] = []
-    for requirement_id, text in requirements.items():
-        covered = requirement_id in candidate.covered_requirements
-        gap = any(requirement_id in item.requirement_ids for item in candidate.gaps)
-        if covered or gap:
-            continue
-        issues.append(
-            _issue(
-                VerificationCheck.REQUIREMENT_COVERAGE,
-                requirement_ids=[requirement_id],
-                statement=f"要求「{text}」在答案中没有对应内容，也没有资料缺口说明",
-                required_action="补充研究或修订答案（PRD 8.2）",
-                severity=VerificationSeverity.HIGH,
-            )
-        )
-    return issues
-
-
-def _check_factual_support(
-    candidate: CandidateAnswer, index: Mapping[str, Evidence]
-) -> list[VerificationIssue]:
-    """事实支持：关键陈述必须能由引用原文支持（PRD 8.2 第 2 行）。"""
-
-    issues: list[VerificationIssue] = []
-    for conclusion in candidate.conclusions:
-        if conclusion.basis is ConclusionBasis.GAP:
-            continue
-        if not conclusion.evidence_ids:
-            issues.append(
-                _issue(
-                    VerificationCheck.FACTUAL_SUPPORT,
-                    requirement_ids=conclusion.requirement_ids,
-                    statement=conclusion.statement,
-                    required_action="查询原文、删除无依据陈述或说明不确定性（PRD 8.2）",
-                    severity=VerificationSeverity.HIGH,
-                )
-            )
-            continue
-        for evidence_id in conclusion.evidence_ids:
-            evidence = index.get(evidence_id)
-            if evidence is None:
-                issues.append(
-                    _issue(
-                        VerificationCheck.FACTUAL_SUPPORT,
-                        requirement_ids=conclusion.requirement_ids,
-                        statement=conclusion.statement,
-                        evidence_ids=[evidence_id],
-                        required_action="修正引用或删除无法核对的陈述（PRD 8.2）",
-                        severity=VerificationSeverity.HIGH,
-                    )
-                )
-            elif not evidence.content.strip():
-                issues.append(
-                    _issue(
-                        VerificationCheck.FACTUAL_SUPPORT,
-                        requirement_ids=conclusion.requirement_ids,
-                        statement=conclusion.statement,
-                        evidence_ids=[evidence_id],
-                        required_action="重新读取原文后核对（PRD 8.2）",
-                    )
-                )
-    return issues
-
-
-def _check_numbers_and_units(
-    candidate: CandidateAnswer, index: Mapping[str, Evidence]
-) -> list[VerificationIssue]:
-    """数字与单位：数值、单位、分母、时间范围、测试条件一致（PRD 8.2 第 3 行）。"""
-
-    issues: list[VerificationIssue] = []
-    for conclusion in candidate.conclusions:
-        if conclusion.basis is ConclusionBasis.GAP:
-            continue
-        support = _normalized(
-            "\n".join(
-                index[evidence_id].content
-                for evidence_id in conclusion.evidence_ids
-                if evidence_id in index
-            )
-        )
-        if not support:
-            continue
-        for value, unit in numeric_claims(conclusion.statement):
-            if value not in support:
-                issues.append(
-                    _issue(
-                        VerificationCheck.NUMBERS_AND_UNITS,
-                        requirement_ids=conclusion.requirement_ids,
-                        statement=conclusion.statement,
-                        evidence_ids=conclusion.evidence_ids,
-                        required_action=(
-                            f"修订数值 {value}{unit}，或引用包含该数值的原文后重新核对（PRD 8.2）"
-                        ),
-                        severity=VerificationSeverity.HIGH,
-                    )
-                )
-                continue
-            if _normalized(f"{value}{unit}") not in support:
-                issues.append(
-                    _issue(
-                        VerificationCheck.NUMBERS_AND_UNITS,
-                        requirement_ids=conclusion.requirement_ids,
-                        statement=conclusion.statement,
-                        evidence_ids=conclusion.evidence_ids,
-                        required_action=(
-                            f"核对单位：陈述写 {value}{unit}，引用原文的单位不同（PRD 8.2）"
-                        ),
-                        severity=VerificationSeverity.HIGH,
-                    )
-                )
-    return issues
-
-
-def _check_version_and_scope(
-    candidate: CandidateAnswer, index: Mapping[str, Evidence]
-) -> list[VerificationIssue]:
-    """版本与范围：资料版本、服务对象、适用环境对应用户问题（PRD 8.2 第 4 行）。"""
-
-    issues: list[VerificationIssue] = []
-    by_revision: dict[str, list[str]] = {}
-    for conclusion in candidate.conclusions:
-        if conclusion.basis is ConclusionBasis.GAP:
-            continue
-        for evidence_id in conclusion.evidence_ids:
-            evidence = index.get(evidence_id)
-            if evidence is not None and evidence.document_revision:
-                by_revision.setdefault(evidence.document_revision, []).append(evidence_id)
-    if len(by_revision) > 1:
-        revisions = "、".join(sorted(by_revision))
-        issues.append(
-            _issue(
-                VerificationCheck.VERSION_AND_SCOPE,
-                evidence_ids=[eid for ids in by_revision.values() for eid in ids],
-                statement=f"引用了多个文档版本（{revisions}），未说明适用范围",
-                required_action="阅读关联资料或并列说明版本差异（PRD 8.2）",
-                severity=VerificationSeverity.HIGH,
-            )
-        )
-    for conclusion in candidate.conclusions:
-        if conclusion.basis is ConclusionBasis.GAP:
-            continue
-        support = _normalized(
-            "\n".join(
-                index[evidence_id].content
-                for evidence_id in conclusion.evidence_ids
-                if evidence_id in index
-            )
-        )
-        for token in _VERSION_TOKEN.findall(conclusion.statement):
-            if support and _normalized(token) not in support:
-                issues.append(
-                    _issue(
-                        VerificationCheck.VERSION_AND_SCOPE,
-                        requirement_ids=conclusion.requirement_ids,
-                        statement=conclusion.statement,
-                        evidence_ids=conclusion.evidence_ids,
-                        required_action=f"确认版本 {token} 是否属于引用资料范围（PRD 8.2）",
-                    )
-                )
-                break
-    return issues
-
-
-def _check_source_conflict(candidate: CandidateAnswer) -> list[VerificationIssue]:
-    """来源冲突：比较原始来源、时间和适用条件（PRD 8.2 第 5 行）。"""
-
-    issues: list[VerificationIssue] = []
-    conflicts = list(dict.fromkeys([*candidate.conflicts, *detect_numeric_conflicts(candidate.evidence)]))
-    content = _normalized(candidate.content)
-    for conflict in conflicts:
-        values = [value for value, _unit in numeric_claims(conflict)]
-        if values and all(_normalized(value) in content for value in values):
-            continue
-        issues.append(
-            _issue(
-                VerificationCheck.SOURCE_CONFLICT,
-                statement=conflict,
-                required_action="继续查询，保留无法确定的冲突并并列说明（PRD 8.2）",
-                severity=VerificationSeverity.HIGH,
-            )
-        )
-    return issues
-
-
-def _check_internal_facts(
-    candidate: CandidateAnswer, index: Mapping[str, Evidence]
-) -> list[VerificationIssue]:
-    """内部事实：公司定义、现有实现、既定方案必须具有本区资料依据（PRD 8.2 第 6 行）。"""
-
-    issues: list[VerificationIssue] = []
-    for conclusion in candidate.conclusions:
-        if not any(marker in conclusion.statement for marker in _INTERNAL_MARKERS):
-            continue
-        sources = {
-            index[evidence_id].source_type
-            for evidence_id in conclusion.evidence_ids
-            if evidence_id in index
-        }
-        if any(item in _INTERNAL_SOURCES for item in sources):
-            continue
-        issues.append(
-            _issue(
-                VerificationCheck.INTERNAL_FACT,
-                requirement_ids=conclusion.requirement_ids,
-                statement=conclusion.statement,
-                evidence_ids=conclusion.evidence_ids,
-                required_action="补充本区资料依据，或把公共建议单独表述（PRD 8.2）",
-                severity=VerificationSeverity.HIGH,
-            )
-        )
-    for position, sentence in _statements(candidate.content):
-        if not any(marker in sentence for marker in _INTERNAL_MARKERS):
-            continue
-        if LABEL_PATTERN.search(sentence):
-            continue
-        # 标题与缺口说明是「要求原文/缺口标注」的回显，不是内部事实陈述，不能算问题。
-        stripped = sentence.lstrip()
-        if stripped.startswith("#") or "缺少依据" in stripped:
-            continue
-        issues.append(
-            _issue(
-                VerificationCheck.INTERNAL_FACT,
-                statement=f"第{position}句：{sentence[:80]}",
-                required_action="为内部事实补充本区资料引用，或改为公共建议表述（PRD 8.2）",
-            )
-        )
-    return issues
-
-
-def _check_citation_validity(
-    candidate: CandidateAnswer, index: Mapping[str, Evidence]
-) -> list[VerificationIssue]:
-    """引用有效性：来源 ID 存在且片段支持引用位置的陈述（PRD 8.2 第 7 行）。"""
-
-    issues: list[VerificationIssue] = []
-    labels_in_content: list[str] = [
-        f"{match.group(1)}{match.group(2)}" for match in LABEL_PATTERN.finditer(candidate.content)
-    ]
-    by_label: dict[str, CitationEntry] = {}
-    for citation in candidate.citations:
-        previous = by_label.get(citation.label)
-        if previous is not None and previous.evidence_id != citation.evidence_id:
-            issues.append(
-                _issue(
-                    VerificationCheck.CITATION_VALIDITY,
-                    statement=f"引用编号 {citation.label} 对应了多个来源",
-                    evidence_ids=[previous.evidence_id, citation.evidence_id],
-                    required_action="修订引用编号或答案（PRD 8.2）",
-                    severity=VerificationSeverity.HIGH,
-                )
-            )
-        by_label[citation.label] = citation
-        evidence = index.get(citation.evidence_id)
-        if evidence is None:
-            issues.append(
-                _issue(
-                    VerificationCheck.CITATION_VALIDITY,
-                    statement=f"引用 {citation.label} 的来源不存在",
-                    evidence_ids=[citation.evidence_id],
-                    required_action="修订引用来源（PRD 8.2）",
-                    severity=VerificationSeverity.HIGH,
-                )
-            )
-            continue
-        if evidence.workspace_id and candidate.workspace_id and evidence.workspace_id != candidate.workspace_id:
-            issues.append(
-                _issue(
-                    VerificationCheck.CITATION_VALIDITY,
-                    statement=f"引用 {citation.label} 的证据不属于当前工作区",
-                    evidence_ids=[citation.evidence_id],
-                    required_action="撤销跨工作区引用（PRD 8.1）",
-                    severity=VerificationSeverity.HIGH,
-                )
-            )
-        if citation.source_type != SourceType(evidence.source_type.value):
-            issues.append(
-                _issue(
-                    VerificationCheck.CITATION_VALIDITY,
-                    statement=f"引用 {citation.label} 的来源类型与证据不一致",
-                    evidence_ids=[citation.evidence_id],
-                    required_action="修正引用身份（PRD 8.2）",
-                    severity=VerificationSeverity.HIGH,
-                )
-            )
-        expected_prefix = citation_prefix(citation.source_type)
-        if expected_prefix is None:
-            issues.append(
-                _issue(
-                    VerificationCheck.CITATION_VALIDITY,
-                    statement=f"引用 {citation.label} 的来源类型不得生成文档引用编号",
-                    evidence_ids=[citation.evidence_id],
-                    required_action="改为 general_knowledge/proposal 表述（PRD 8.1）",
-                    severity=VerificationSeverity.HIGH,
-                )
-            )
-        elif not citation.label.startswith(expected_prefix):
-            issues.append(
-                _issue(
-                    VerificationCheck.CITATION_VALIDITY,
-                    statement=f"引用 {citation.label} 的前缀与来源类型不符",
-                    evidence_ids=[citation.evidence_id],
-                    required_action="按 S/W/M/H 前缀重新编号（PRD 8.3）",
-                )
-            )
-        if not citation.snippet.strip():
-            issues.append(
-                _issue(
-                    VerificationCheck.CITATION_VALIDITY,
-                    statement=f"引用 {citation.label} 缺少可核对片段",
-                    evidence_ids=[citation.evidence_id],
-                    required_action="补充引用片段（PRD 14.4）",
-                    severity=VerificationSeverity.LOW,
-                )
-            )
-        if citation.label not in labels_in_content:
-            issues.append(
-                _issue(
-                    VerificationCheck.CITATION_VALIDITY,
-                    statement=f"引用 {citation.label} 没有出现在正文中",
-                    evidence_ids=[citation.evidence_id],
-                    required_action="删除未使用的引用映射",
-                    severity=VerificationSeverity.LOW,
-                )
-            )
-    for label in labels_in_content:
-        if label not in by_label:
-            issues.append(
-                _issue(
-                    VerificationCheck.CITATION_VALIDITY,
-                    statement=f"正文引用 [{label}] 没有对应的来源映射",
-                    required_action="修订引用或答案（PRD 8.2）",
-                    severity=VerificationSeverity.HIGH,
-                )
-            )
-    return issues
-
-
-def _check_material_status(
-    candidate: CandidateAnswer,
-    index: Mapping[str, Evidence],
-    material_status: MaterialStatusReport | None,
-) -> list[VerificationIssue]:
-    """资料状态：发布前知识与记忆仍可使用（PRD 8.2 第 8 行 / A32）。"""
-
-    if material_status is None:
-        return []
-    issues: list[VerificationIssue] = []
-    for evidence_id in material_status.invalid_evidence_ids:
-        statement = next(
-            (
-                conclusion.statement
-                for conclusion in candidate.conclusions
-                if evidence_id in conclusion.evidence_ids
-            ),
-            f"证据 {evidence_id} 已失效",
-        )
-        issues.append(
-            _issue(
-                VerificationCheck.MATERIAL_STATUS,
-                statement=statement,
-                evidence_ids=[evidence_id],
-                required_action="撤销失效证据并重新核对受影响陈述（PRD 8.2 / A32）",
-                severity=VerificationSeverity.HIGH,
-            )
-        )
-    if material_status.knowledge_revision_changed:
-        issues.append(
-            _issue(
-                VerificationCheck.MATERIAL_STATUS,
-                statement="生成答案后工作区知识版本发生变化",
-                evidence_ids=[item.evidence_id for item in index.values()],
-                required_action="重新核对受影响陈述（PRD 8.2 / 5.3）",
-                severity=VerificationSeverity.HIGH,
-            )
-        )
-    return issues
-
-
-# =====================================================================
-# 5. Verifier（PRD 8.2）
-# =====================================================================
-
-
-def decide_verdict(
-    issues: Sequence[VerificationIssue],
-    *,
-    candidate: CandidateAnswer,
-    blocking_questions: Sequence[str] = (),
-) -> VerifierVerdict:
-    """按问题集合汇总 ``verdict``（``pass`` 是唯一允许无缺口发布的结论）。"""
-
-    if not issues:
-        has_gaps = bool(candidate.gaps or candidate.uncovered_requirements)
-        if has_gaps or candidate.answer_basis is AnswerBasis.INSUFFICIENT:
-            return VerifierVerdict.INSUFFICIENT
-        if blocking_questions:
-            # 没有问题但仍有需要用户确认的关键歧义：不能作为 pass 发布（PRD 8.2）。
-            return VerifierVerdict.CLARIFY
-        return VerifierVerdict.PASS
-    checks = {issue.check for issue in issues}
-    needs_research = bool(
-        checks & {VerificationCheck.SOURCE_CONFLICT, VerificationCheck.REQUIREMENT_COVERAGE}
-    )
-    if needs_research:
-        return VerifierVerdict.RESEARCH
-    if blocking_questions:
-        return VerifierVerdict.CLARIFY
-    return VerifierVerdict.REVISE
-
-
-async def verify_answer(
-    candidate: CandidateAnswer,
-    *,
-    requirements: Mapping[str, str],
-    material_check: MaterialStatusCheck | None = None,
-    model_verifier: ModelVerifier | None = None,
-) -> VerificationResult:
-    """核对候选答案（PRD 8.2）：程序检查字段与结构，模型判断语义支持。"""
-
-    material_status: MaterialStatusReport | None = None
-    if material_check is not None:
-        produced = material_check(candidate.evidence)
-        if inspect.isawaitable(produced):
-            produced = await produced
-        material_status = produced
-    program = run_program_checks(
-        candidate, requirements=requirements, material_status=material_status
-    )
-    issues = list(program.issues)
-    blocking = list(candidate.blocking_questions)
-    if model_verifier is not None:
-        review = await model_verifier.review(
-            VerificationRequest(
-                question=candidate.question,
-                content=candidate.content,
-                conclusions=candidate.conclusions,
-                evidence=candidate.evidence,
-                requirements=dict(requirements),
-            )
-        )
-        for item in review.issues:
-            issues.append(
-                VerificationIssue(
-                    check=item.check,
-                    requirement_ids=list(item.requirement_ids),
-                    statement=item.statement,
-                    evidence_ids=list(item.evidence_ids),
-                    required_action=item.required_action,
-                    severity=item.severity,
-                )
-            )
-        blocking.extend(review.ambiguity_questions)
-    verdict = decide_verdict(issues, candidate=candidate, blocking_questions=blocking)
-    return VerificationResult(
-        verdict=verdict,
-        issues=issues,
-        covered_requirements=list(candidate.covered_requirements),
-        uncovered_requirements=list(candidate.uncovered_requirements),
-        # 待确认问题 = 候选答案的开放问题 + 需要用户澄清的阻塞问题（verdict=clarify 时
-        # 运行层据此发起澄清卡片；契约没有独立的 blocking 字段，见模块 docstring）。
-        open_questions=list(dict.fromkeys([*candidate.open_questions, *blocking])),
-        conflicts=list(candidate.conflicts),
-        checked_at=utc_now_iso(),
-    )
-
-
-# =====================================================================
-# 6. 发布（PRD 8.3）
-# =====================================================================
-
-
 def answer_version(artifact: AnswerArtifact) -> str:
-    """答案版本：契约没有独立版本字段，用「内容 hash + 状态」表达（见模块 docstring）。"""
-
     if not artifact.content_hash:
-        raise AnswerVersionError("AnswerArtifact 缺少 content_hash，无法确定版本")
+        raise AnswerVersionError("AnswerArtifact 缺少 content_hash")
     return f"{artifact.content_hash[:12]}@{artifact.status.value}"
 
 
 def publish_answer(
-    candidate: CandidateAnswer,
-    verification: VerificationResult,
-    *,
-    requirements: Mapping[str, str],
-    answer_id: str | None = None,
-    allow_gaps: bool = True,
+    candidate: CandidateAnswer, *, requirements: Mapping[str, str], answer_id: str | None = None,
 ) -> AnswerArtifact:
-    """按 PRD 8.3 发布答案：``pass`` → ``completed``；资料不足 → ``completed_with_gaps``。"""
-
-    if verification.verdict is VerifierVerdict.PASS:
-        status = RunStatus.COMPLETED
-    elif verification.verdict is VerifierVerdict.INSUFFICIENT and allow_gaps:
-        status = RunStatus.COMPLETED_WITH_GAPS
-    else:
-        raise PublicationError(
-            f"verdict={verification.verdict.value} 不允许发布；"
-            f"需处理 {len(verification.issues)} 项核对问题（PRD 8.3）"
-        )
+    if not candidate.content.strip():
+        raise ValueError("答案正文为空")
+    index = candidate.evidence_by_id()
+    citations = {item.label: item for item in candidate.citations}
+    problems: list[str] = []
+    for match in LABEL_PATTERN.finditer(candidate.content):
+        label = "".join(match.groups())
+        citation = citations.get(label)
+        evidence = index.get(citation.evidence_id) if citation is not None else None
+        if citation is None or evidence is None:
+            problems.append(f"引用 {label} 没有对应资料")
+        elif citation.workspace_id != candidate.workspace_id or evidence.workspace_id != candidate.workspace_id:
+            problems.append(f"引用 {label} 不属于当前工作区")
+        elif citation_prefix(evidence.source_type) != match.group(1):
+            problems.append(f"引用 {label} 的来源类型不匹配")
+    if problems:
+        raise CitationError(problems)
+    has_gaps = bool(candidate.gaps or candidate.uncovered_requirements)
+    status = RunStatus.COMPLETED_WITH_GAPS if has_gaps else RunStatus.COMPLETED
     content = candidate.content
-    if status is RunStatus.COMPLETED_WITH_GAPS:
-        gap_section = render_gap_section(candidate.gaps, requirements)
-        if gap_section not in content:
+    if has_gaps:
+        undisclosed = [gap for gap in candidate.gaps if not _gap_is_explicit(content, gap.missing)]
+        gap_section = render_gap_section(undisclosed, requirements)
+        if (undisclosed or not candidate.gaps) and gap_section not in content:
             content = f"{content}\n\n{gap_section}".strip()
     digest = hashlib.sha256(content.encode("utf-8")).hexdigest()
-    active_id = answer_id or "ans-" + hashlib.sha256(
-        f"{candidate.run_id}|{digest}".encode()
-    ).hexdigest()[:24]
+    active_id = answer_id or "ans-" + hashlib.sha256(f"{candidate.run_id}|{digest}".encode()).hexdigest()[:24]
     return AnswerArtifact(
-        answer_id=active_id,
-        run_id=candidate.run_id,
-        workspace_id=candidate.workspace_id,
-        content=content,
-        citations=list(candidate.citations),
-        verification=verification,
-        content_hash=digest,
-        answer_basis=candidate.answer_basis,
-        basis_components=list(candidate.basis_components),
-        status=status,
-        created_at=utc_now_iso(),
+        answer_id=active_id, run_id=candidate.run_id, workspace_id=candidate.workspace_id,
+        content=content, citations=list(candidate.citations), content_hash=digest,
+        answer_basis=candidate.answer_basis, basis_components=list(candidate.basis_components),
+        status=status, created_at=utc_now_iso(),
     )
 
 
-def build_failure_outcome(
-    results: Sequence[ResearchResult],
-    error: AgentError,
-    *,
-    run_id: str,
-) -> RunFailure:
-    """运行错误 → ``failed``，保留已完成研究记录与继续入口（PRD 8.3）。"""
-
+def build_failure_outcome(results: Sequence[ResearchResult], error: AgentError, *, run_id: str) -> RunFailure:
     return RunFailure(
-        run_id=run_id,
-        status=RunStatus.FAILED,
-        error=error,
-        completed_task_ids=[
-            result.task_id
-            for result in results
-            if result.status in {TaskStatus.COMPLETED, TaskStatus.COMPLETED_WITH_GAPS}
-        ],
-        failed_task_ids=[
-            result.task_id for result in results if result.status is TaskStatus.FAILED
-        ],
-        evidence_ids=[item.evidence_id for result in results for item in result.evidence],
-        results=list(results),
+        run_id=run_id, error=error,
+        completed_task_ids=[result.task_id for result in results if result.status in {TaskStatus.COMPLETED, TaskStatus.COMPLETED_WITH_GAPS}],
+        failed_task_ids=[result.task_id for result in results if result.status is TaskStatus.FAILED],
+        evidence_ids=[item.evidence_id for result in results for item in result.evidence], results=list(results),
         resume_action=f"POST /api/runs/{run_id}/resume：从失败位置继续并复用已完成研究",
     )
 
 
-# =====================================================================
-# 7. answer_basis 展示兼容（PRD 8.3 末句）
-# =====================================================================
-
-
 def parse_answer_basis(raw: str) -> AnswerBasis | None:
-    """解析 ``answer_basis``；历史消息中的旧取值不认识时返回 ``None``（原样展示）。"""
-
     try:
         return AnswerBasis(str(raw))
     except ValueError:
@@ -1189,9 +933,5 @@ def parse_answer_basis(raw: str) -> AnswerBasis | None:
 
 
 def answer_basis_display(raw: str) -> str:
-    """展示用文案：新取值给中文名，未知旧取值原样返回。"""
-
     basis = parse_answer_basis(raw)
-    if basis is None:
-        return str(raw)
-    return ANSWER_BASIS_LABELS.get(basis, str(raw))
+    return ANSWER_BASIS_LABELS.get(basis, str(raw)) if basis is not None else str(raw)

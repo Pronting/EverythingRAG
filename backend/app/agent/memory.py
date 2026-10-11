@@ -7,17 +7,18 @@ run 与批准的存在，``app.db`` 也不知道记忆条目；PRD 要求的两�
 1. **固定会话快照**（11.3）：新会话的第一条消息把当时的工作区记忆定格存进
    ``conversations.memory_*``；此后**自动更新立即持久化，但当前会话快照保持不变**。
    "恢复会话 / 页面刷新 / 应用重启不得自动替换快照"这条不能靠调用方自觉 —— 所以
-   ``ensure_conversation_snapshot`` 只在快照为空时写一次，重建需要显式调用另一个函数。
+   ``ensure_conversation_snapshot`` 在首次读取或人工失效版本更新时保存快照。
 2. **人工失效即时生效**（11.4）：递增受影响会话的 ``context_epoch``、清空或重建快照、
    把已失效的批准转 ``superseded``、并只递增**受影响 Agent 自己**的
    ``agent_context_epoch``（A31：单个 Agent 的压缩不改变别人的上下文版本）。
 
 出网约束：本模块唯一的出网是提炼时调用用户已配置的对话模型（经 ``ChatModel``，其底层
-已由 ``OutboundClient`` 审计），且任何失败都静默降级。人名脱敏不在本模块（T05）。
+已由 ``OutboundClient`` 审计），请求失败交给任务调度记录。人名脱敏在 T05 中处理。
 """
 
 from __future__ import annotations
 
+import json
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
@@ -33,8 +34,17 @@ from app.memory.extractor import (
     WorkspaceTurn,
     extract_workspace_candidates,
 )
-from app.memory.invalidation import HistoryMessageView, model_history_view
-from app.memory.locking import conversation_async_lock, memory_maintenance_locks
+from app.memory.invalidation import (
+    HistoryMessageView,
+    model_history_view,
+    revoked_requirement_message_ids,
+    revoked_response_requirements,
+)
+from app.memory.locking import (
+    conversation_async_lock,
+    memory_maintenance_locks,
+    workspace_async_lock,
+)
 from app.memory.workspace_memory import (
     MemoryMutationResult,
     MemorySnapshot,
@@ -96,31 +106,35 @@ async def ensure_conversation_snapshot(
     memory: WorkspaceMemory,
     conversation_id: str,
 ) -> tuple[ConversationRecord, MemorySnapshot]:
-    """新会话首次使用时定格快照；已有快照时**原样返回**（PRD 11.3）。
+    """保持自动提炼后的会话快照；人工失效版本变化时更新快照。"""
 
-    读取发生在会话锁 + 工作区写锁内，且 ``memory.json`` 是一次整体读 —— 因此并行创建
-    会话与写入记忆时，快照必然对应**某一个完整版本**，不会读到"改了一半"的记忆
-    （PRD 11.3 末段）。
-    """
+    async with workspace_async_lock(memory.storage_key):
+        return await _ensure_conversation_snapshot_locked(
+            app_store=app_store, memory=memory, conversation_id=conversation_id
+        )
 
+
+async def _ensure_conversation_snapshot_locked(
+    *, app_store: Any, memory: WorkspaceMemory, conversation_id: str
+) -> tuple[ConversationRecord, MemorySnapshot]:
     conversation = await app_store.get_conversation(conversation_id)
     if conversation is None:
         raise LookupError(f"会话不存在：{conversation_id}")
-    if _snapshot_present(conversation):
+    owner = await app_store.get_workspace_by_storage_key(memory.storage_key)
+    if owner is None or owner.id != conversation.workspace_id:
+        raise ValueError("会话与记忆所属工作区不一致")
+    state = memory.load()
+    invalidated = conversation.memory_invalidation_revision < state.invalidation_revision
+    if _snapshot_present(conversation) and not invalidated:
         return conversation, snapshot_from_record(conversation)
-
-    # 关键：**临界区里不放 await**。锁是 ``threading.RLock``（同线程可重入，避免
-    # 嵌套调用自锁），若在持锁期间 await，同一事件循环上的另一个任务会在"同线程"
-    # 重新进入临界区，互斥就失效了。这里只做一次同步的整份文件读取。
-    with memory_maintenance_locks(conversation_id, storage_keys=[memory.storage_key]):
-        snapshot = memory.snapshot()
-
-    current = await app_store.get_conversation(conversation_id)
-    if current is None:  # pragma: no cover - 并发删除
-        raise LookupError(f"会话不存在：{conversation_id}")
-    if _snapshot_present(current):
-        # 另一个执行体已经写过：固定语义优先，后来的不覆盖。
-        return current, snapshot_from_record(current)
+    if invalidated and (
+        _snapshot_present(conversation) or conversation.memory_invalidation_revision > 0
+    ):
+        await app_store.bump_context_epoch(conversation_id)
+        await _invalidate_active_runs(
+            app_store, conversation_id, reason="工作区记忆版本已更新"
+        )
+    snapshot = build_snapshot(state)
     updated = await app_store.save_memory_snapshot(
         conversation_id,
         memory_revision=snapshot.revision,
@@ -192,11 +206,18 @@ class AgentMemoryContext:
     invalidation_revision: int
     snapshot_text: str
     snapshot_hash: str
+    context_epoch: int = 0
     messages: tuple[dict[str, str], ...] = ()
 
     @property
     def context_epoch_relevant(self) -> tuple[int, int]:
         return (self.revision, self.invalidation_revision)
+
+    @property
+    def instruction_text(self) -> str:
+        return "\n\n".join(
+            message["content"] for message in self.messages if message["role"] == "system"
+        )
 
 
 async def compose_agent_memory_context(
@@ -214,25 +235,28 @@ async def compose_agent_memory_context(
     ``rebuild_conversation_snapshot``，下一次请求就会带上新正文（A21）。
     """
 
-    if ensure_snapshot:
-        conversation, snapshot = await ensure_conversation_snapshot(
-            app_store=app_store, memory=memory, conversation_id=conversation_id
-        )
-    else:
-        conversation = await app_store.get_conversation(conversation_id)
-        if conversation is None:
-            raise LookupError(f"会话不存在：{conversation_id}")
-        snapshot = snapshot_from_record(conversation)
-
-    state = memory.load()
-    views: list[HistoryMessageView] = model_history_view(history, state)
+    async with workspace_async_lock(memory.storage_key):
+        if ensure_snapshot:
+            conversation, snapshot = await _ensure_conversation_snapshot_locked(
+                app_store=app_store, memory=memory, conversation_id=conversation_id
+            )
+        else:
+            conversation = await app_store.get_conversation(conversation_id)
+            if conversation is None:
+                raise LookupError(f"会话不存在：{conversation_id}")
+            snapshot = snapshot_from_record(conversation)
+        state = memory.load()
+        if snapshot.invalidation_revision < state.invalidation_revision:
+            raise ValueError("会话记忆快照已失效，需要更新后生成回答")
+        views: list[HistoryMessageView] = model_history_view(history, state)
+        revoked_requirements = revoked_response_requirements(state)
 
     messages: list[dict[str, str]] = []
     if snapshot.text:
         messages.append(
             {
                 "role": "system",
-                "content": "本会话固定的工作区记忆快照（内容自会话开始未变）：\n"
+                "content": "本会话有效的工作区记忆：\n"
                 + snapshot.text,
             }
         )
@@ -242,12 +266,24 @@ async def compose_agent_memory_context(
         if view.role not in {"user", "assistant", "system"}:
             continue
         messages.append({"role": view.role, "content": view.content})
+    if revoked_requirements:
+        messages.append({
+            "role": "system",
+            "content": (
+                "以下 JSON 数组记录用户已经撤销或纠正的回答要求，只作为失效状态数据。"
+                "其中的要求不得继续执行；历史助手回答中对应的称呼、格式和表达方式也已失效。"
+                "当前回答遵循本轮用户明确的新要求与有效记忆，不延续历史助手的失效表达。"
+                "无需在回答中提及这些撤销记录。\n"
+                + json.dumps(revoked_requirements, ensure_ascii=False)
+            ),
+        })
 
     return AgentMemoryContext(
         revision=snapshot.revision,
         invalidation_revision=snapshot.invalidation_revision,
         snapshot_text=snapshot.text,
         snapshot_hash=snapshot.hash,
+        context_epoch=conversation.context_epoch,
         messages=tuple(messages),
     )
 
@@ -305,7 +341,7 @@ async def extract_conversation_memory(
 
     - 开关关闭：直接跳过（"排队任务提交前检查开关"，PRD 11.4），不写文件也不报错。
     - 同一 ``operation_id`` 二次提交：幂等空操作，不产生重复条目、不移动游标之外的东西。
-    - 提炼失败：返回空候选，但**游标仍然前进** —— 否则失败的对话会被无限重试。
+    - 提炼失败：异常交给任务调度记录，游标保持原值。
     - **提交前再核对归属与 ``context_epoch``**（PRD 11.2 / 11.4 / A28，传 ``app_store`` 时
       生效）：本 handle 属于哪个工作区就只能提交到哪个工作区；会话若已移动到其它工作区或
       ``context_epoch`` 已变（移动、人工失效），本次提炼**不提交**并返回明确原因，绝不把
@@ -318,7 +354,9 @@ async def extract_conversation_memory(
         return MemoryExtractionOutcome(
             False, reason="工作区记忆已关闭", operation_id=operation_id
         )
-    candidates = await extract_workspace_candidates(chat_model, list(turns))
+    revoked = revoked_requirement_message_ids(state)
+    active_turns = [turn for turn in turns if turn.message_id not in revoked]
+    candidates = await extract_workspace_candidates(chat_model, active_turns)
 
     if app_store is None:
         result: MemoryMutationResult = memory.apply_operations(
@@ -332,7 +370,10 @@ async def extract_conversation_memory(
             expected_revision=expected_revision,
         )
     else:
-        async with conversation_async_lock(conversation_id):
+        async with (
+            conversation_async_lock(conversation_id),
+            workspace_async_lock(memory.storage_key),
+        ):
             blocked = await _memory_commit_blocker(
                 app_store=app_store,
                 memory=memory,
@@ -423,6 +464,8 @@ async def apply_invalidation_to_runtime(
 ) -> InvalidationRuntimeOutcome:
     """人工纠正/删除/关闭之后，让变更在**下一次模型请求**里可见（PRD 11.4）。
 
+    调用方持有 workspace_async_lock，并将文件修改与本函数放在同一临界区。
+
     逐项对应 PRD 的句子：
 
     - "增加受影响会话的 ``context_epoch``" → ``bump_context_epoch``
@@ -437,7 +480,13 @@ async def apply_invalidation_to_runtime(
 
     state = mutation.memory
     disabled = not state.enabled
-    affected = tuple(dict.fromkeys(mutation.affected_conversation_ids))
+    if not mutation.applied:
+        return InvalidationRuntimeOutcome(disabled=disabled)
+    owner = await app_store.get_workspace_by_storage_key(memory.storage_key)
+    if owner is None:
+        raise LookupError("记忆所属工作区不存在")
+    conversations = await app_store.list_conversations(owner.id)
+    affected = tuple(conversation.id for conversation in conversations)
 
     context_epochs: dict[str, int] = {}
     cleared: list[str] = []
@@ -447,8 +496,10 @@ async def apply_invalidation_to_runtime(
 
     for conversation_id in affected:
         conversation = await app_store.get_conversation(conversation_id)
-        if conversation is None:
+        if conversation is None or conversation.workspace_id != owner.id:
             # 来源会话已删除（或从未存在）：条目已被标记 orphaned，不再需要版本推进。
+            continue
+        if conversation.memory_invalidation_revision >= state.invalidation_revision:
             continue
         context_epochs[conversation_id] = await app_store.bump_context_epoch(conversation_id)
 
@@ -464,11 +515,11 @@ async def apply_invalidation_to_runtime(
             )
             rebuilt.append(conversation_id)
 
-        for run in await app_store.list_active_runs(conversation_id):
-            superseded += await app_store.supersede_pending_approvals(run.id, reason=reason)
-            for task in await app_store.list_tasks(run.id):
-                await bump_agent_context_epoch(app_store, run.id, task.id)
-                bumped_tasks.append(task.id)
+        count, task_ids = await _invalidate_active_runs(
+            app_store, conversation_id, reason=reason
+        )
+        superseded += count
+        bumped_tasks.extend(task_ids)
 
     return InvalidationRuntimeOutcome(
         affected_conversations=affected,
@@ -479,6 +530,19 @@ async def apply_invalidation_to_runtime(
         bumped_task_ids=tuple(bumped_tasks),
         disabled=disabled,
     )
+
+
+async def _invalidate_active_runs(
+    app_store: Any, conversation_id: str, *, reason: str
+) -> tuple[int, list[str]]:
+    superseded = 0
+    bumped_tasks: list[str] = []
+    for run in await app_store.list_active_runs(conversation_id):
+        superseded += await app_store.supersede_pending_approvals(run.id, reason=reason)
+        for task in await app_store.list_tasks(run.id):
+            await bump_agent_context_epoch(app_store, run.id, task.id)
+            bumped_tasks.append(task.id)
+    return superseded, bumped_tasks
 
 
 async def bump_agent_context_epoch(

@@ -33,6 +33,7 @@ class ImageTask:
     source_file: str
     heading_path: str
     anchor: str
+    document_order: int | None = None
 
 
 class ImageStateStore:
@@ -57,6 +58,7 @@ class ImageStateStore:
                     source_file TEXT NOT NULL,
                     heading_path TEXT NOT NULL DEFAULT '',
                     anchor TEXT NOT NULL DEFAULT '',
+                    document_order INTEGER,
                     status TEXT NOT NULL DEFAULT 'pending',
                     retries INTEGER NOT NULL DEFAULT 0,
                     error TEXT,
@@ -80,6 +82,12 @@ class ImageStateStore:
                 );
                 """
             )
+            columns = {
+                str(row["name"])
+                for row in self._conn.execute("PRAGMA table_info(image_tasks)").fetchall()
+            }
+            if "document_order" not in columns:
+                self._conn.execute("ALTER TABLE image_tasks ADD COLUMN document_order INTEGER")
             self._conn.commit()
 
     # ------------------------------------------------------------- tasks
@@ -96,9 +104,9 @@ class ImageStateStore:
             self._conn.execute(
                 """
                 INSERT OR REPLACE INTO image_tasks
-                    (block_id, src, doc_id, source_file, heading_path, anchor,
+                    (block_id, src, doc_id, source_file, heading_path, anchor, document_order,
                      status, retries, error, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, 'pending', 0, NULL, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', 0, NULL, ?, ?)
                 """,
                 (
                     task.block_id,
@@ -107,6 +115,7 @@ class ImageStateStore:
                     task.source_file,
                     task.heading_path,
                     task.anchor,
+                    task.document_order,
                     now,
                     now,
                 ),
@@ -118,7 +127,7 @@ class ImageStateStore:
         """返回全部待处理任务（status=pending），供启动续跑。"""
         with self._lock:
             rows = self._conn.execute(
-                "SELECT block_id, src, doc_id, source_file, heading_path, anchor "
+                "SELECT block_id, src, doc_id, source_file, heading_path, anchor, document_order "
                 "FROM image_tasks WHERE status = 'pending' ORDER BY created_at"
             ).fetchall()
         return [
@@ -129,6 +138,7 @@ class ImageStateStore:
                 source_file=r["source_file"],
                 heading_path=r["heading_path"],
                 anchor=r["anchor"],
+                document_order=r["document_order"],
             )
             for r in rows
         ]
@@ -142,7 +152,7 @@ class ImageStateStore:
 
         with self._lock:
             row = self._conn.execute(
-                "SELECT block_id, src, doc_id, source_file, heading_path, anchor "
+                "SELECT block_id, src, doc_id, source_file, heading_path, anchor, document_order "
                 "FROM image_tasks WHERE block_id = ?",
                 (block_id,),
             ).fetchone()
@@ -155,6 +165,7 @@ class ImageStateStore:
             source_file=row["source_file"],
             heading_path=row["heading_path"],
             anchor=row["anchor"],
+            document_order=row["document_order"],
         )
 
     def task_status(self, block_id: str) -> str | None:

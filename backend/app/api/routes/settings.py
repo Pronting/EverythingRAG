@@ -3,6 +3,11 @@
 - 读取返回脱敏视图：API key 只回显 api_key_set + 尾4位 hint，绝不回显明文。
 - 保存为局部更新：请求中省略/为 null 的字段保持原值；api_key 传空串表示清除。
 - 校验：chat base_url 需 http(s)；embed mode=cloud 时 base_url/model 必填。
+- 多供应商模型（providers / model_selection）：``providers`` 为**整表替换**（省略的供应商
+  即被删除），同名 id 的 api_key 省略即保留原值、空串清除；``model_selection`` 决定
+  ``chat``（保存时推导，见 ``SettingsStore.save``）。删掉当前选中的供应商会一并清空
+  ``chat``，不留悬空引用。
+- POST /api/settings/providers/models：按端点拉取可用模型列表（真实出网、经审计、不落盘密钥）。
 - rerank（PRD §6.5/§8.1）：保存与启用分别校验；启用但缺凭证/endpoint/有效档案 -> 422 且
   旧设置不变；生产只接受 validated 档案，验收环境由启动参数开启。
 - POST /api/settings/rerank/test：固定公开文本做真实连接测试，不读知识库、不持久化测试密钥。
@@ -18,6 +23,17 @@ from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, model_validator
 
+from app.core.model_providers import (
+    DEFAULT_PROTOCOL,
+    SUPPORTED_PROTOCOLS,
+    ModelProvider,
+    ModelSelection,
+    ProviderModelEntry,
+    builtin_catalog,
+    find_model,
+    providers_view,
+    selection_view,
+)
 from app.core.settings_store import (
     AppSettings,
     ChatModelConfig,
@@ -30,6 +46,7 @@ from app.core.settings_store import (
     acceptance_mode_enabled,
     get_settings_store,
     validate_rerank_enable,
+    with_resolved_chat,
 )
 from app.generation.prompt_policy import POLICY_VERSION, AnswerPreferences
 from app.retrieval.rerank_provider import (
@@ -109,6 +126,42 @@ class AnswerPreferencesUpdate(BaseModel):
     custom_instructions: str | None = Field(default=None, max_length=4000)
 
 
+class ProviderModelUpdate(BaseModel):
+    """供应商下的一个模型（真实调用名 + 显示名 + 是否多模态）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(min_length=1, max_length=200)
+    name: str | None = Field(default=None, max_length=120)
+    vision: bool = False
+
+
+class ProviderUpdate(BaseModel):
+    """供应商整条状态（``providers`` 为整表替换，因此每条都必须给全）。
+
+    ``api_key``：省略/None = 保留同名 id 的原密钥；空串 = 清除；非空 = 设置。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(min_length=1, max_length=64)
+    name: str = Field(min_length=1, max_length=60)
+    kind: Literal["builtin", "custom"] = "custom"
+    protocol: str | None = Field(default=None, max_length=64)
+    base_url: str | None = Field(default=None, max_length=2048)
+    api_key: SecretStr | None = None
+    models: list[ProviderModelUpdate] = Field(default_factory=list, max_length=200)
+
+
+class ModelSelectionUpdate(BaseModel):
+    """当前选中的供应商 + 模型；两个字段都为空 = 清除选择。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    provider_id: str | None = Field(default=None, max_length=64)
+    model_id: str | None = Field(default=None, max_length=200)
+
+
 class SettingsUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -117,6 +170,9 @@ class SettingsUpdate(BaseModel):
     vision: VisionSettingsUpdate | None = None
     search: SearchSettingsUpdate | None = None
     rerank: RerankSettingsUpdate | None = None
+    providers: list[ProviderUpdate] | None = Field(default=None, max_length=50)
+    model_selection: ModelSelectionUpdate | None = None
+    memory_enabled: bool | None = None
     answer_preferences: AnswerPreferencesUpdate | None = None
     theme: Literal["light", "dark"] | None = None
 
@@ -138,12 +194,12 @@ class SettingsUpdate(BaseModel):
             self.vision.base_url
         ):
             raise ValueError("识图模型 Base URL 需为 http(s) 地址")
-        if (
-            self.embed is not None
-            and self.embed.mode == "cloud"
-            and (not self.embed.base_url or not self.embed.model)
+        if self.embed is not None and self.embed.mode == "cloud" and (
+            not self.embed.base_url or not self.embed.model
         ):
             raise ValueError("云端嵌入需同时提供 Base URL 与模型名")
+        if self.providers is not None:
+            self._validate_providers()
         if self.rerank is not None and self.rerank.endpoint is not None:
             # 保存即校验：完整 HTTPS，或显式配置的本机回环 HTTP（PRD §6.5）
             try:
@@ -151,6 +207,27 @@ class SettingsUpdate(BaseModel):
             except RerankError as exc:
                 raise ValueError(exc.user_message) from exc
         return self
+
+    def _validate_providers(self) -> None:
+        """供应商列表校验：id 唯一、地址为 http(s)、协议在支持表内。"""
+
+        assert self.providers is not None
+        seen: set[str] = set()
+        for provider in self.providers:
+            if provider.id in seen:
+                raise ValueError(f"供应商 id 重复：{provider.id}")
+            seen.add(provider.id)
+            if provider.base_url is not None and provider.base_url.strip() and not _BASE_URL_RE.match(
+                provider.base_url.strip()
+            ):
+                raise ValueError(f"供应商「{provider.name}」的 API 地址需为 http(s) 地址")
+            if provider.protocol is not None and provider.protocol not in SUPPORTED_PROTOCOLS:
+                raise ValueError(f"不支持的 API 协议：{provider.protocol}")
+            model_ids: set[str] = set()
+            for model in provider.models:
+                if model.id.strip() in model_ids:
+                    raise ValueError(f"供应商「{provider.name}」里模型 id 重复：{model.id}")
+                model_ids.add(model.id.strip())
 
 
 @router.get("/api/settings")
@@ -171,9 +248,17 @@ async def update_settings(
     """局部保存设置：覆盖字段更新后原子落盘，返回脱敏视图。
 
     启用重排时先校验档案与凭证（PRD §8.1）：校验失败返回 422 且**不写盘**，旧设置不变。
+    模型选择指向不存在的供应商/模型时同样 422（不猜、不静默回落）。
     """
     current = store.load()
-    updated = _apply(current, update)
+    try:
+        updated = _apply(current, update)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=422, detail={"code": "invalid_model_selection", "message": str(exc)}
+        ) from exc
+    # 选择 -> chat 在保存前完成，保证「返回值」与「落盘值」是同一份（save 内部再推导一次）。
+    updated = with_resolved_chat(updated)
     profiles = RerankProfileStore.for_data_dir(store.data_dir).load()
     if updated.rerank.enabled:
         try:
@@ -207,17 +292,90 @@ def _apply(current: AppSettings, update: SettingsUpdate) -> AppSettings:
     preferences = current.answer_preferences
     if update.answer_preferences is not None:
         preferences = _overlay_preferences(preferences, update.answer_preferences)
+    providers, selection, selection_lost = _overlay_model_providers(current, update)
+    if update.chat is not None and update.model_selection is None:
+        # 显式直接配置 chat（旧客户端 / 脚本）优先于供应商选择：清掉可能过期、与 chat
+        # 不一致的选择，避免「界面上选的是 A、实际发的是 B」。
+        selection = None
+        selection_lost = False
     return AppSettings(
-        chat=chat,
+        chat=ChatModelConfig() if selection_lost else chat,
         embed=embed,
         vision=vision,
         search=search,
         rerank=rerank,
+        providers=providers,
+        model_selection=selection,
+        memory_enabled=(
+            update.memory_enabled if update.memory_enabled is not None else current.memory_enabled
+        ),
         answer_preferences=preferences,
         legacy_system_prompt_backup=current.legacy_system_prompt_backup,
         avatars=current.avatars,  # 保留头像（覆盖式更新不得重置）
         theme=update.theme if update.theme is not None else current.theme,
     )
+
+
+def _overlay_model_providers(
+    current: AppSettings, update: SettingsUpdate
+) -> tuple[list[ModelProvider], ModelSelection | None, bool]:
+    """供应商整表替换 + 选择解析。
+
+    返回 ``(providers, selection, selection_lost)``：``selection_lost=True`` 表示原本选中的
+    供应商/模型在这次更新里被删掉了 —— 调用方据此把 ``chat`` 一起清空，不留悬空引用。
+    """
+
+    providers = current.providers
+    selection = current.model_selection
+    selection_lost = False
+    if update.providers is not None:
+        providers = _replace_providers(current.providers, update.providers)
+        if selection is not None and find_model(providers, selection.provider_id, selection.model_id) is None:
+            selection = None
+            selection_lost = True
+    if update.model_selection is not None:
+        provider_id = (update.model_selection.provider_id or "").strip()
+        model_id = (update.model_selection.model_id or "").strip()
+        if not provider_id and not model_id:
+            selection = None
+        else:
+            if find_model(providers, provider_id, model_id) is None:
+                raise ValueError("所选模型不存在，请先在设置页添加该供应商与模型")
+            selection = ModelSelection(provider_id=provider_id, model_id=model_id)
+            selection_lost = False
+    return providers, selection, selection_lost
+
+
+def _replace_providers(
+    current: list[ModelProvider], updates: list[ProviderUpdate]
+) -> list[ModelProvider]:
+    """整表替换：省略的供应商被删除；同名 id 的 api_key 省略即保留原值。"""
+
+    existing = {provider.id: provider for provider in current}
+    result: list[ModelProvider] = []
+    for item in updates:
+        previous = existing.get(item.id.strip())
+        api_key = previous.api_key if previous is not None else None
+        if item.api_key is not None:
+            api_key = None if item.api_key.get_secret_value() == "" else item.api_key
+        protocol = (item.protocol or "").strip() or (
+            previous.protocol if previous is not None else DEFAULT_PROTOCOL
+        )
+        result.append(
+            ModelProvider(
+                id=item.id,
+                name=item.name,
+                kind=item.kind,
+                protocol=protocol,
+                base_url=item.base_url,
+                api_key=api_key,
+                models=[
+                    ProviderModelEntry(id=model.id, name=model.name, vision=model.vision)
+                    for model in item.models
+                ],
+            )
+        )
+    return result
 
 
 def _overlay_chat(current: ChatModelConfig, update: ChatSettingsUpdate) -> ChatModelConfig:
@@ -345,6 +503,11 @@ def _settings_view(
         "vision": _vision_view(settings.vision),
         "search": _search_view(settings.search),
         "rerank": _rerank_view(settings.rerank, profiles or {}),
+        "providers": providers_view(settings.providers, settings.model_selection),
+        "model_selection": selection_view(settings.providers, settings.model_selection),
+        "model_catalog": builtin_catalog(),
+        "model_protocols": list(SUPPORTED_PROTOCOLS),
+        "memory_enabled": settings.memory_enabled,
         "answer_preferences": settings.answer_preferences.model_dump(),
         "policy": {"version": POLICY_VERSION, "managed": True},
         "avatars": {
@@ -497,6 +660,58 @@ async def test_connection(
     if key is None and url == (config.base_url or "").strip().rstrip("/"):
         key = config.api_key
     return await probe_model(request.kind, url, model, key.get_secret_value() if key is not None else None)
+
+
+class ProviderModelsRequest(BaseModel):
+    """「获取可用模型」请求：可提交未保存的地址与密钥（服务端只用于本次请求，不落盘）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    provider_id: str | None = Field(default=None, max_length=64)
+    base_url: str = Field(max_length=2048)
+    api_key: SecretStr | None = None
+
+
+@router.post("/api/settings/providers/models")
+async def list_provider_models(
+    request: ProviderModelsRequest,
+    store: SettingsStore = Depends(get_settings_store),  # noqa: B008
+) -> dict:
+    """按 OpenAI 兼容 ``GET {base_url}/models`` 拉取可用模型（真实出网，经审计）。
+
+    - 密钥省略时**只在地址与已保存供应商一致时**复用（换地址不复用，与既有连接测试一致）；
+    - 失败只回稳定文案（不泄露响应体与密钥），``success=false`` + 空列表；
+    - 不落盘任何东西：结果由用户确认后再随 ``providers`` 一起保存。
+    """
+
+    from urllib.parse import urlsplit
+
+    from app.generation.connection_test import list_available_models
+
+    url = request.base_url.strip().rstrip("/")
+    try:
+        parsed = urlsplit(url)
+    except ValueError:
+        return {"success": False, "message": "服务地址格式不正确", "models": [], "count": 0}
+    if parsed.scheme not in ("http", "https") or not parsed.hostname:
+        return {"success": False, "message": "请填写有效的服务地址", "models": [], "count": 0}
+    if parsed.username or parsed.password or parsed.query or parsed.fragment:
+        return {
+            "success": False,
+            "message": "服务地址不能包含凭据或查询参数",
+            "models": [],
+            "count": 0,
+        }
+    key = request.api_key
+    if key is None and request.provider_id:
+        saved = next(
+            (item for item in store.load().providers if item.id == request.provider_id), None
+        )
+        if saved is not None and (saved.base_url or "").strip().rstrip("/") == url:
+            key = saved.api_key
+    return await list_available_models(
+        url, key.get_secret_value() if key is not None else None
+    )
 
 
 class RerankTestRequest(BaseModel):

@@ -50,7 +50,6 @@ AGENT_PHASES: Final[tuple[str, ...]] = (
     "plan",
     "research",
     "synthesis",
-    "verification",
     "approval",
     "clarify",
     "publish",
@@ -64,7 +63,6 @@ PHASE_LABELS: Final[dict[str, str]] = {
     "plan": "拆解子问题",
     "research": "执行研究与查资料",
     "synthesis": "汇总候选答案",
-    "verification": "核对候选答案",
     "approval": "等待用户批准联网操作",
     "clarify": "等待用户澄清问题",
     "publish": "保存答案",
@@ -115,7 +113,7 @@ class AgentState(TypedDict, total=False):
     - ``knowledge_revision``：本次运行看到的知识版本（重放复用要带上它）
     - ``decision``：``RouteDecision.model_dump(mode="json")``
     - ``plan``：``Plan.model_dump(mode="json")``
-    - ``requirement_texts``：``{requirement_id: 文本}``，核对与渲染共用
+    - ``requirement_texts``：``{requirement_id: 文本}``，用于研究与答案生成
     - ``task_order``：子任务执行顺序（planner ``levels`` 展平）
     - ``task_results``：``{task_id: ResearchResult.model_dump(mode="json")}``
     - ``completed_task_ids`` / ``failed_task_ids``
@@ -124,9 +122,7 @@ class AgentState(TypedDict, total=False):
     - ``approval_grants``：本轮已授权的同类操作范围（``ApprovalScope`` 的 dump 列表）
     - ``clarification``：``InputRequest.model_dump(mode="json")``；非空即等澄清
     - ``candidate``：``CandidateAnswer.model_dump(mode="json")``
-    - ``verification``：``VerificationResult.model_dump(mode="json")``
     - ``answer_id`` / ``answer_status``：发布结果
-    - ``revisions``：revise / research 回边计数（防死循环，PRD 7.4）
     - ``error``：``AgentError.model_dump(mode="json")``
     - ``outcomes``：节点诊断摘要列表（``NodeOutcome`` 的 dump）
     """
@@ -138,6 +134,7 @@ class AgentState(TypedDict, total=False):
     phase: str
     history: list[dict[str, str]]
     memory_context: str
+    memory_invalidation_revision: int
     knowledge_revision: int
     decision: dict[str, Any]
     plan: dict[str, Any]
@@ -152,10 +149,8 @@ class AgentState(TypedDict, total=False):
     approval_grants: list[dict[str, Any]]
     clarification: dict[str, Any]
     candidate: dict[str, Any]
-    verification: dict[str, Any]
     answer_id: str
     answer_status: str
-    revisions: int
     error: dict[str, Any]
     outcomes: list[dict[str, Any]]
 
@@ -180,6 +175,7 @@ class ResearchState(TypedDict, total=False):
     workspace_id: str
     task: dict[str, Any]
     request: dict[str, Any]
+    context: dict[str, Any]
     rounds: int
     result: dict[str, Any]
     status: str
@@ -211,9 +207,7 @@ class GraphServices(ContractModel):
     research_graph: Any = None
     #: 汇总候选答案：``synthesize(question, results, requirements) -> CandidateAnswer``。
     synthesize: Any = None
-    #: 核对：``await verify(state, candidate) -> VerificationResult``。
-    verify: Any = None
-    #: 发布：``publish(state, candidate, verification) -> AnswerArtifact | None``。
+    #: 发布：``publish(state) -> AnswerArtifact``。
     publish: Any = None
     #: 写子任务状态：``await save_task(state, task_id, status, thread_id, result_ref)``。
     save_task: Any = None
@@ -255,7 +249,6 @@ def new_agent_state(
         "completed_task_ids": [],
         "failed_task_ids": [],
         "approval_grants": [],
-        "revisions": 0,
         "outcomes": [],
     }
     if resume_from:

@@ -7,8 +7,6 @@ app.db、`general_model` 未接、以及本轮的四处）。本文件做两件�
    - `research_graph`：主图 `_invoke` 现编译研究子图 → 每任务 thread 的检查点确实存在；
    - `history_search`：`app/api/run_services.tool_services_for` → `ToolContext` → `search_history`
      走**委托路径**（FTS5），且 `total` / `conversation_count` 为 **null 时不猜数字**；
-   - `model_verifier`：`default_services.verify` 把模型核对器交给 `verify_answer`，且模型
-     返回的问题真的进入 `issues` / 影响 `verdict`；
    - `synthesize(model=)`：候选答案正文来自模型输出（带 `{{ev-…}}` 占位符），模型不守规矩或
      未配置时**回落**确定性渲染。
 2. **装配守卫**：把「应当被填充的 seam」列表化，断言真实装配后没有漏填；并证明守卫**非永真**
@@ -18,7 +16,6 @@ app.db、`general_model` 未接、以及本轮的四处）。本文件做两件�
 
 from __future__ import annotations
 
-import json
 import sqlite3
 from collections.abc import Mapping
 from pathlib import Path
@@ -31,16 +28,11 @@ from app.agent.contracts import (
     AnswerBasis,
     EvidenceSourceType,
     RunStatus,
-    SourceType,
-    VerifierVerdict,
 )
 from app.agent.research import RequirementState
 from app.agent.verification import (
-    CandidateAnswer,
-    ModelVerification,
-    VerificationResult,
+    SynthesisUnavailable,
     synthesize_answer,
-    verify_answer,
 )
 from app.generation.base import ChatChunk
 from tests.fakes_agent import app_store  # noqa: F401 -- 共享夹具（pytest 从模块导入）
@@ -265,94 +257,21 @@ async def test_history_seam_is_none_when_index_unavailable_no_guess(
 
 
 # =====================================================================
-# ③ model_verifier：交给 verify_answer 且影响 issues / verdict
+# ④ synthesize(model=)：正文必须来自模型；不守引用格式时先纠正、仍不符即明确失败
 # =====================================================================
 
 
-def _candidate() -> CandidateAnswer:
-    from app.agent.research import ResearchConclusion
+def _synthesis_request(*, supported: bool = False) -> Any:
+    """候选答案请求。
 
-    return CandidateAnswer(
-        question="限流怎么做",
-        content="限流用令牌桶实现。",
-        run_id="run-1",
-        workspace_id="ws-1",
-        conclusions=[
-            ResearchConclusion(
-                statement="限流用令牌桶实现",
-                evidence_ids=["ev-1"],
-                requirement_ids=["R1"],
-            )
-        ],
-        covered_requirements=["R1"],
-        answer_basis=AnswerBasis.GENERAL,
-        basis_components=[SourceType.KNOWLEDGE],
-    )
+    ``supported=True`` 时证据带 ``supported_requirements`` —— 只有这类证据才会被
+    ``synthesis_model_for_chat`` 当作**可引用**材料，从而触发「必须带占位符」的
+    硬性检查（不带该字段的证据只作为背景材料，见函数内 ``citable`` 的说明）。
+    """
 
-
-async def test_model_verifier_is_wired_and_its_issues_reach_the_verdict(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """真实装配：`default_services.verify` 把模型核对器交给 `verify_answer`（PRD 8.2）。"""
-
-    import inspect
-
-    from app.agent.verification import verify_answer
-
-    source = inspect.getsource(agent_runtime.default_services)
-    assert "model_verifier=model_verifier_for_chat()" in source, "verify 节点必须接线"
-    assert "model=synthesis_model_for_chat()" in source, "synthesize 节点必须接线"
-
-    model = _fake_provider(
-        monkeypatch,
-        json.dumps(
-            {
-                "issues": [
-                    {
-                        "check": "factual_support",
-                        "statement": "限流用令牌桶实现",
-                        "evidence_ids": ["ev-1"],
-                        "requirement_ids": ["R1"],
-                        "required_action": "补充证据或改写陈述",
-                        "severity": "high",
-                    }
-                ],
-                "ambiguity_questions": [],
-                "notes": [],
-            }
-        ),
-    )
-    verifier = agent_runtime.model_verifier_for_chat()
-    assert verifier is not None, "已配置 provider 时模型核对器必须被填充"
-    review = await verifier.review(_verification_request())
-    assert [issue.check.value for issue in review.issues] == ["factual_support"]
-    assert model.calls, "模型必须真的被调用"
-
-    verification = await verify_answer(
-        _candidate(), requirements={"R1": "限流怎么做"}, model_verifier=verifier
-    )
-    assert verification.issues, "模型发现的问题必须进入 issues"
-    assert verification.verdict is VerifierVerdict.REVISE, "必须影响 verdict（不得 pass）"
-
-
-async def test_model_verifier_is_none_when_provider_unconfigured(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """条件性 seam：未配置 provider ⇒ None（只有程序侧八项检查），合法。"""
-
-    _unconfigured_provider(monkeypatch)
-    assert agent_runtime.model_verifier_for_chat() is None
-
-
-# =====================================================================
-# ④ synthesize(model=)：正文来自模型；不守规矩或未配置时回落确定性渲染
-# =====================================================================
-
-
-def _synthesis_request() -> Any:
     from app.agent.contracts import Evidence
     from app.agent.research import ResearchConclusion
-    from app.agent.verification import VerificationRequest
+    from app.agent.verification import SynthesisRequest
 
     evidence = Evidence(
         evidence_id="ev-1",
@@ -363,8 +282,9 @@ def _synthesis_request() -> Any:
         content="限流用令牌桶实现。",
         content_hash="h",
         retrieved_at="2026-09-20T00:00:00Z",
+        supported_requirements=["R1"] if supported else [],
     )
-    return VerificationRequest(
+    return SynthesisRequest(
         question="限流怎么做",
         content="",
         conclusions=[
@@ -386,36 +306,68 @@ def test_synthesis_uses_model_text_when_placeholders_present(
     text = call(_synthesis_request())
     assert text == "限流用令牌桶实现{{ev-1}}。"
     assert model.calls, "模型必须真的被调用"
-    assert "{{ev-1}}" in str(model.calls[0][0]["content"])
+    # 职责/偏好走 system 提示，结论与证据占位符仍在用户消息里（PRD 9.3 固定顺序）
+    assert any(
+        item.get("role") == "user" and "{{ev-1}}" in str(item.get("content") or "")
+        for item in model.calls[0]
+    )
 
 
-def test_synthesis_falls_back_when_model_drops_placeholders(
+def test_synthesis_corrects_once_then_fails_when_model_drops_placeholders(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """模型不守占位符要求 ⇒ 回落确定性渲染（答案必须带来源，PRD 8.3）。"""
+    """模型不守占位符要求 ⇒ 走一次明确的纠正调用；仍不符合即失败（不发布无来源的答案）。
 
-    _fake_provider(monkeypatch, "限流用令牌桶实现，具体见文档。")  # 没有 {{ev-…}}
+    旧实现会回落到确定性拼接稿（``render_candidate``），产出的正文看着像答案、实际是
+    「内部标识符 + 原文首句」的拼接（用户实测缺陷，见 ``synthesis_model_for_chat`` 的
+    说明）。这条兜底路径已按要求删除，因此这里断言新的正确行为：两次都不给占位符时
+    明确抛 ``SynthesisUnavailable``，绝不用拼接稿冒充回答。
+    """
+
+    _fake_provider(monkeypatch, "限流用令牌桶实现，具体见文档。")  # 两次都缺 {{ev-…}}
     call = agent_runtime.synthesis_model_for_chat()
     assert call is not None
-    text = call(_synthesis_request())
-    assert text != "限流用令牌桶实现，具体见文档。"
-    assert "{{ev-1}}" in text, "回落必须带可引用来源占位符"
+    with pytest.raises(SynthesisUnavailable) as failure:
+        call(_synthesis_request(supported=True))
+    assert "两次" in str(failure.value), "失败原因必须点明「两次都没有按引用格式输出」"
 
     _unconfigured_provider(monkeypatch)
-    assert agent_runtime.synthesis_model_for_chat() is None, "未配置 ⇒ 确定性渲染兜底"
+    assert agent_runtime.synthesis_model_for_chat() is None, "未配置 ⇒ 没有可用模型，明确失败"
 
 
-def test_deterministic_render_is_kept_as_fallback() -> None:
-    """无模型时 `synthesize_answer` 仍产出带占位符的结构化正文（兜底不丢）。"""
+def test_synthesis_correction_gives_up_after_two_attempts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """两次都拿不到占位符 ⇒ ``SynthesisUnavailable``（不发布无来源的答案）。"""
 
-    candidate = synthesize_answer(
-        "限流怎么做",
-        [],
-        requirements={"R1": "限流怎么做"},
-        run_id="run-1",
-        workspace_id="ws-1",
+    calls: list[int] = []
+
+    class _Model:
+        async def stream_chat(self, messages, **_kwargs):  # type: ignore[no-untyped-def]
+            calls.append(len(messages))
+            yield ChatChunk(kind="content", text="限流用令牌桶实现，具体见文档。")
+
+    monkeypatch.setattr(
+        "app.generation.providers.create_chat_model_from_config", lambda _config: _Model()
     )
-    assert candidate.answer_basis is AnswerBasis.INSUFFICIENT
+    call = agent_runtime.synthesis_model_for_chat()
+    assert call is not None
+    with pytest.raises(SynthesisUnavailable):
+        call(_synthesis_request(supported=True))
+    assert len(calls) == 2, "只允许一次纠正调用，之后明确失败"
+
+
+def test_synthesis_without_model_fails_instead_of_rendering_deterministically() -> None:
+    """无模型时 `synthesize_answer` 明确失败，不再产出确定性拼接稿。"""
+
+    with pytest.raises(SynthesisUnavailable):
+        synthesize_answer(
+            "限流怎么做",
+            [],
+            requirements={"R1": "限流怎么做"},
+            run_id="run-1",
+            workspace_id="ws-1",
+        )
 
 
 # =====================================================================
@@ -457,7 +409,7 @@ def unfilled_seams(
             missing.append(f"{key}(键缺失)")
         elif configured.get(key) and services.get(key) is None:
             missing.append(f"{key}(已配置却为 None)")
-    for key in ("general_model", "model_verifier", "synthesis_model"):
+    for key in ("general_model", "synthesis_model"):
         if configured.get(key) and services.get(key) is None:
             missing.append(f"{key}(已配置却为 None)")
     return missing
@@ -491,12 +443,11 @@ def test_assembly_guard_detects_unfilled_seams(
     services.update(
         {
             "general_model": agent_runtime.general_model_for_chat(),
-            "model_verifier": agent_runtime.model_verifier_for_chat(),
             "synthesis_model": agent_runtime.synthesis_model_for_chat(),
         }
     )
     configured = dict.fromkeys(
-        [*CONDITIONAL_TOOL_SEAMS, "general_model", "model_verifier", "synthesis_model"],
+        [*CONDITIONAL_TOOL_SEAMS, "general_model", "synthesis_model"],
         True,
     )
     assert unfilled_seams(services, configured=configured) == []
@@ -596,7 +547,6 @@ def test_conditionally_unconfigured_seams_are_legitimately_none(
     settings.data_dir.mkdir(parents=True, exist_ok=True)
     _unconfigured_provider(monkeypatch)
     assert agent_runtime.general_model_for_chat() is None
-    assert agent_runtime.model_verifier_for_chat() is None
     assert agent_runtime.synthesis_model_for_chat() is None
     # 未配置时守卫不得报「已配置却为 None」；但**缺键**仍要报（那是装配缺陷）
     missing = unfilled_seams({}, configured=dict.fromkeys(CONDITIONAL_TOOL_SEAMS, False))
@@ -604,31 +554,10 @@ def test_conditionally_unconfigured_seams_are_legitimately_none(
     assert all("已配置却为 None" not in item for item in missing)
 
 
-async def test_verify_answer_with_model_verifier_is_the_real_protocol(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """`verify_answer(model_verifier=…)` 走的是真实协议（async review → issues）。"""
-
-    class Verifier:
-        def __init__(self) -> None:
-            self.calls = 0
-
-        async def review(self, request: Any) -> ModelVerification:
-            self.calls += 1
-            return ModelVerification(notes=["ok"])
-
-    verifier = Verifier()
-    verification: VerificationResult = await verify_answer(
-        _candidate(), requirements={"R1": "限流怎么做"}, model_verifier=verifier
-    )
-    assert verifier.calls == 1
-    assert verification is not None
-
-
-async def test_default_services_synthesize_and_verify_use_the_chat_model(
+async def test_default_services_synthesize_uses_the_chat_model(
     app_store, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """真实 `default_services`：synthesize 的正文来自模型、verify 拿到模型核对器。"""
+    """检查正文生成与引用编号的连接。"""
 
     from app.agent.contracts import AgentKind, TaskStatus
     from app.agent.research import (
@@ -677,7 +606,7 @@ async def test_default_services_synthesize_and_verify_use_the_chat_model(
                 next_action=ResearchNextAction.FINALIZE,
             ),
         )
-        candidate = services.synthesize(
+        candidate = await services.synthesize(
             {"question": "限流怎么做", "requirement_texts": {"R1": "限流怎么做"}},
             [result.model_dump(mode="json")],
             {"R1": "限流怎么做"},
@@ -687,42 +616,5 @@ async def test_default_services_synthesize_and_verify_use_the_chat_model(
         assert "{{ev-1}}" not in candidate.content
         assert model.calls, "真实装配路径必须调用注入的对话模型"
 
-        # verify 节点拿到模型核对器：模型报出问题 ⇒ verdict 不得是 pass
-        model.text = json.dumps(
-            {
-                "issues": [
-                    {
-                        "check": "factual_support",
-                        "statement": "限流用令牌桶实现",
-                        "evidence_ids": ["ev-1"],
-                        "requirement_ids": ["R1"],
-                        "required_action": "补充证据",
-                        "severity": "high",
-                    }
-                ]
-            }
-        )
-        verification = await services.verify(
-            {
-                "candidate": candidate.model_dump(mode="json"),
-                "verification": {},
-                "requirement_texts": {"R1": "限流怎么做"},
-            }
-        )
-        assert verification.issues, "模型核对的问题必须进入 issues"
-        assert verification.verdict is not VerifierVerdict.PASS
     finally:
         await manager.aclose()
-
-
-def _verification_request() -> Any:
-    from app.agent.verification import VerificationRequest
-
-    request = _synthesis_request()
-    return VerificationRequest(
-        question=request.question,
-        content="限流用令牌桶实现。",
-        conclusions=request.conclusions,
-        evidence=request.evidence,
-        requirements=request.requirements,
-    )

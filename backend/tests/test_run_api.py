@@ -78,11 +78,11 @@ async def test_create_run_persists_message_and_task(manager, client) -> None:
 
 
 async def test_create_run_defaults_to_ask_permission(manager, client) -> None:
-    """默认权限模式为 ask（PRD 10.1 / 18.1）。"""
+    """默认权限模式为 ask、默认思考强度为 off（PRD 10.1 / 18.1）。"""
 
     body = await _create(client)
     assert body["permission_mode"] == "ask"
-    assert body["reasoning_level"] == "high"
+    assert body["reasoning_level"] == "off"
     await manager.wait(body["run_id"])
 
 

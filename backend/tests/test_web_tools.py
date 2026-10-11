@@ -146,6 +146,7 @@ def _tool_context(
     retriever: Any = None,
     embedder: Any = None,
     redactor: Any = None,
+    web_budget: Any = None,
 ) -> ToolContext:
     return ToolContext(
         workspace=workspace,
@@ -155,6 +156,7 @@ def _tool_context(
         retriever=retriever,
         embedder=embedder,
         redactor=redactor,
+        web_budget=web_budget,
     )
 
 

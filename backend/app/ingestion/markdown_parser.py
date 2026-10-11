@@ -560,6 +560,9 @@ def _build_blocks(tokens: list[Token], has_frontmatter: bool) -> tuple[MDBlock, 
                 else:
                     blocks.append(MDBlock(kind="table", text=" | ".join(table_row)))
         elif t in ("bullet_list_close", "ordered_list_close", "blockquote_close", "table_close"):
+            if t == "table_close" and table_row_count == 1 and any(table_header):
+                # 只有表头的表格也可能承载正文信息。
+                blocks.append(MDBlock(kind="table", text="；".join(cell for cell in table_header if cell)))
             if context:
                 context.pop()
         i += 1

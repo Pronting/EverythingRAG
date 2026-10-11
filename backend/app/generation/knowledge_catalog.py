@@ -177,12 +177,24 @@ def build_knowledge_overview(vectorstore: Any) -> KnowledgeOverview:
 _PRIVATE_TOPIC_RE = re.compile(r"^(?:[a-z]:|~|users|home)$", re.IGNORECASE)
 
 
-def _public_source_parts(raw_source: str, metadata: Mapping[str, Any]) -> tuple[str, str]:
-    """只返回 basename 与直接父主题；盘符、用户目录和完整路径不会向外暴露。"""
+def _public_source_parts(
+    raw_source: str,
+    metadata: Mapping[str, Any],
+    *,
+    strip_extension: bool = False,
+) -> tuple[str, str]:
+    """只返回 basename 与直接父主题；盘符、用户目录和完整路径不会向外暴露。
+
+    ``strip_extension=True``（目录用）再去掉 ``.md`` 一类来源后缀：目录标题是**匹配
+    与提示**用的名字，不是文件清单。保留后缀会让「整串等于标题」这条线索永远无法成立
+    （用户不会在提问里打 ``.md``），等于把最可靠的一条线索作废。
+    """
 
     normalized = raw_source.replace("\\", "/")
     parts = [part for part in PurePosixPath(normalized).parts if part not in ("/", ".", "..")]
     name = _clean_label(parts[-1] if parts else raw_source, fallback="未命名文档")
+    if strip_extension:
+        name = _DOCUMENT_EXTENSION_RE.sub("", name) or name
     topic = ""
     if len(parts) >= 2 and not _PRIVATE_TOPIC_RE.match(parts[-2].strip()):
         topic = _clean_label(parts[-2], fallback="")
@@ -236,6 +248,85 @@ _SENTENCE_SPLIT_RE = re.compile(r"[。！？!?；;\n]+")
 _ASCII_TOKEN_RE = re.compile(r"[a-z0-9_]+")
 _CJK_RUN_RE = re.compile(r"[\u4e00-\u9fff]+")
 _WS_RE = re.compile(r"\s+")
+#: 目录文档标题要去掉的来源文件后缀（标题用于匹配与提示，不是文件清单）。
+_DOCUMENT_EXTENSION_RE = re.compile(r"\.(?:md|markdown|mdx|txt)$", re.IGNORECASE)
+#: 「标签整体出现在问题里」这一档（800/700）要求的最小标签长度：1–2 字的泛化标题
+#: （「方案」「总结」）本身没有区分度，授权「本区有这份资料」的依据不成立。
+_MIN_SUBSTRING_LABEL_CHARS = 3
+#: 提问句式标签：聊天导出里常出现把提问句当小节的标题（「怎么做」）。它们**不指代
+#: 任何资料主题**，因此即便长度够也不许走 800/700 档（否则「X 怎么做」会凭空获得
+#: 「本区有资料」的授权）。真实主题（「召回率」「实体链接」）不在此列。
+_LOW_INFORMATION_LABELS: Final[frozenset[str]] = frozenset(
+    {
+        "是什么",
+        "什么是",
+        "为什么",
+        "为何",
+        "怎么",
+        "怎么样",
+        "怎么做",
+        "怎么实现",
+        "如何",
+        "如何做",
+        "如何实现",
+        "怎样",
+        "哪些",
+        "有哪些",
+        "多少",
+        "什么",
+    }
+)
+#: 部分标题命中的最小公共中文串长度（问题与标题/小节标题的连续公共子串）。
+_MIN_SHARED_RUN_CHARS = 4
+#: 部分标题命中的基准分（= 路由的线索门槛，见 ``agent/routing.py::CATALOG_CLUE_MIN_SCORE``，
+#: 两处必须保持一致：低于门槛的命中不会授权 R1）。
+_PARTIAL_TITLE_CLUE_SCORE = 400
+#: 覆盖强度加成上限（公共中文二元组个数）：整体仍低于「整串等于标题」的 500 档。
+_MAX_CLUE_COVERAGE_BONUS = 30
+#: 线索排序门槛：非术语条目落在 ``[门槛, 强命中)`` 这一带时属于「定位线索」，在 ``search``
+#: 里排在**其它非线索条目**之前。为什么需要：术语带 +50 加成且数量远超文档/标题，会把
+#: 真正的 400 分文档线索挤出调用方的 top-K（``IntentAgent.enrich`` 只取 6 条 ⇒ 该走知识库
+#: 的问题落回通用知识；实测「物化视图新鲜度怎么保证」）。
+_CLUE_RANK_MIN_SCORE = 400
+#: 强命中下限（精确词 / 别名 / 整串等于标题）：这一档**不动**原有排序语义（分数高者先，
+#: 同分按 kind），避免把「精确术语命中」挤到标题条目之后（``lookup_catalog`` 的既有约定）。
+_STRONG_MATCH_SCORE = 500
+
+
+def _has_shared_cjk_run(query_norm: str, label_norm: str, size: int) -> bool:
+    """问题与标签是否存在长度 ≥ ``size`` 的**连续公共中文串**（部分标题命中）。
+
+    用连续串而不是词元集合：词元（bigram/trigram）重叠在长标题上极易偶然成立，
+    而「≥4 个连续汉字同时出现在问题与标题里」几乎只在用户真的点到某份资料时发生
+    （「货拉拉的记忆系统…」↔「货拉拉大模型记忆系统（一）…」的公共串「记忆系统」）。
+    """
+
+    if not query_norm or not label_norm or size <= 0:
+        return False
+    for run in _CJK_RUN_RE.findall(query_norm):
+        if len(run) < size:
+            continue
+        for start in range(len(run) - size + 1):
+            if run[start : start + size] in label_norm:
+                return True
+    return False
+
+
+def _shared_cjk_bigram_count(query_norm: str, label_norm: str) -> int:
+    """问题与标签之间**不同**的公共中文二元组数量 —— 部分标题命中的强度。
+
+    为什么需要强度而不是「命中/不命中」：同一个问题常常与**多份**资料都有 ≥4 字公共串
+    （「记忆系统」这种领域词同时出现在若干标题/小节里）。命中的公共二元组越多，说明用户
+    点的越可能是这份资料（例：「货拉拉的记忆系统…」与目标标题有 货拉/拉拉/记忆/忆系/系统
+    五个，与另一篇只有 记忆/忆系/系统 三个）—— 用它把**真正被问到的那份**排到最前。
+    """
+
+    if not query_norm or not label_norm:
+        return 0
+    grams: set[str] = set()
+    for run in _CJK_RUN_RE.findall(query_norm):
+        grams.update(run[start : start + 2] for start in range(len(run) - 1))
+    return sum(1 for gram in grams if gram in label_norm)
 
 
 def _now_iso() -> str:
@@ -654,8 +745,12 @@ class KnowledgeCatalog(_CatalogModel):
     ) -> CatalogQueryResult:
         """精确词 / 别名 / 全文检索统一入口（``lookup_catalog`` 直接消费）。
 
-        - 精确命中等分高于别名命中，别名又高于标题、目录全文；
-        - 同分按 ``kind`` → ``document_id`` → ``heading_path`` 稳定排序；
+        - 排序分三档：**强命中**（≥500：精确词 / 别名 / 整串等于标题）→ **定位线索**
+          （非术语、400 ≤ 分 < 500：文档或小节的**部分**标题命中）→ 其余；档内按分数、
+          再按 ``kind`` → ``document_id`` → ``heading_path`` 稳定排序。
+          中间那一档单独提前，是因为术语带 +50 加成且数量远超文档/标题，会把真正的 400 分
+          文档线索挤出调用方的 top-K（``IntentAgent.enrich`` 只取 6 条 ⇒ 本该走知识库的
+          问题落回通用知识）；强命中档保持原语义，精确术语命中仍排在小节条目之前。
         - ``next_cursor`` 为 ``None`` 表示已到末页。
         """
 
@@ -666,16 +761,23 @@ class KnowledgeCatalog(_CatalogModel):
         wanted_kinds = {kind for kind in (kinds or ()) if kind in {"term", "heading", "document"}}
         query_tokens = _tokens(query)
 
-        scored: list[tuple[int, int, str, str, str, dict[str, Any]]] = []
+        scored: list[tuple[int, int, int, str, str, str, dict[str, Any]]] = []
         for entry in self._index:
             if wanted_kinds and entry["kind"] not in wanted_kinds:
                 continue
             score = self._score_entry(entry, normalized, query_tokens)
             if score <= 0:
                 continue
+            if score >= _STRONG_MATCH_SCORE:
+                band = 0
+            elif entry["kind"] != "term" and score >= _CLUE_RANK_MIN_SCORE:
+                band = 1
+            else:
+                band = 2
             kind_rank = {"term": 0, "heading": 1, "document": 2}[entry["kind"]]
             scored.append(
                 (
+                    band,
                     -score,
                     kind_rank,
                     entry["document_id"],
@@ -684,21 +786,21 @@ class KnowledgeCatalog(_CatalogModel):
                     entry,
                 )
             )
-        scored.sort(key=lambda item: item[:5])
+        scored.sort(key=lambda item: item[:6])
         total = len(scored)
         safe_limit = max(1, min(int(limit), CATALOG_MAX_LIMIT))
         start = max(0, int(cursor))
         matches = [
             CatalogMatch(
-                kind=item[5]["kind"],
-                document_id=item[5]["document_id"],
-                title=item[5]["title"],
-                heading_path=item[5]["heading_path"],
-                snippet=_display_text(item[5]["snippet"]),
-                score=-item[0],
-                matched_on=item[5]["matched_on"],
-                definition_unknown=bool(item[5]["definition_unknown"]),
-                aliases=list(item[5]["aliases"]),
+                kind=item[6]["kind"],
+                document_id=item[6]["document_id"],
+                title=item[6]["title"],
+                heading_path=item[6]["heading_path"],
+                snippet=_display_text(item[6]["snippet"]),
+                score=-item[1],
+                matched_on=item[6]["matched_on"],
+                definition_unknown=bool(item[6]["definition_unknown"]),
+                aliases=list(item[6]["aliases"]),
             )
             for item in scored[start : start + safe_limit]
         ]
@@ -714,19 +816,72 @@ class KnowledgeCatalog(_CatalogModel):
         alias_norms = [normalize_catalog_text(alias) for alias in entry.get("aliases", ())]
         heading_norm = normalize_catalog_text(entry["heading_path"])
         title_norm = normalize_catalog_text(entry.get("title", ""))
+        is_document = entry["kind"] == "document"
+        # 「某个标签整体出现在问题里」这一档（800/700）只对**有区分度的标签**成立：
+        # 1–2 字的泛化标题（「方案」「问题」「总结」）本来就出现在大量提问里，让它拿到
+        # 800 分就会把「…那种方案」这类泛指问题误判成「本工作区有这份资料」
+        # （真实缺陷：两个无关文档里的小节标题「方案」曾单独授权 R1）。文档标题天然
+        # 有区分度（整串等于标题名），因此不受这条限制。
+        label_long_enough = (
+            is_document
+            or len(term_norm) >= _MIN_SUBSTRING_LABEL_CHARS
+        ) and term_norm not in _LOW_INFORMATION_LABELS
         score = 0
         if term_norm and term_norm == normalized_query:
             score = 1_000
         elif any(alias and alias == normalized_query for alias in alias_norms):
             score = 900
-        elif term_norm and len(normalized_query) >= 2 and term_norm in normalized_query:
+        elif (
+            term_norm
+            and len(normalized_query) >= 2
+            and term_norm in normalized_query
+            and label_long_enough
+        ):
             score = 800
-        elif any(alias and len(alias) >= 2 and alias in normalized_query for alias in alias_norms):
+        elif any(
+            alias and len(alias) >= _MIN_SUBSTRING_LABEL_CHARS and alias in normalized_query
+            for alias in alias_norms
+        ):
             score = 700
         elif title_norm and (title_norm in normalized_query or normalized_query in title_norm):
             score = 500
-        elif heading_norm and (heading_norm in normalized_query or normalized_query in heading_norm):
+        elif (
+            heading_norm
+            and (heading_norm in normalized_query or normalized_query in heading_norm)
+            and (
+                is_document
+                or (
+                    len(heading_norm) >= _MIN_SUBSTRING_LABEL_CHARS
+                    and heading_norm not in _LOW_INFORMATION_LABELS
+                )
+            )
+        ):
             score = 400
+        elif (
+            _has_shared_cjk_run(
+                normalized_query,
+                title_norm if is_document else (term_norm or heading_norm),
+                _MIN_SHARED_RUN_CHARS,
+            )
+            and (
+                is_document
+                or (term_norm or heading_norm) not in _LOW_INFORMATION_LABELS
+            )
+        ):
+            # 「用户点到了这份资料的标题/小节」的部分命中：问题与文档标题（或小节标题）
+            # 存在 ≥4 字的公共中文串（如「记忆系统」「从提取到召回」）。整串包含太严
+            # （自然提问几乎不会原样打出全标题），只看词元重叠又太松（子串级噪音会盖过
+            # 它），这条介于两者之间，且**只有 >=4 字的连续公共串**才算 —— 2 字泛化词
+            # （「方案」）永远够不到。
+            #
+            # 得分不是常数：同一问题常与多份资料都有 4 字公共串（「记忆系统」这种领域词
+            # 出现在多篇标题/小节里），用一个**覆盖强度**（公共中文二元组个数，封顶 30）
+            # 把真正被问到的那份排到最前 —— 否则先按 kind_rank 排，文档级线索会被另一篇
+            # 资料的小节标题挤到第 2/3 位（真实缺陷：R1 的证据指向了别篇的小节）。
+            label = title_norm if is_document else (term_norm or heading_norm)
+            score = _PARTIAL_TITLE_CLUE_SCORE + min(
+                _shared_cjk_bigram_count(normalized_query, label), _MAX_CLUE_COVERAGE_BONUS
+            )
         elif any(token and token in heading_norm for token in query_tokens):
             score = 300
         if score == 0:
@@ -811,7 +966,7 @@ def build_knowledge_catalog(
         document_id = _document_id_for(raw_source)
         entry = documents.get(document_id)
         if entry is None:
-            title, topic = _public_source_parts(raw_source, meta)
+            title, topic = _public_source_parts(raw_source, meta, strip_extension=True)
             entry = {
                 "document_id": document_id,
                 "title": title,
@@ -1118,23 +1273,28 @@ def catalog_cache_key(
     index_fingerprint: str | None = None,
     generator_version: str = CATALOG_GENERATOR_VERSION,
 ) -> str:
-    """缓存键 = workspace_id + knowledge_revision + 索引指纹 + 生成器版本（PRD 5.3.4）。"""
+    """缓存键 = workspace_id + knowledge_revision + 索引指纹 + 生成器版本（PRD 5.3.4）。
+
+    目录身份用**共享数据根**（D-KB：知识库全局共享，语料只有一份），避免同一
+    ``workspace_id`` 在不同数据目录下互相命中。
+    """
 
     fingerprint = index_fingerprint or context.storage_key
     key = context.index_cache_key(
         index_fingerprint=fingerprint,
         generator_version=f"{CATALOG_SCHEMA_VERSION}+{generator_version}",
     )
-    root = getattr(getattr(context, "paths", None), "root_dir", "")
+    root = getattr(getattr(context, "paths", None), "data_dir", "")
     return f"{root}|{key}|ws={context.workspace_id}"
 
 
 def catalog_for_area(area: Any, *, max_terms: int = CATALOG_MAX_TERMS) -> KnowledgeCatalog:
-    """返回本区知识目录（按 :func:`catalog_cache_key` 缓存）。
+    """返回**共享知识库**的目录（按 :func:`catalog_cache_key` 缓存）。
 
     ``area`` 是 ``app.retrieval.workspace_retrieval.WorkspaceKnowledgeArea``
     （鸭子类型：``context`` / ``index_fingerprint`` / ``blocks()``）。导入、同步、删除
-    提交后 ``knowledge_revision`` 递增，旧键自然失效并重建（PRD 5.3.4）。
+    提交后 ``knowledge_revision`` 递增（D-KB：**所有**工作区一起递增），旧键自然失效
+    并重建（PRD 5.3.4）。
     """
 
     context = area.context

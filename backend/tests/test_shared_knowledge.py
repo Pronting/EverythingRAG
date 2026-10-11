@@ -1,14 +1,15 @@
-"""工作区知识隔离（PRD 5.1–5.3、5.4；A06 / A07 / A08，T01）。
+"""全局共享知识库（D-KB，2026-09-20 用户决策：取消「按工作区划分知识库」）。
 
-A06：两个工作区各自含**同名**真实文档（都叫 ``notes.md``）时，dense、BM25、章节补充、
-浏览（目录）与统计各自只读取本区。
+取代原 ``test_workspace_isolation.py`` 的 A06/A07/A08：那三条验收的前提是「知识按区
+隔离」，本文件按新决策把同一批不变量**反过来**钉死：
 
-A07：用其它工作区的图片 hash 或任务 ID 取原图/任务状态必须 404。
+- 所有工作区解析出的知识路径相同（只有一份语料）；
+- 一区写入的块、图片、指纹，其它区**都能看到**（dense / BM25 / 章节 / 概览 / 统计）；
+- 知识版本递增**波及所有工作区**（否则邻区的索引缓存不会失效）；
+- 工作区私有件（记忆 / 检查点 / 工件 / jieba 缓存）仍按区隔离，不得串。
 
-A08：导入过程中切换工作区，任务仍写入**创建时**的工作区。
-
-这些用例刻意使用**真实 Chroma**（``create_vector_store`` + 两个独立 persist 目录），
-而不是计数替身 —— 串读问题只有在真实 collection 上才会暴露。
+这些用例刻意使用**真实 Chroma**（``create_vector_store`` + 共享 persist 目录），
+而不是计数替身 —— 句柄复用与缓存键问题只有在真实 collection 上才会暴露。
 """
 
 from __future__ import annotations
@@ -38,18 +39,19 @@ from app.retrieval.workspace_retrieval import (
 from app.vectorstore.chroma_store import create_vector_store
 from tests.fakes import FakeEmbedder
 
-#: 两区共用的文件名 —— A06 的关键前提是「同名不同内容」。
+#: 两区共用的文件名。
 SHARED_FILE_NAME = "notes.md"
-#: 只在 A 区出现的标记，用来断言「B 区任何路径都不会吐回 A 区的正文」。
+#: 只在 A 区导入的标记 —— 共享后 B 区**必须**也能检索到它。
 MARKER_A = "ALPHA-ONLY-内部风控方案"
-MARKER_B = "BETA-ONLY-营销投放方案"
 
 
-def _contexts(tmp_path: Path, count: int = 2) -> tuple[Any, list[Any], list[Any]]:
+def _contexts(tmp_path: Path, count: int = 2) -> list[Any]:
+    """在 ``tmp_path`` 下造 ``count`` 个真实工作区上下文。"""
+
     store = WorkspaceStore(tmp_path)
     factory = WorkspaceContextFactory(tmp_path, store)
     workspaces = [store.create(name) for name in ("甲区", "乙区", "丙区")[:count]]
-    return factory, [store], [factory.resolve(workspace.id) for workspace in workspaces]
+    return [factory.resolve(workspace.id) for workspace in workspaces]
 
 
 def _seed_area(
@@ -60,7 +62,7 @@ def _seed_area(
     vector: list[float],
     heading: str,
 ) -> Any:
-    """在**本区** chroma 目录写一个真实 collection，返回本区检索面。"""
+    """往**共享** collection 写一个真实块，返回检索面（共享向量库）。"""
 
     embedder = FakeEmbedder()
     context.chroma_dir.mkdir(parents=True, exist_ok=True)
@@ -99,10 +101,12 @@ def _clean_area_cache() -> None:
     deps.reset_workspace_scoped_caches()
 
 
-def test_a06_two_workspaces_same_file_name_stay_isolated(tmp_path: Path) -> None:
-    """A06：dense / BM25 / 章节补充 / 浏览 / 统计分别只读本区。"""
+def test_a06_knowledge_written_in_one_workspace_is_visible_in_another(
+    tmp_path: Path,
+) -> None:
+    """A06（D-KB）：甲区导入的块，乙区的 dense / BM25 / 统计 / 浏览都能看到。"""
 
-    _factory, _stores, (context_a, context_b) = _contexts(tmp_path)
+    context_a, context_b = _contexts(tmp_path)
     area_a = _seed_area(
         context_a,
         block_id="block-a",
@@ -110,48 +114,35 @@ def test_a06_two_workspaces_same_file_name_stay_isolated(tmp_path: Path) -> None
         vector=[1.0, 0.0, 0.0, 0.0],
         heading="风控/延迟",
     )
-    area_b = _seed_area(
+    area_b = workspace_knowledge_area(
         context_b,
-        block_id="block-b",
-        text=f"# 营销\n\n{MARKER_B} 的投放预算与转化率。",
-        vector=[0.0, 1.0, 0.0, 0.0],
-        heading="营销/预算",
+        vector_store=area_a.vector_store,  # 同一份语料 ⇒ 同一个句柄
+        index_fingerprint=area_a.index_fingerprint,
     )
 
-    # --- 统计（PRD 5.3.2 / 5.4：知识概览按区统计）---
-    assert area_a.stats() == {"files": 1, "chunks": 1, "images": 0}
+    # 知识路径相同、块可见
+    assert context_a.chroma_dir == context_b.chroma_dir
+    assert context_a.documents_dir == context_b.documents_dir
+    assert [block[0] for block in area_b.blocks()] == ["block-a"]
     assert area_b.stats() == {"files": 1, "chunks": 1, "images": 0}
+    assert area_b.overview().representative_documents[0].name == SHARED_FILE_NAME
 
-    # --- 浏览：本区块与目录 ---
-    assert [block[0] for block in area_a.blocks()] == ["block-a"]
-    assert [block[0] for block in area_b.blocks()] == ["block-b"]
-    assert area_a.overview().file_count == 1
-    assert area_a.overview().representative_documents[0].name == SHARED_FILE_NAME
+    # 乙区检索到的是甲区写进去的正文（共享的唯一语料）
+    chunks = area_b.retriever.retrieve("风控 延迟", [1.0, 0.0, 0.0, 0.0])
+    assert chunks, "共享语料必须能被任何工作区检索到"
+    assert {chunk.block_id for chunk in chunks} == {"block-a"}
+    assert MARKER_A in f"{chunks[0].text}{chunks[0].context_text or ''}"
 
-    # --- dense + BM25 + 章节补充：同一批查询在两个区互不可见 ---
-    for area, own_id, own_vector, own_kind in (
-        (area_a, "block-a", [1.0, 0.0, 0.0, 0.0], "风控"),
-        (area_b, "block-b", [0.0, 1.0, 0.0, 0.0], "营销"),
-    ):
-        chunks = area.retriever.retrieve(own_kind, own_vector)
-        assert chunks, "本区自有文档必须能被检索到"
-        ids = {chunk.block_id for chunk in chunks}
-        assert own_id in ids
-        # 关键断言：本区检索结果里**永远**不出现另一个区的块
-        assert ids <= {own_id}
-
-        for chunk in chunks:
-            haystack = f"{chunk.text}{chunk.context_text or ''}"
-            other_marker = MARKER_B if own_id == "block-a" else MARKER_A
-            assert other_marker not in haystack
-
-    # --- 缓存键含 workspace_id（PRD 5.3.3）---
-    assert area_a.cache_key != area_b.cache_key
-    assert area_a.context.workspace_id != area_b.context.workspace_id
+    # 向量句柄键不含工作区 ⇒ 两个区拿到同一个键（同一个句柄）
+    assert context_a.vector_cache_key(
+        provider_digest="p", collection_identity="chunks__m__v7"
+    ) == context_b.vector_cache_key(
+        provider_digest="p", collection_identity="chunks__m__v7"
+    )
 
 
 def test_a06_index_cache_key_changes_with_knowledge_revision(tmp_path: Path) -> None:
-    """PRD 5.3.4 / 5.3.6：本区知识版本递增后必须换键（否则继续读旧索引）。"""
+    """PRD 5.3.4 / 5.3.6：知识版本递增后必须换键（否则继续读旧索引）。"""
 
     store = WorkspaceStore(tmp_path)
     factory = WorkspaceContextFactory(tmp_path, store)
@@ -186,8 +177,8 @@ def test_a06_index_cache_key_changes_with_knowledge_revision(tmp_path: Path) -> 
     assert workspace_area_cache_size() == 2
 
 
-def test_a07_cross_workspace_image_hash_and_task_id_return_404(tmp_path: Path) -> None:
-    """A07：原图与任务身份同时校验工作区；跨区 hash / 任务 ID 一律 404。"""
+def test_a07_image_and_task_are_visible_from_every_workspace(tmp_path: Path) -> None:
+    """A07（D-KB）：图片与任务在共享库中，任何工作区都能取到；不存在的仍是 404。"""
 
     store = deps.workspace_store
     factory = WorkspaceContextFactory(committed_version_dir(tmp_path), store)
@@ -209,35 +200,52 @@ def test_a07_cross_workspace_image_hash_and_task_id_return_404(tmp_path: Path) -
     )
 
     client = TestClient(app)
-    ok = client.get(f"/api/knowledge/images/{image_hash}", params={"workspace_id": context_a.workspace_id})
+    ok = client.get(
+        f"/api/knowledge/images/{image_hash}", params={"workspace_id": context_a.workspace_id}
+    )
     assert ok.status_code == 200, ok.text
+    # 共享：乙区取同一张原图同样 200（语料只有一份）
+    shared = client.get(
+        f"/api/knowledge/images/{image_hash}", params={"workspace_id": context_b.workspace_id}
+    )
+    assert shared.status_code == 200, shared.text
 
-    leaked = client.get(f"/api/knowledge/images/{image_hash}", params={"workspace_id": context_b.workspace_id})
-    assert leaked.status_code == 404
-    assert image_hash not in leaked.text
-
-    task_ok = client.get("/api/knowledge/image-tasks/task-a", params={"workspace_id": context_a.workspace_id})
+    task_ok = client.get(
+        "/api/knowledge/image-tasks/task-a", params={"workspace_id": context_a.workspace_id}
+    )
     assert task_ok.status_code == 200, task_ok.text
     assert task_ok.json()["workspace_id"] == context_a.workspace_id
+    task_shared = client.get(
+        "/api/knowledge/image-tasks/task-a", params={"workspace_id": context_b.workspace_id}
+    )
+    assert task_shared.status_code == 200, task_shared.text
+    assert task_shared.json()["workspace_id"] == context_b.workspace_id
 
-    task_leaked = client.get("/api/knowledge/image-tasks/task-a", params={"workspace_id": context_b.workspace_id})
-    assert task_leaked.status_code == 404
+    # 不存在的工作区不能静默回落到默认区；不存在的 hash 仍是 404
+    assert (
+        client.get(
+            f"/api/knowledge/images/{image_hash}", params={"workspace_id": "nope"}
+        ).status_code
+        == 404
+    )
+    assert (
+        client.get(
+            "/api/knowledge/images/" + "b" * 32,
+            params={"workspace_id": context_a.workspace_id},
+        ).status_code
+        == 404
+    )
 
-    # 不存在的工作区不能静默回落到默认区
-    assert client.get("/api/knowledge/images/" + image_hash, params={"workspace_id": "nope"}).status_code == 404
-
-    # 服务层同样隔离：B 区的库里没有 A 区的原图与任务
+    # 共享库：两个上下文解析到同一个图片库文件与同一个句柄
     store_b = deps.workspace_image_state_store(context_b)
-    assert store_b.get_image_bytes(image_hash) is None
-    assert store_b.get_task("task-a") is None
-    assert store_b.task_status("task-a") is None
-    # 本区独立文件：两个库的路径不同
-    assert store_a is not store_b
-    assert context_a.image_state_db != context_b.image_state_db
+    assert store_b is store_a
+    assert context_a.image_state_db == context_b.image_state_db
+    assert store_b.get_image_bytes(image_hash) is not None
+    assert store_b.get_task("task-a") is not None
 
 
-def test_a08_background_task_keeps_creation_time_workspace(tmp_path: Path) -> None:
-    """A08：导入时切换工作区，任务仍写创建时的工作区。"""
+def test_a08_background_task_writes_the_shared_knowledge_store(tmp_path: Path) -> None:
+    """A08（D-KB）：后台任务仍绑定创建时的**工作区身份**，但写的是同一份共享知识。"""
 
     store = deps.workspace_store
     data_dir = committed_version_dir(tmp_path)
@@ -245,24 +253,42 @@ def test_a08_background_task_keeps_creation_time_workspace(tmp_path: Path) -> No
     workspace_a = store.create_with_uuid("甲区")
     workspace_b = store.create_with_uuid("乙区")
     context_a = factory.resolve(workspace_a.id)
+    context_b = factory.resolve(workspace_b.id)
 
-    # 任务创建时绑定上下文（PRD 5.2 末段）
     scope = BackgroundTaskScope.bind(context_a)
     assert scope.workspace_id == workspace_a.id
-
-    # 用户随后切到别的区并发起新的解析
-    context_b = factory.resolve(workspace_b.id)
     assert context_b.workspace_id == workspace_b.id
-    assert context_b.state_db != scope.state_db
+    # 知识与同步状态共享 ⇒ 任务写进哪个「区」其实都写进同一个库
+    assert context_b.state_db == scope.state_db
+    assert context_b.documents_dir == scope.documents_dir
 
-    # 任务继续写**创建时**的区：指纹落进甲区 state.db，乙区一无所获
     from app.ingestion.state_store import DocumentStateStore
 
     task_store = DocumentStateStore(scope.state_db)
     task_store.upsert_fingerprint(str(scope.documents_dir / "notes.md"), "hash", 1.0, 3, 1)
     assert scope.state_db.is_file()
-    assert DocumentStateStore(context_b.state_db).load_all() == {}
+    # 乙区读同一个库 → 看得到甲区导入的指纹（共享知识库应有的语义）
+    assert DocumentStateStore(context_b.state_db).load_all() != {}
+    assert deps.workspace_state_store(context_a) is deps.workspace_state_store(context_b)
     task_store.close()
+
+
+def test_workspace_private_files_stay_isolated(tmp_path: Path) -> None:
+    """共享的是**知识**：记忆 / 检查点 / 工件 / 分词缓存仍按区隔离。"""
+
+    store = WorkspaceStore(tmp_path)
+    factory = WorkspaceContextFactory(tmp_path, store)
+    context_a = factory.resolve(store.create("甲区").id)
+    context_b = factory.resolve(store.create("乙区").id)
+
+    for attribute in ("memory_json", "checkpoints_db", "artifacts_dir"):
+        assert getattr(context_a, attribute) != getattr(context_b, attribute), attribute
+    assert context_a.paths.jieba_cache_dir != context_b.paths.jieba_cache_dir
+
+    memory_a = deps.workspace_memory(context_a)
+    memory_b = deps.workspace_memory(context_b)
+    assert memory_a is not memory_b
+    assert memory_a.path != memory_b.path
 
 
 def _png_bytes() -> bytes:
@@ -278,10 +304,10 @@ def _png_bytes() -> bytes:
 
 
 def committed_version_dir(tmp_path: Path) -> Path:
-    """返回一个已提交 ``storage_schema_version=2`` 的数据目录（每工作区布局）。
+    """返回一个已提交 ``storage_schema_version`` 的数据目录（工作区记录 authority=D29）。
 
-    ``deps`` 的按区 provider 读 ``settings.data_dir``（conftest 已隔离到 tmp 并提交
-    标记）；这里保持一致，避免用例自己造出旧布局而翻转解析。
+    ``deps`` 的 provider 读 ``settings.data_dir``（conftest 已隔离到 tmp）；这里保持
+    一致。D-KB 后该标记**不影响知识库布局**，只影响工作区记录写 JSON 还是 app.db。
     """
 
     from app.core.config import settings
@@ -294,7 +320,7 @@ def committed_version_dir(tmp_path: Path) -> Path:
 
 
 def test_vector_cache_key_includes_collection_identity(tmp_path: Path) -> None:
-    """PRD 5.3.3：collection 身份变化必须换向量句柄（入库版本升级场景）。"""
+    """collection 身份变化必须换向量句柄（入库版本升级场景）。"""
 
     factory = WorkspaceContextFactory(tmp_path, WorkspaceStore(tmp_path))
     context = factory.resolve()
@@ -306,8 +332,8 @@ def test_vector_cache_key_includes_collection_identity(tmp_path: Path) -> None:
     )
 
 
-def test_delete_knowledge_bumps_only_the_target_workspace_revision(tmp_path: Path) -> None:
-    """PRD 5.3.6：清空知识在本区提交成功后递增**本区**版本，别区不受影响。"""
+def test_delete_knowledge_bumps_every_workspace_revision(tmp_path: Path) -> None:
+    """D-KB：共享知识库被清空后，**所有**工作区的版本都要递增（否则邻区缓存不失效）。"""
 
     from app.ingestion.state_store import DocumentStateStore
     from tests.fakes import FakeVectorStore
@@ -337,4 +363,4 @@ def test_delete_knowledge_bumps_only_the_target_workspace_revision(tmp_path: Pat
         images.close()
 
     assert factory.resolve(workspace.id).knowledge_revision == before_target + 1
-    assert factory.resolve(other.id).knowledge_revision == before_other
+    assert factory.resolve(other.id).knowledge_revision == before_other + 1

@@ -8,6 +8,8 @@ import {
 } from "../api/settingsApi";
 import type { AvatarKind } from "../api/settingsApi";
 import type {
+  ModelCatalogEntry,
+  ModelSelectionView,
   RerankProfileView,
   RerankStatus,
   RerankTestResult,
@@ -20,18 +22,25 @@ import type {
 import BrandMark from "./BrandMark";
 import ArchiveSettings from "./ArchiveSettings";
 import KnowledgeSettings from "./KnowledgeSettings";
+import ModelProviders, {
+  draftFromView,
+  toProviderUpdate,
+  validateProviderDrafts,
+} from "./ModelProviders";
+import type { ProviderDraft } from "./ModelProviders";
 import SettingsSelect from "./SettingsSelect";
 
 const SETTINGS_PAGES = [
   { id: "knowledge", label: "知识库", icon: "M4 4h6v16H4zM14 4h6v16h-6z" },
   { id: "archive", label: "归档对话", icon: "M3 7h18v12H3zM3 3h18v4H3zM9 12h6" },
+  { id: "memory", label: "记忆", icon: "M12 3a5 5 0 0 0-3 9v3h6v-3a5 5 0 0 0-3-9Zm-3 12v3h6v-3M10 21h4" },
   { id: "appearance", label: "外观与头像", icon: "M12 3a9 9 0 1 0 9 9c0-1.5-1-2-2.5-2H16a2 2 0 0 1-2-2V5.5C14 4 13.5 3 12 3ZM7 10h.01M8 15h.01M12 17h.01" },
   { id: "models", label: "模型服务", icon: "M5 5h14v14H5zM9 9h6v6H9zM9 2v3m6-3v3M9 19v3m6-3v3M2 9h3m-3 6h3m14-6h3m-3 6h3" },
   { id: "rerank", label: "相关性筛选", icon: "M10 4h10M10 12h7M10 20h4M4 4l1.6 1.6L8.4 2.6M4 12l1.6 1.6L8.4 10.6" },
   { id: "search", label: "联网搜索", icon: "M3 12h18M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18Zm0 0c5 5 5 13 0 18-5-5-5-13 0-18Z" },
   { id: "answers", label: "回答偏好", icon: "M4 5h16v12H9l-5 4V5Zm4 4h8m-8 4h5" },
 ] as const;
-type SettingsPage = typeof SETTINGS_PAGES[number]["id"];
+export type SettingsPage = typeof SETTINGS_PAGES[number]["id"];
 
 /** 设置页状态文案（PRD §8.1）；不展示 RRF / tokenizer 等实现参数。 */
 const RERANK_STATUS_LABELS: Record<RerankStatus, string> = {
@@ -72,6 +81,13 @@ interface SettingsModalProps {
   /** 归档恢复/删除后回调：父级刷新侧边栏会话列表。 */
   onConversationsChanged: () => void;
   open: boolean;
+  /**
+   * 打开时落在哪一页（默认「外观与头像」）。
+   *
+   * 供「从别处跳进设置」的入口用：输入框模型选择器的「管理提供方」必须直接落到
+   * **模型服务**，而不是默认页（用户实测反馈：跳到了外观与头像 = 跳错位置）。
+   */
+  initialPage?: SettingsPage;
   onClose: () => void;
   /** 保存成功后回调（父级刷新 /api/status 等）。 */
   onSaved: () => void;
@@ -169,6 +185,7 @@ export default function SettingsModal({
   status,
   onKnowledgeChanged,
   onConversationsChanged,
+  initialPage = "appearance",
   onClose,
   onSaved,
   theme,
@@ -197,14 +214,14 @@ export default function SettingsModal({
     return () => previousFocus?.focus();
   }, [open]);
 
-  // 对话模型表单
-  const [chatBaseUrl, setChatBaseUrl] = useState("");
-  const [chatModel, setChatModel] = useState("");
-  const [chatKey, setChatKey] = useState("");
-  const [chatKeyCleared, setChatKeyCleared] = useState(false);
-  const [chatKeySet, setChatKeySet] = useState(false);
-  const [chatKeyHint, setChatKeyHint] = useState<string | null>(null);
-  const [chatSupportsImage, setChatSupportsImage] = useState(false);
+  // 对话模型：多供应商注册表（草稿在本地编辑，保存时整表提交）
+  const [providers, setProviders] = useState<ProviderDraft[]>([]);
+  const [modelCatalog, setModelCatalog] = useState<ModelCatalogEntry[]>([]);
+  const [modelProtocols, setModelProtocols] = useState<string[]>(["openai-completions"]);
+  const [modelSelection, setModelSelection] = useState<{
+    provider_id: string;
+    model_id: string;
+  } | null>(null);
 
   // 嵌入模型表单（统一云端 OpenAI 兼容 /embeddings）
   const [embedBaseUrl, setEmbedBaseUrl] = useState("");
@@ -222,9 +239,9 @@ export default function SettingsModal({
   const [visionKeySet, setVisionKeySet] = useState(false);
   const [visionKeyHint, setVisionKeyHint] = useState<string | null>(null);
 
-  const testConnection = async (kind: "chat" | "embed" | "vision") => {
+  const testConnection = async (kind: "embed" | "vision") => {
     if (testingModel) return;
-    const config = kind === "chat" ? [chatBaseUrl, chatModel, chatKey, chatKeyCleared] : kind === "embed" ? [embedBaseUrl, embedModel, embedKey, embedKeyCleared] : [visionBaseUrl, visionModel, visionKey, visionKeyCleared];
+    const config = kind === "embed" ? [embedBaseUrl, embedModel, embedKey, embedKeyCleared] : [visionBaseUrl, visionModel, visionKey, visionKeyCleared];
     setTestingModel(kind);
     setConnectionResult(null);
     connectionDialog.current?.showModal();
@@ -296,6 +313,7 @@ export default function SettingsModal({
   const [searchKeyHint, setSearchKeyHint] = useState<string | null>(null);
   const [searchBaseUrl, setSearchBaseUrl] = useState("");
   const [searchMaxResults, setSearchMaxResults] = useState(5);
+  const [memoryEnabled, setMemoryEnabled] = useState(true);
 
   // 只影响表达方式的结构化偏好；不能覆盖身份、grounding、防注入和引用规则。
   const [answerLanguage, setAnswerLanguage] = useState<"auto" | "zh-CN" | "en">("auto");
@@ -323,11 +341,10 @@ export default function SettingsModal({
     if (!open) return;
     let cancelled = false;
     setLoading(true);
-    setActivePage("appearance");
+    // 打开落在哪一页由调用方决定（侧边栏齿轮 = 默认外观页；模型选择器「管理提供方」= 模型服务）
+    setActivePage(initialPage);
     setError(null);
     setSaved(false);
-    setChatKey("");
-    setChatKeyCleared(false);
     setEmbedKey("");
     setEmbedKeyCleared(false);
     setVisionKey("");
@@ -348,11 +365,18 @@ export default function SettingsModal({
     getSettings()
       .then((view) => {
         if (cancelled) return;
-        setChatBaseUrl(view.chat.base_url ?? "");
-        setChatModel(view.chat.model ?? "");
-        setChatKeySet(view.chat.api_key_set);
-        setChatKeyHint(view.chat.api_key_hint);
-        setChatSupportsImage(view.chat.supports_image);
+        setProviders((view.providers ?? []).map(draftFromView));
+        setModelCatalog(view.model_catalog ?? []);
+        setModelProtocols(view.model_protocols ?? ["openai-completions"]);
+        setModelSelection(
+          // 旧后端 / 旧视图可能整段缺失：只有真的给了选择才回填，否则按「未选择」处理
+          // （`undefined` 与 `null` 都必须走这条路，否则读 `.provider_id` 会抛错，
+          // 把整个设置回填链打断 —— 后面几段会静默停在默认值）。
+          view.model_selection === null || view.model_selection === undefined
+            ? null
+            : { provider_id: view.model_selection.provider_id, model_id: view.model_selection.model_id },
+        );
+
         setEmbedBaseUrl(view.embed.base_url ?? "");
         setEmbedModel(view.embed.model ?? "");
         setEmbedKeySet(view.embed.api_key_set);
@@ -367,6 +391,7 @@ export default function SettingsModal({
         setSearchKeyHint(view.search?.api_key_hint ?? null);
         setSearchBaseUrl(view.search?.base_url ?? "");
         setSearchMaxResults(view.search?.max_results ?? 5);
+        setMemoryEnabled(view.memory_enabled ?? true);
         // 相关性筛选：旧后端 / 旧配置缺少该段时按未启用处理（不伪造已配置）。
         setRerankEnabled(view.rerank?.enabled ?? false);
         setRerankEndpoint(view.rerank?.endpoint ?? "");
@@ -396,7 +421,7 @@ export default function SettingsModal({
     return () => {
       cancelled = true;
     };
-  }, [open]);
+  }, [open, initialPage]);
 
   // 释放 object URL（切换预览或卸载时），避免内存泄漏
   useEffect(() => {
@@ -417,6 +442,26 @@ export default function SettingsModal({
   /** 当前选中的校准档案（展示状态与验证日期；PRD §8.1）。 */
   const selectedProfile =
     rerankProfiles.find((profile) => profile.profile_id === rerankProfileId) ?? null;
+
+  /**
+   * 供应商草稿里的当前选择投影（「使用中」标记与勾选态都看它）。
+   *
+   * 从**草稿**推导而不是直接用后端视图：用户刚改了显示名/模型名时，标记必须跟着变。
+   * 选择指向已被删掉的模型时返回 null（界面不再显示「使用中」）。
+   */
+  const draftSelection: ModelSelectionView | null = (() => {
+    if (modelSelection === null) return null;
+    const provider = providers.find((item) => item.id === modelSelection.provider_id);
+    const model = provider?.models.find((item) => item.id === modelSelection.model_id);
+    if (provider === undefined || model === undefined) return null;
+    return {
+      provider_id: provider.id,
+      provider_name: provider.name,
+      model_id: model.id,
+      model_name: model.name || model.id,
+      vision: model.vision,
+    };
+  })();
 
   const handleSave = async (): Promise<void> => {
     // 嵌入：仅在填写时才校验/发送；未配置不应阻塞头像、主题等其它项保存。
@@ -454,6 +499,14 @@ export default function SettingsModal({
       onNotify("error", message);
       return;
     }
+    // 供应商草稿：本地先校验（服务端仍会独立校验并返回 422）。
+    const providerError = validateProviderDrafts(providers);
+    if (providerError !== null) {
+      setActivePage("models");
+      setError(providerError);
+      onNotify("error", providerError);
+      return;
+    }
 
     setSaving(true);
     setError(null);
@@ -474,12 +527,16 @@ export default function SettingsModal({
       }
 
       const update: SettingsUpdate = {
-        chat: {
-          base_url: chatBaseUrl.trim() || undefined,
-          model: chatModel.trim() || undefined,
-          supports_image: chatSupportsImage,
-          ...(chatKey !== "" || chatKeyCleared ? { api_key: chatKeyCleared ? "" : chatKey } : {}),
-        },
+        memory_enabled: memoryEnabled,
+        // 对话模型改为「供应商整表替换 + 当前选择」：不再直接写 chat（后端由选择推导 chat，
+        // 直接写 chat 会被理解为「绕过供应商选择」，因此这里不发送）。
+        providers: providers.map(toProviderUpdate),
+        // 提交**草稿里仍然存在**的选择：用户刚删掉了当前选中模型时，这里必须提交「清除」，
+        // 否则服务端会因为选择指向不存在的模型而 422（界面与实际配置分叉）。
+        model_selection:
+          draftSelection === null
+            ? { provider_id: null, model_id: null }
+            : { provider_id: draftSelection.provider_id, model_id: draftSelection.model_id },
         search: {
           provider_type: searchProvider,
           enabled: searchEnabled,
@@ -532,8 +589,6 @@ export default function SettingsModal({
       const savedView = await updateSettings(update);
 
       setSaved(true);
-      setChatKey("");
-      setChatKeyCleared(false);
       setEmbedKey("");
       setEmbedKeyCleared(false);
       setVisionKey("");
@@ -542,9 +597,18 @@ export default function SettingsModal({
       setSearchKeyCleared(false);
       // 回显：用保存后返回的脱敏视图同步各段「已设置/尾4位」状态，
       // 否则保存成功后页面不刷新（API key 不会立刻显示为「已设置」）
-      setChatKeySet(savedView.chat.api_key_set);
-      setChatKeyHint(savedView.chat.api_key_hint);
-      setChatSupportsImage(savedView.chat.supports_image);
+      setProviders((savedView.providers ?? []).map(draftFromView));
+      setModelCatalog(savedView.model_catalog ?? modelCatalog);
+      setModelProtocols(savedView.model_protocols ?? modelProtocols);
+      setModelSelection(
+        savedView.model_selection === null || savedView.model_selection === undefined
+          ? null
+          : {
+              provider_id: savedView.model_selection.provider_id,
+              model_id: savedView.model_selection.model_id,
+            },
+      );
+
       setEmbedKeySet(savedView.embed.api_key_set);
       setEmbedKeyHint(savedView.embed.api_key_hint);
       setVisionKeySet(savedView.vision?.api_key_set ?? false);
@@ -666,6 +730,27 @@ export default function SettingsModal({
 
           {!loading && (
             <>
+              <section className="settings-section settings-memory" hidden={activePage !== "memory"}>
+                <h3>记忆</h3>
+                <p className="settings-hint">
+                  启用后，任务可以读取工作区记忆与当前会话保存的记忆快照。
+                </p>
+                <label className="settings-field settings-toggle">
+                  <span>启用记忆</span>
+                  <input
+                    type="checkbox"
+                    data-testid="settings-memory-enabled"
+                    checked={memoryEnabled}
+                    onChange={(event) => setMemoryEnabled(event.target.checked)}
+                  />
+                </label>
+                {!memoryEnabled && (
+                  <p className="settings-hint" data-testid="settings-memory-disabled-note">
+                    关闭后，新任务会跳过工作区记忆与会话记忆快照读取。
+                  </p>
+                )}
+              </section>
+
               <section className="settings-section settings-appearance" hidden={activePage !== "appearance"}>
                 <h3>外观</h3>
                 <div className="settings-segmented theme-options" role="group" aria-label="主题">
@@ -689,64 +774,17 @@ export default function SettingsModal({
               </section>
 
               <section className="settings-section settings-model" hidden={activePage !== "models"}>
-                <div className="settings-section-heading"><h3>对话模型</h3><button type="button" className="model-test-button" disabled={testingModel !== null} onClick={() => void testConnection("chat")} aria-label="测试对话模型连接">测试连接</button></div>
-                <label className="settings-field">
-                  <span>Base URL</span>
-                  <input
-                    type="text"
-                    value={chatBaseUrl}
-                    onChange={(e) => setChatBaseUrl(e.target.value)}
-                    placeholder="https://api.example.com/v1"
-                  />
-                </label>
-                <label className="settings-field">
-                  <span>模型名</span>
-                  <input
-                    type="text"
-                    value={chatModel}
-                    onChange={(e) => setChatModel(e.target.value)}
-                    placeholder="deepseek-chat / gpt-4o-mini"
-                  />
-                </label>
-                <div className="settings-field">
-                  <span>API Key</span>
-                  <div className="settings-key-row">
-                    <input
-                      type="password"
-                      value={chatKey}
-                      onChange={(e) => {
-                        setChatKey(e.target.value);
-                        setChatKeyCleared(false);
-                      }}
-                      placeholder={chatKeySet && !chatKeyCleared ? "已设置" : "API Key（可选）"}
-                      aria-label="对话模型 API Key"
-                    />
-                    {chatKeySet && !chatKeyCleared && !chatKey && chatKeyHint !== null && (
-                      <span className="settings-key-hint">{chatKeyHint}</span>
-                    )}
-                    {chatKeySet && !chatKeyCleared && (
-                    <button
-                      type="button"
-                      className="settings-clear-key"
-                      onClick={() => {
-                        setChatKey("");
-                        setChatKeyCleared(true);
-                      }}
-                    >
-                      清除 Key
-                    </button>
-                  )}
-                  </div>
-                </div>
-                <label className="settings-field settings-toggle">
-                  <span>图片输入</span>
-                  <input
-                    type="checkbox"
-                    checked={chatSupportsImage}
-                    onChange={(e) => setChatSupportsImage(e.target.checked)}
-                    aria-label="多模态模型"
-                  />
-                </label>
+                <ModelProviders
+                  providers={providers}
+                  catalog={modelCatalog}
+                  protocols={modelProtocols}
+                  selection={draftSelection}
+                  onChange={setProviders}
+                  onSelect={(providerId, modelId) =>
+                    setModelSelection({ provider_id: providerId, model_id: modelId })
+                  }
+                  onNotify={onNotify}
+                />
               </section>
 
               <section className="settings-section settings-model" hidden={activePage !== "models"}>

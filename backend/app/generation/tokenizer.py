@@ -1,26 +1,3 @@
-"""DeepSeek 官方 tokenizer 本地 token 计数（PRD 9.3）。Owner: T03（model-provider）。
-
-PRD 9.3 原文：当前模型的本地请求计数采用官方 ``deepseek-recipe``，固定软件版本、
-tokenizer 版本和文件 SHA-256；把完整 Chat Completions 请求转换为官方消息格式后
-计算 token ID 数量，包含 ``tools`` 和要求保留的推理内容。
-
-实测结论与实现边界（2026-09-19）：
-
-- 官方 ``deepseek-recipe`` **未发布到 PyPI**（``pip download deepseek-recipe`` →
-  "No matching distribution found"），因此本模块不把它写成硬依赖：安装后用官方
-  编码路径，未安装时抛 :class:`TokenizerResourceError` 并给出获取方式；
-- tokenizer 文件必须是官方 ``static/tokenizers/v41/tokenizer.json`` 且 SHA-256 与
-  :data:`TOKENIZER_PINNED_SHA256` 一致；缺失或不匹配一律明确失败；
-- **没有可用 tokenizer 资源时绝不伪造计数**（不按字符数估算、不用其他模型 tokenizer）；
-- ``to_official_messages`` / ``official_message_payload`` 是纯函数：把完整
-  Chat Completions 请求（含 ``tools``、assistant ``reasoning_content``、
-  ``tool_call_id``）转成官方消息格式，可用内存编码器单测（零网络）。
-
-官方流程（docs/tokenizer.md）：``ChatCompletionRequest(payload).convert(...)``
-→ ``DeepseekV41Encoding().with_tokenizer(tokenizer).encode(converted.conversation)``
-→ token ID 数量即本地 prompt token 数。
-"""
-
 from __future__ import annotations
 
 import hashlib
@@ -65,23 +42,23 @@ TOKENIZER_VERSION: Final[str] = "v4.1"
 TOKENIZER_RESOURCE_FILENAME: Final[str] = "tokenizer.json"
 
 #: 官方仓库修订（取值来源与复核依据）。
-DEEPSEEK_RECIPE_REVISION: Final[str] = "deepseek-ai/deepseek-recipe@main (2026-09-19)"
+DEEPSEEK_RECIPE_REVISION: Final[str] = "deepseek-ai/deepseek-recipe@8cadfede7063c896b944e7bae05daa3549ae97ea"
 DEEPSEEK_RECIPE_PACKAGE: Final[str] = "deepseek-recipe"
 
 #: tokenizer 文件 SHA-256（PRD 9.3 要求固定）。
-#: 实测取值：官方仓库 ``static/tokenizers/v41/tokenizer.json``，
-#: 文件大小 6,367,247 字节，2026-09-19 从 raw.githubusercontent.com 取得后本机计算。
+#: 官方仓库 ``static/tokenizers/v41/tokenizer.json`` 的固定文件身份。
 TOKENIZER_PINNED_SHA256: Final[str] = (
-    "81f64d1248a68ce3663e07ab3ee48b851e5df0e32d27cb98e4c9a268151e8d99"
+    "df385ab3ba4bbb1815327f3e71bba5b263263f5d015a838e6ff295ca69b3198e"
 )
 
 #: 官方文件字节数（与 SHA-256 一起做二次身份校验，防截断下载）。
-TOKENIZER_PINNED_SIZE: Final[int] = 6_367_247
+TOKENIZER_PINNED_SIZE: Final[int] = 6_634_606
 
 #: 哈希固定状态说明；写入证据与错误消息。
-TOKENIZER_SHA256_STATE: Final[str] = "已固定（官方 v41/tokenizer.json，6,367,247 字节）"
+TOKENIZER_SHA256_STATE: Final[str] = "已固定（官方 v41/tokenizer.json，6,634,606 字节）"
 
 TOKENIZER_DIR_ENV_VAR: Final[str] = "EVERYTHING_RAG_TOKENIZER_DIR"
+TOKENIZER_BUNDLED_DIR: Final[Path] = Path(__file__).resolve().parent / "resources" / "deepseek-v41"
 
 
 class TokenizerResourceError(RuntimeError):
@@ -218,32 +195,24 @@ class _RecipeEncoder:
     def __init__(self, encoding: Any, manifest: TokenizerManifest) -> None:
         self._encoding = encoding
         self._manifest = manifest
-        self._cache: dict[str, tuple[int, ...]] = {}
 
     def encode_messages(
         self,
         messages: list[dict[str, Any]],
         payload: dict[str, Any],
     ) -> list[int]:
-        key = json.dumps(payload, ensure_ascii=False, sort_keys=True)
-        cached = self._cache.get(key)
-        if cached is not None:
-            return list(cached)
+        from deepseek_recipe import (  # type: ignore[import-not-found]
+            ChatCompletionRequest,
+            ConversionOptions,
+        )
         try:
-            from deepseek_recipe import (  # type: ignore[import-not-found]
-                ChatCompletionRequest,
-                ConversionOptions,
-            )
-
             converted = ChatCompletionRequest(payload).convert(ConversionOptions())
             raw_ids = self._encoding.encode(converted.conversation)
         except TokenizerResourceError:
             raise
         except Exception as exc:
             raise TokenizerResourceError(f"官方 deepseek-recipe 编码失败: {exc}") from exc
-        ids = tuple(int(item) for item in raw_ids)
-        self._cache[key] = ids
-        return list(ids)
+        return [int(item) for item in raw_ids]
 
 
 def resolve_pinned_encoder(
@@ -252,34 +221,12 @@ def resolve_pinned_encoder(
     resource_dir: Path | str | None = None,
     env: Mapping[str, str] | None = None,
 ) -> MessageEncoder:
-    """解析并校验官方 tokenizer 编码器；缺资源/缺包/未固定哈希 -> 明确错误。
-
-    查找顺序：``resource_dir`` > ``EVERYTHING_RAG_TOKENIZER_DIR``。
-    找到 ``tokenizer.json`` 后先做 SHA-256 校验，再交给 ``deepseek-recipe``。
-    """
+    """从指定目录、环境变量或随包资源加载并校验官方 tokenizer。"""
     source = os.environ if env is None else env
-    directory: Path | str | None = resource_dir
-    if directory is None:
-        directory = source.get(TOKENIZER_DIR_ENV_VAR) or None
-    if not directory:
-        raise TokenizerResourceError(
-            "未配置 DeepSeek tokenizer 资源目录（PRD 9.3 要求固定软件版本/tokenizer 版本/"
-            f"文件 SHA-256）：请取得官方 {manifest.tokenizer_id}/{manifest.filename}"
-            f"（revision {manifest.revision}），放入本地目录并设置 {TOKENIZER_DIR_ENV_VAR}。"
-            "本版不按字符数估算 token，也不会伪造计数。"
-        )
+    directory: Path | str = resource_dir or source.get(TOKENIZER_DIR_ENV_VAR) or TOKENIZER_BUNDLED_DIR
     path = Path(directory) / manifest.filename
     verify_resource(path, manifest)
-    try:
-        from deepseek_recipe import (  # type: ignore[import-not-found]
-            DeepseekV41Encoding,
-            Tokenizer,
-        )
-    except ImportError as exc:
-        raise TokenizerResourceError(
-            f"未安装官方 {DEEPSEEK_RECIPE_PACKAGE}（PyPI 目前无该发行包，需从官方仓库安装）；"
-            f"tokenizer 文件已通过校验: {path}"
-        ) from exc
+    from deepseek_recipe import DeepseekV41Encoding, Tokenizer  # type: ignore[import-not-found]
     tokenizer = Tokenizer.from_file(str(path))
     encoding = DeepseekV41Encoding().with_tokenizer(tokenizer)
     return _RecipeEncoder(encoding=encoding, manifest=manifest)

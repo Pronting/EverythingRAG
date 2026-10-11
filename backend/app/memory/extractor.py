@@ -503,25 +503,19 @@ async def extract_workspace_candidates(
     chat_model: ChatModel,
     turns: list[WorkspaceTurn],
 ) -> list[CandidateWorkspaceMemory]:
-    """调用对话模型提炼工作区记忆候选；任何失败都返回空列表。
-
-    与 v1.1.0 一致：提炼失败只是"这一轮没记住"，**绝不**影响任何用户可见流程。
-    """
+    """调用对话模型提炼工作区记忆候选；服务异常交给任务调度记录。"""
 
     if not turns:
         return []
     if not any(turn.role == "user" for turn in turns):
         return []
-    try:
-        chunks = [
-            chunk
-            async for chunk in chat_model.stream_chat(
-                build_workspace_extraction_messages(turns),
-                max_tokens=MAX_EXTRACTION_TOKENS,
-            )
-            if chunk.kind == "content"
-        ]
-    except Exception:  # noqa: BLE001 -- 后台提炼失败必须静默降级
-        return []
+    chunks = [
+        chunk
+        async for chunk in chat_model.stream_chat(
+            build_workspace_extraction_messages(turns),
+            max_tokens=MAX_EXTRACTION_TOKENS,
+        )
+        if chunk.kind == "content"
+    ]
     raw = "".join(chunk.text for chunk in chunks)
     return parse_workspace_candidates(raw, turns=turns)

@@ -25,8 +25,10 @@ from typing import Any, Final, Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.agent import query_plan
 from app.agent.contracts import Freshness, IntentKind, RouteDecision
 from app.agent.events import EventType, StoredEvent, build_event
+from app.agent.web_budget import local_only_question
 from app.generation.knowledge_catalog import (
     CatalogMatch,
     CatalogPromptProjection,
@@ -96,6 +98,10 @@ _INTERNAL_MARKERS: Final[tuple[str, ...]] = (
     "笔记里",
     "我的文档",
     "我的资料",
+    "本地文档",
+    "本地资料",
+    "本地笔记",
+    "本地知识",
     "我们内部",
     "内部资料",
     "内部文档",
@@ -174,12 +180,15 @@ _PRONOUNS: Final[tuple[str, ...]] = (
     "那个方案",
     "这个文档",
     "那个文档",
+    "这个机制",
+    "那个机制",
     "这种方式",
     "那种方式",
     "第二种方式",
     "第一种方式",
     "该方案",
     "该文档",
+    "该机制",
     "那套",
     "这套",
     "那种",
@@ -196,7 +205,27 @@ _PRONOUNS: Final[tuple[str, ...]] = (
     "它",
 )
 
+#: 自带名词的指代表达：就地替换成语义完整（「这个方案」→「内部风控 P99 方案」）。
+_PHRASE_PRONOUNS: Final[tuple[str, ...]] = tuple(
+    item for item in _PRONOUNS if item[-1] in "案档制式套篇"
+)
+
+#: 裸指代（这个 / 它 / 上述…）：它后面往往还跟着名词（「这个面试题」），就地替换会把
+#: 两段话说在一起（用户实测缺陷：「回答有一个很经典的一个面试题面试题」）。因此裸指代
+#: 用**前置上文主题**的方式补全 —— 用户本轮的原话一字不改。
+_BARE_PRONOUNS: Final[tuple[str, ...]] = tuple(
+    item for item in _PRONOUNS if item not in _PHRASE_PRONOUNS
+)
+
 _MEMORY_MARKERS: Final[tuple[str, ...]] = (
+    "搜索以前的对话",
+    "搜索之前的对话",
+    "查询历史对话",
+    "检索历史会话",
+    "查找以前的对话",
+    "以前的对话",
+    "之前的会话",
+    "历史聊天记录",
     "还记得",
     "我之前问过",
     "我以前问过",
@@ -213,6 +242,53 @@ _MEMORY_MARKERS: Final[tuple[str, ...]] = (
     "回忆一下",
     "帮我回忆",
 )
+
+
+def source_exclusions(question: str) -> tuple[bool, bool]:
+    search_denial = re.search(
+        r"(?:不要|不用|无需|禁止|不必|别)(?:再)?(?:检索|搜索|查询|查找|查)(?:本地)?(?:资料|文档|知识库)?(?:或|和|及)?(?:联网|上网)?",
+        question,
+    )
+    no_search = search_denial is not None
+    local_only = bool(search_denial and re.search(r"本地|知识库|内部", search_denial.group(0)))
+    no_web = bool(re.search(r"(?:不要|不用|无需|禁止|不必|别)[^。！？]{0,15}(?:联网|上网)", question))
+    return no_search, bool(no_web or no_search and not local_only and not explicit_web_request(question))
+
+
+def _apply_source_exclusions(decision: RouteDecision, question: str) -> RouteDecision:
+    if history_only_request(question):
+        decision.intent = IntentKind.MEMORY
+        decision.needs_history = True
+        decision.needs_knowledge = False
+        decision.needs_web = False
+        decision.needs_general = False
+        decision.freshness = Freshness.NONE
+        decision.reason_summary = "查询以前的对话并读取原始消息"
+    no_search, no_web = source_exclusions(question)
+    if no_search:
+        decision.needs_knowledge = False
+    if no_web:
+        decision.needs_web = False
+        decision.freshness = Freshness.NONE
+    if no_search and not decision.needs_history and not decision.needs_web:
+        decision.intent = IntentKind.GENERAL
+        decision.needs_general = True
+        decision.needs_source_search = False
+        decision.reason_summary = "按当前会话要求直接回复"
+    return decision
+
+
+def history_only_request(question: str) -> bool:
+    if re.search(
+        r"(?:同时|然后|另外|并且|再|并现在|并当前)(?:请)?"
+        r"(?:联网|检索本地|查询本地|搜索本地|(?:核实|核对|查看|查询|检索|搜索|确认)[^。；！？]{0,30}(?:官方|官网|网页))",
+        question,
+    ):
+        return False
+    return bool(re.search(
+        r"(?:查询|搜索|检索|查找|回顾)(?:一下)?(?:我|我们)?(?:以前|之前|历史)(?:的)?(?:一段|一次|一条)?(?:对话|会话|聊天记录)",
+        question,
+    ))
 
 _GENERAL_MARKERS: Final[tuple[str, ...]] = (
     "是什么",
@@ -244,6 +320,266 @@ _DEFINITION_INTENT_MARKERS: Final[tuple[str, ...]] = (
     "怎么做的",
     "如何落地",
 )
+
+#: 「一般知识可以参与理解」的概念 / 场景意图（PRD 6.3 R6 的术语分支）。
+#: 出现这些问法时，模型可以先用一般知识理解术语，再据此组织检索表达。
+_CONCEPT_INTENT_MARKERS: Final[tuple[str, ...]] = (
+    "是什么",
+    "什么意思",
+    "含义",
+    "定义",
+    "解释",
+    "概念",
+    "原理",
+    "机制",
+    "场景",
+    "用途",
+    "用法",
+    "怎么用",
+    "如何使用",
+    "有哪些",
+    "举例",
+    "例子",
+    "介绍",
+    "怎么做",
+    "怎么做的",
+    "如何做",
+    "一回事",
+    "一样吗",
+    "有什么区别",
+)
+
+#: 术语形态（一个或多个连续英文词）：研究对象最容易被一般知识识别的形态。
+_TERM_SPAN: Final[re.Pattern[str]] = re.compile(
+    r"[A-Za-z][A-Za-z0-9_.\-]*(?:\s+[A-Za-z][A-Za-z0-9_.\-]*)*"
+)
+_TERM_SPAN_STOP: Final[frozenset[str]] = frozenset(
+    {"a", "an", "and", "or", "the", "is", "are", "of", "to", "in", "on", "for", "with", "how", "what"}
+)
+
+#: 「某份文档在哪里 / 有没有」这类**文档寻址**问法：问的是本工作区有没有这份资料，
+#: 必须先真的检索一次再回答（否则「没找到」是没检索过就下的结论）。
+_DOC_SEEK_INTENT: Final[re.Pattern[str]] = re.compile(
+    r"(?:在哪|在哪里|哪里|哪个文档|哪个文件|哪一份|找一下|找找|查一下|翻一下|"
+    r"有没有|有吗|是否有|收录)",
+)
+_DOC_SEEK_OBJECT: Final[re.Pattern[str]] = re.compile(
+    r"(?:手册|文档|文件|资料|笔记|记录|报告|规范|说明书|wiki|知识库|文档库)",
+)
+
+#: 指向**知识库里某一篇具体资料**的定指标记（「那篇文章」「这篇文章」「文中」「原文」）。
+_DOC_POINTER: Final[re.Pattern[str]] = re.compile(
+    r"(?:那篇|这篇|该篇|这一篇|那一篇|此篇|那篇文章|这篇文章|该文章|本文|文中|原文|"
+    r"文章里|文章中的|给出的文章|指定的文章|那本书|这篇文章中)"
+)
+#: 「给出**文中的依据**」这类**求文档论据**的要求：用户点名的是知识库里的既有原文，
+#: 必须真的去读，不能用通用解释顶替（用户实测缺陷 F14）。
+_DOC_EVIDENCE_DEMAND: Final[re.Pattern[str]] = re.compile(
+    r"(?:文中的|原文的|文章中的|文档中的|该书中的|文里)"
+    r"[^。！？?]{0,8}"
+    r"(?:依据|出处|原文|论断|证据|说明|理由|例子|数据|结论|观点|怎么(?:说|写|讲))"
+)
+#: 问「某篇文章/某份资料说明了什么」的内容问法（不是问清单，也不是问产品）。
+_DOC_CONTENT_ASK: Final[re.Pattern[str]] = re.compile(
+    r"(?:如何(?:说明|解释|描述|阐述|处理|计算|实现|规定|定义)|怎么(?:说明|解释|写|讲)|"
+    r"为什么|说明了什么|讲了什么|说了什么|介绍了(?:什么|哪些)|有哪些(?:做法|办法|措施|方案|依据|内容)|"
+    r"怎么(?:做|算|处理))"
+)
+#: 「介绍 X 的那篇文章/那份资料」这类**由内容反指文档**的说法（用户实测 T12：
+#: 「知识库中介绍 K8S 十四个基础概念的文章，如何说明 Deployment 和 Service 各自的
+#: 职责？」）。它不是问清单，而是问那篇文章里的具体说法。
+_CONTENT_DESCRIBED_DOC: Final[re.Pattern[str]] = re.compile(
+    r"(?:介绍|讲|写|谈|说)[^。！？?，,]{0,24}?(?:的)?(?:那|这|该)?"
+    r"(?:篇|份|个)?(?:文章|文档|资料|笔记|实践|文章里|报告|规范)"
+)
+#: 求「某个具体方面的说明」的内容要素：出现即说明问的是正文内容，不是清单
+#: （「各自的职责」「具体实践」「怎么计算」…）。
+_CONTENT_ASPECT: Final[re.Pattern[str]] = re.compile(
+    r"(?:职责|作用|区别|差异|关系|原理|机制|流程|步骤|公式|口径|定义|边界|"
+    r"如何|怎么|为什么|具体|实践|依据|例子|举例|数量|范围|阈值|配置|实现)"
+)
+
+
+def document_intent(question: str) -> str:
+    """问题是否在**指向知识库里某一篇具体资料的内容**；是则返回可读线索。
+
+    与「知识库有哪些文章」区分开（用户实测缺陷 F15）：这里问的是某篇文章说了什么、
+    文中依据是什么，因此必须走正文研究，而不是只输出结构化清单或通用解释。
+    覆盖四类可复核问法：
+    ``某篇文章 + 内容问法``、``文中依据类要求``、``文档寻址``、
+    ``介绍 X 的文章 + 内容要素``。
+    """
+
+    text = " ".join(str(question or "").split())
+    if not text:
+        return ""
+    named_document = re.search(r"《[^》]+》", text)
+    if named_document is not None and re.search(r"多少|哪些|什么|如何|为什么|怎样|说明|列出|介绍|总结|概述|引用|依据", text):
+        return named_document.group(0)
+    pointer = _DOC_POINTER.search(text)
+    if pointer is not None and (_DOC_CONTENT_ASK.search(text) or _DOC_SEEK_OBJECT.search(text)):
+        return pointer.group(0)
+    demand = _DOC_EVIDENCE_DEMAND.search(text)
+    if demand is not None:
+        return demand.group(0)
+    seek = _DOC_SEEK_INTENT.search(text)
+    if seek is not None and _DOC_SEEK_OBJECT.search(text):
+        return seek.group(0)
+    described = _CONTENT_DESCRIBED_DOC.search(text)
+    if described is not None and (
+        _DOC_CONTENT_ASK.search(text) or _CONTENT_ASPECT.search(text)
+    ):
+        return described.group(0)
+    # 用户点名「资料 / 文档」但**没有给出唯一文章名**（C21.3「关于文档中，他们是怎么
+    # 设计 agent 的」）：语义上就是「查本地资料里的内容」，与上面「点名某篇文章」同属
+    # 内容问法。判定在 query_plan 里唯一实现（泛指文档指向 + 内容 / 寻址意图），这里只取
+    # 它的结果，避免两处各写一套「什么算问文档内容」。
+    return query_plan.generic_document_content_ask(text)
+
+
+def _document_intent(question: str) -> str:
+    """内部别名（规则层用；与 :func:`document_intent` 同一实现）。"""
+
+    return document_intent(question)
+#: 联网动作的表达（动词短语）。用户实测缺陷 F05：``联网搜索`` 能触发网络工具，而
+#: 近义的 ``联网查找`` 不动 —— 固定表达清单只能补个别用例，因此这里覆盖**动作短语**
+#: 而不是逐句枚举：``联网/上网/在线`` + ``搜/查/找/检索/核实/核对/验证/求证``，
+#: 以及 ``网页/网上/公开资料`` 这类明确指向外部来源的表达。
+_WEB_ACTION: Final[str] = r"(?:搜索|搜一下|搜一搜|查询|查一下|查找|查查|检索|寻找|找一下|找找|找|核实|核对|验证|求证|确认|看看|了解一下|浏览)"
+_WEB_SOURCE: Final[str] = r"(?:联网|上网|在线|网上|网页|互联网|公开资料|公开来源|外部资料|外部来源|官方网站|官网)"
+#: 动作 + 紧邻的来源要求（「查一下官方文档」「搜索官方链接」）：两者之间允许一段
+#: 对象名（「查一下 Kubernetes 官方文档」），但不能跨句（间隔里出现句末标点即不算）。
+_OFFICIAL_ASK: Final[str] = r"(?:官方网站|官网|官方文档|官方资料|官方来源|官方页面)"
+#: 三段拆分 + VERBOSE：把带量词的片段各自独立，避免交替 / 量词的优先级歧义。
+_EXPLICIT_WEB_RE: Final[re.Pattern[str]] = re.compile(
+    rf"""
+      (?P<src_then_action> {_WEB_SOURCE} \s* {_WEB_ACTION} )
+    | (?P<action_then_src> {_WEB_ACTION} \s*{_WEB_SOURCE} )
+    | (?P<action_then_official> {_WEB_ACTION} [^。！？?；;\n]{{0,20}}? {_OFFICIAL_ASK} )
+    """,
+    re.VERBOSE,
+)
+#: 否定词（出现在联网动作**紧前方**的窗口里即视为否定该动作）。
+#: 只看紧邻窗口，因此不会因为句首有「不用」就否定后面的联网要求
+#: （「文档里没有就说，不用联网搜索」这类就近判定仍然正确）。
+_WEB_NEGATION_WORD_RE: Final[re.Pattern[str]] = re.compile(
+    r"(?:不要|不用|无需|不必|不得|禁止|不允许|请勿|别去|别)"
+)
+#: 明确要求「公开可核实的来源 / 官方链接」：这是**交付要求**，不只是检索动作。
+_SOURCE_REQUIREMENT_RE: Final[re.Pattern[str]] = re.compile(
+    r"(?:官方(?:文档|资料|来源|网站|链接|页面|说明|原文)|公开(?:来源|资料|信息)|"
+    r"官网|原始出处|一手来源)"
+)
+
+
+def explicit_web_request(question: str) -> str:
+    """明确要求联网的表达（无 / 有则返回命中的动作短语）。
+
+    否定表达（「不要联网查找」）优先判定，命中即返回空串 —— 用户明确排除的能力
+    不能被当成要求。联网意图的识别同时供路由规则与联网查询构造使用，避免两处各写
+    一套「什么算联网」。
+    """
+
+    text = " ".join(str(question or "").split())
+    if not text:
+        return ""
+    for match in _EXPLICIT_WEB_RE.finditer(text):
+        prefix = text[: match.start()]
+        # 只看**紧邻动作之前**的否定窗口（去掉标点空白后约 12 字）：既覆盖
+        # 「不要联网查找」这种紧贴否定，也不会把远处的「不用」误判成对本次动作的否定。
+        window = re.sub(r"[\s，,、：:；;。！!？?]", "", prefix)[-12:]
+        if _WEB_NEGATION_WORD_RE.search(window):
+            continue
+        return match.group(0)
+    return ""
+
+
+#: 明确指定机构的检索目标 → 官方域名（只收**确定**的官方文档域名，不猜）。
+#: 用户实测缺陷 F17：T19/T20 要求「官方来源 / 官方链接」，但请求并未体现这一点。
+OFFICIAL_DOMAINS: Final[tuple[tuple[str, tuple[str, ...]], ...]] = (
+    ("kubernetes", ("kubernetes.io",)),
+    ("k8s", ("kubernetes.io",)),
+    ("bedrock", ("docs.aws.amazon.com", "aws.amazon.com")),
+    ("agentcore", ("docs.aws.amazon.com", "aws.amazon.com")),
+    ("aws", ("docs.aws.amazon.com", "aws.amazon.com")),
+    ("amazon", ("docs.aws.amazon.com", "aws.amazon.com")),
+    ("azure", ("learn.microsoft.com", "azure.microsoft.com")),
+    ("microsoft", ("learn.microsoft.com",)),
+    ("google cloud", ("cloud.google.com",)),
+    ("阿里云", ("help.aliyun.com",)),
+    ("腾讯云", ("cloud.tencent.com",)),
+    ("docker", ("docs.docker.com",)),
+    ("python", ("docs.python.org",)),
+    ("react", ("react.dev",)),
+    ("openai", ("platform.openai.com",)),
+    ("openclaw", ("docs.openclaw.ai",)),
+    ("anthropic", ("docs.anthropic.com",)),
+    ("claude", ("docs.anthropic.com",)),
+    ("postgres", ("www.postgresql.org", "postgresql.org")),
+    ("mysql", ("dev.mysql.com",)),
+    ("redis", ("redis.io",)),
+    ("nginx", ("nginx.org",)),
+    ("linux", ("www.kernel.org", "man7.org")),
+)
+
+
+def official_domains(question: str) -> list[str]:
+    """问题里点名的机构 → 可信官方域名（用于限定查询与选页，缺陷 F17）。
+
+    只返回**确定的**官方文档域名；无法确定时返回空列表 —— 不猜域名，也不因此拒绝
+    回答（用户裁定：额度是上限，信息不足时如实说明缺口）。
+    """
+
+    text = str(question or "").casefold()
+    domains: list[str] = []
+    for marker, values in OFFICIAL_DOMAINS:
+        if marker in text:
+            for domain in values:
+                if domain not in domains:
+                    domains.append(domain)
+    return domains
+
+
+def source_requirement(question: str) -> str:
+    """问题里对**来源类型**的明确要求（官方文档 / 公开来源 / 官网 / 一手来源）。
+
+    用户实测缺陷 F17：T19、T20 都要求「官方来源 / 官方链接」，但搜索仍直接发送用户
+    整句问题、选页直接取前三条第三方结果，最终没有官方依据却登记 completed。
+    本函数把这个要求提取成**可执行的检索与验收条件**。
+    """
+
+    if history_only_request(question):
+        return ""
+    text = " ".join(str(question or "").split())
+    match = _SOURCE_REQUIREMENT_RE.search(text)
+    return match.group(0) if match is not None else ""
+
+
+def concept_terms(question: str) -> list[str]:
+    """问题里的术语表达（仅在问概念/场景/定义时返回）。
+
+    用途：让「用一般知识理解术语」这一步**真的参与检索** —— 术语被填进
+    ``RouteDecision.entities``，随后成为检索查询；但术语扩展只是**检索线索**，
+    不能据此断言文档讨论过该概念（route prompt 与综合提示都写明这一点）。
+    """
+
+    text = " ".join(str(question or "").split())
+    if not any(marker in text.casefold() for marker in _CONCEPT_INTENT_MARKERS):
+        return []
+    terms: list[str] = []
+    for match in _TERM_SPAN.finditer(text):
+        term = match.group(0).strip(" .-_")
+        if len(term) < 2 or term.casefold() in _TERM_SPAN_STOP:
+            continue
+        if term not in terms:
+            terms.append(term)
+    # 短语里的短词只是长术语的前缀（「AI」⊂「AI Native」）：只保留更具体的表达，
+    # 避免把「AI」这种超泛词当成一条检索查询。
+    return [
+        term
+        for term in terms
+        if not any(other != term and other.casefold().startswith(term.casefold()) for other in terms)
+    ]
 
 _TOPIC_CUT_MARKERS: Final[tuple[str, ...]] = (
     "？",
@@ -394,18 +730,37 @@ def _detect_freshness(question: str) -> Freshness:
 
 
 def _topic_of(text: str) -> str:
-    """从上一轮问题里取一个可替换指代的对象（启发式、可复核、长度受限）。"""
+    """从上一轮问题里取一个可替换指代的对象（唯一实现见 ``query_plan.topic_phrase``）。"""
 
-    cleaned = " ".join(str(text or "").split()).strip()
-    if not cleaned:
-        return ""
-    cut = len(cleaned)
-    for marker in _TOPIC_CUT_MARKERS:
-        position = cleaned.find(marker)
-        if 0 < position < cut:
-            cut = position
-    topic = cleaned[:cut].strip("，,。 的")
-    return topic[:30]
+    return query_plan.topic_phrase(text)
+
+
+def _longest_pronoun(question: str) -> str:
+    for pronoun in sorted(_PRONOUNS, key=len, reverse=True):
+        if pronoun in question:
+            return pronoun
+    return ""
+
+
+def _reference_topic(previous: Sequence[RoutingHistoryTurn]) -> str:
+    """上一轮里可用来补全指代的对象（连续追问的保护层）。
+
+    用户实测缺陷 C21.4：上一轮主题只剩「文档中」这类泛指指向时，直接把「文档中」
+    填进本轮会把研究对象丢掉（Agent 对象在更早一轮）。因此**优先取含实质研究对象的
+    最近一轮**（``query_plan.has_research_object``），只有实在没有时才退回最近一轮的
+    非空主题，语义与旧实现一致（旧行为仍然覆盖）。
+    """
+
+    latest = ""
+    for turn in reversed(previous):
+        topic = _topic_of(turn.content)
+        if not topic:
+            continue
+        if not latest:
+            latest = topic
+        if query_plan.has_research_object(topic):
+            return topic
+    return latest
 
 
 def resolve_reference(
@@ -413,22 +768,29 @@ def resolve_reference(
 ) -> tuple[str, str]:
     """按历史补全指代（PRD 6.3 R2）：返回 ``(resolved_question, note)``。
 
+    两类指代分开处理（用户实测缺陷 C04/C05）：
+
+    - **自带名词的指代**（「这个方案」「这个文档」「这篇」）→ 就地替换成上一轮的对象，
+      语义完整且不留指代；
+    - **裸指代**（「这个」「它」「上述」）→ 把上一轮主题作为**上下文前置**，本轮原话
+      一字不改。早期实现对裸指代也做就地替换，于是「如果让你回答这个面试题的话」被写成
+      「回答有一个很经典的一个面试题面试题」这类重复表达，检索查询也跟着被污染。
+
     没有指代词或没有可用历史时原样返回，并把原因写进 note，不猜测对象。
     """
 
-    matched = _contains(question, _PRONOUNS)
+    matched = _longest_pronoun(question)
     if not matched:
         return question, ""
     previous = [turn for turn in history if turn.role == "user"]
     if not previous:
         return question, "出现指代但本轮没有可用历史，未补全对象"
-    topic = _topic_of(previous[-1].content)
+    topic = _reference_topic(previous)
     if not topic:
         return question, "上一轮问题没有可提取的对象，未补全指代"
-    for pronoun in sorted(_PRONOUNS, key=len, reverse=True):
-        if pronoun in question:
-            return question.replace(pronoun, topic, 1), f"指代补全：{matched} → {topic}"
-    return question, ""
+    if matched in _PHRASE_PRONOUNS:
+        return question.replace(matched, topic, 1), f"指代补全：{matched} → {topic}"
+    return f"{topic} —— {question}", f"指代补全（上文主题）：{matched} → {topic}"
 
 
 def _catalog_term_matches(input: RoutingInput) -> list[CatalogMatch]:
@@ -489,24 +851,54 @@ def evaluate_route_rules(input: RoutingInput) -> RuleOutcome:
     if reference_note:
         notes.append(reference_note)
 
-    # ---- R7：仅询问产品功能或文档数量（最高优先级，避免误送检索）
-    mode = classify_query(question)
-    if mode is QueryMode.PRODUCT_HELP:
-        hit("R7", "产品功能问题标记命中")
-        decision.intent = IntentKind.PRODUCT
-        decision.reason_summary = "询问产品功能，使用产品说明回答"
-        return RuleOutcome(decision=decision, hits=hits, notes=notes)
-    if mode is QueryMode.KNOWLEDGE_OVERVIEW:
-        hit("R7", "文档数量 / 概览问题标记命中")
-        decision.intent = IntentKind.CATALOG
-        decision.reason_summary = "询问工作区资料概览，使用结构化统计回答"
-        return RuleOutcome(decision=decision, hits=hits, notes=notes)
-
+    # ---- 内容线索（先算，R7 的早退要用它判断「产品/概览」是否其实是内容问题）----
     internal_marker = _contains(question, _INTERNAL_MARKERS)
     term_matches = _mentioned_term_matches(question, input)
     document_matches = _catalog_document_matches(input)
     unknown_terms = [match for match in term_matches if match.definition_unknown]
-    general_marker = _contains(question, _GENERAL_MARKERS)
+    document_intent = _document_intent(question)
+    generic_document_intent = query_plan.generic_document_content_ask(question)
+    explicit_document_intent = (
+        document_intent if document_intent != generic_document_intent else ""
+    )
+    # 泛指文档内容（「文档中，他们是怎么设计的」）比「指定资料的内容问法」更精确：
+    # C21.3 会同时匹配后者（正则过宽），因此只把它作为 R1 的证据文案，避免同一条规则
+    # 出现两条语义不同的命中。是否只有泛指、没有明确文章名，由 R1 分支单独判定。
+    generic_document_only = False
+
+    # ---- R7：仅询问产品功能或资料概览
+    # 早退的前提是「问题确实只是在问产品/概览」。用户实测缺陷 F11/F15：T12 问的是
+    # 「知识库中介绍 K8S 十四个基础概念的文章，如何说明 Deployment 和 Service 各自的
+    # 职责」—— 这是**指定文章的内容问题**，却因为句中出现「知识库」被归入 catalog，
+    # needs_knowledge=False，联网额度/查询规划都被跳过；T14 问「某篇文章…文中的依据」
+    # 连一次检索都没有执行。因此：命中内容线索（点名文档 / 求文中依据 / 目录文件线索）
+    # 时保留 R7 的意图标签，但**同时**要求走正文研究。
+    mode = classify_query(question)
+    content_question = document_intent or generic_document_intent or bool(document_matches)
+    if mode is QueryMode.PRODUCT_HELP:
+        hit("R7", "产品功能问题标记命中")
+        decision.intent = IntentKind.PRODUCT
+        decision.reason_summary = "询问产品功能，使用产品说明回答"
+        if content_question:
+            decision.needs_knowledge = True
+            notes.append(
+                "问题同时点名了具体资料内容：保留产品意图，但必须按正文研究回答（不只看产品说明）"
+            )
+        else:
+            return RuleOutcome(decision=decision, hits=hits, notes=notes)
+    elif mode is QueryMode.KNOWLEDGE_OVERVIEW:
+        hit("R7", "文档数量 / 概览问题标记命中")
+        decision.intent = IntentKind.CATALOG
+        decision.reason_summary = "询问工作区资料概览，使用结构化统计回答"
+        if content_question:
+            decision.needs_knowledge = True
+            decision.intent = IntentKind.RESEARCH
+            decision.reason_summary = "询问知识库中的内容，检索并读取相关正文"
+            notes.append(
+                "问题包含资料内容要求，进入正文研究"
+            )
+        else:
+            return RuleOutcome(decision=decision, hits=hits, notes=notes)
 
     # ---- R8：回忆以前的讨论
     memory_marker = _contains(question, _MEMORY_MARKERS)
@@ -515,9 +907,22 @@ def evaluate_route_rules(input: RoutingInput) -> RuleOutcome:
         decision.intent = IntentKind.MEMORY
         decision.needs_history = True
 
-    # ---- R1：明确引用内部资料 / 项目
+    # ---- R1：明确引用内部资料 / 项目；泛指文档内容优先归类 ----
     if internal_marker:
         hit("R1", f"内部引用标记：{internal_marker}")
+        decision.needs_knowledge = True
+    elif generic_document_intent:
+        hit("R1", f"泛指文档的内容问法：{generic_document_intent}")
+        decision.needs_knowledge = True
+        # 只有「泛指」、没有明确文章名时，不再叠加通用解释（避免用通用解释顶替文档内容）。
+        generic_document_only = not (
+            internal_marker or document_matches or explicit_document_intent
+        )
+    elif document_intent:
+        # 文档寻址问法（「的运维手册在哪里？」）与文档内容问法（「那篇文章为什么强调」
+        # 「请给出文中的依据」）：先检索再回答，不能没查就说没有、也不能要求用户
+        # 再提供知识库里已有的原文（用户实测缺陷 F14/F15）。
+        hit("R1", f"指定资料的内容问法：{document_intent}")
         decision.needs_knowledge = True
     elif document_matches:
         hit("R1", f"目录文件线索：{document_matches[0].matched_on}")
@@ -551,24 +956,62 @@ def evaluate_route_rules(input: RoutingInput) -> RuleOutcome:
             decision.intent = IntentKind.CLARIFICATION
             notes.append("问题很短且术语不明，先请用户确认对象")
 
-    # ---- R5：明确要求今天 / 最新 / 当前版本
+    # ---- R5：明确要求今天 / 最新 / 当前版本，或明确要求联网
+    # 联网表达用**动作短语**识别（见 :func:`explicit_web_request`）：旧实现是一张固定
+    # 动词清单（「联网搜索 / 联网查询 / 上网搜索 / 搜索网页 / 上网查」），于是
+    # 「联网查找」静默不动、行为与「联网搜索」不一致（用户实测缺陷 F05/T20）。
     freshness = _detect_freshness(question)
-    if freshness is not Freshness.NONE:
+    explicit_web = explicit_web_request(question)
+    official_web = bool(source_requirement(question)) and not memory_marker
+    general_only = bool(re.search(r"(?:仅|只|用|使用|根据)通用知识|无需检索|不(?:要|用)检索", question))
+    product_web = bool(
+        official_domains(question)
+        and not (internal_marker or memory_marker or document_intent or generic_document_intent or document_matches)
+        and not general_only and not local_only_question(question)
+        and any(marker in question.casefold() for marker in (*_CONCEPT_INTENT_MARKERS, "什么是", "默认", "参数", "配置"))
+    )
+    if freshness is not Freshness.NONE or explicit_web or official_web or product_web:
         marker = (
-            _contains(question, _FRESHNESS_RANGE_MARKERS)
+            explicit_web
+            or ("指定机构官方来源" if official_web else "")
+            or ("产品机制优先查询官方文档" if product_web else "")
+            or _contains(question, _FRESHNESS_RANGE_MARKERS)
             or _contains(question, _FRESHNESS_CURRENT_MARKERS)
             or "时间范围表达"
         )
-        hit("R5", f"时效标记：{marker}（{freshness.value}）")
+        hit("R5", f"联网要求：{marker}")
         decision.needs_web = True
         decision.freshness = freshness
+        if (official_web or product_web) and not (internal_marker or memory_marker):
+            decision.needs_knowledge = False
+            notes.append("本轮从产品官方网页查询所问内容")
+        elif not decision.needs_knowledge and bool(explicit_web):
+            decision.needs_knowledge = True
+            notes.append("用户明确要求联网核实，同时也查本工作区资料作为对照")
         if not decision.needs_knowledge:
-            decision.reason_summary = "需要公开且可核实的最新信息，走联网路径"
+            decision.reason_summary = "根据请求联网查询公开资料"
 
-    # ---- R6：通用解释同时涉及已有内部方案
+    # ---- R6：通用解释同时涉及已有内部方案 / 术语需要先理解再检索
+    general_marker = _contains(question, _GENERAL_MARKERS)
+    terms = concept_terms(question)
     if general_marker and (decision.needs_knowledge or bool(input.catalog_clues)):
         hit("R6", f"通用解释标记：{general_marker}，同时有内部线索")
         decision.needs_general = True
+    elif terms and not generic_document_only and input.knowledge_available:
+        # 术语 + 概念/场景意图：允许先用一般知识理解术语（General），同时把术语作为
+        # **检索线索**去查本区资料（RAG）。这样「AI Native 的使用场景」第一次提问就能
+        # 既解释概念又去找资料，而不是反复说「文档没有定义」（用户实测缺陷 C01）。
+        hit("R6", f"术语 + 概念意图：{'、'.join(terms[:3])}")
+        decision.needs_knowledge = True
+        decision.needs_general = True
+        decision.entities = _merge_unique(decision.entities, terms)
+        notes.append(
+            "术语先用一般知识理解并生成检索表达；术语扩展只是检索线索，"
+            "文档观点与案例仍需原文证据"
+        )
+
+    if (official_web or product_web) and not (internal_marker or memory_marker):
+        decision.needs_knowledge = False
 
     # ---- R9：知识库为空
     if not input.knowledge_available:
@@ -595,7 +1038,7 @@ def evaluate_route_rules(input: RoutingInput) -> RuleOutcome:
 
     if not decision.reason_summary:
         decision.reason_summary = _reason_summary(decision)
-    return RuleOutcome(decision=decision, hits=hits, notes=notes)
+    return RuleOutcome(decision=_apply_source_exclusions(decision, question), hits=hits, notes=notes)
 
 
 def _reason_summary(decision: RouteDecision) -> str:
@@ -795,9 +1238,13 @@ R9 知识库为空 → 通用和联网问题仍可处理；内部资料问题要
 - intent 只能取 general / research / product / catalog / memory / clarification。
 - freshness 只能取 none / current / date_range。
 - 目录片段只是定位线索，不能当作事实依据；不要引用其中的原文当答案。
+- reuse_evidence_ids逐份选择上一轮已完整阅读、且包含本轮所问事实的原文ID；另一份来源尚需补充时仍保留这些ID。
+  read_evidence_ids选择上一轮尚未完整阅读、需要按其章节位置补全的知识片段ID；已经有完整原文的相同章节无需再次选择。
+  needs_source_search表示是否还需搜索尚未定位的来源。既有完整原文与待补读章节已经定位本轮所需全部来源时为false，否则为true。
+  用户要求当前状态或重新联网读取时，needs_source_search为true。核对刚才原文的含义、版本、来源可以复用；来源类型仍在needs_knowledge/needs_web中声明。
 - 只输出 JSON 对象，字段：question / resolved_question / intent / needs_knowledge /
   needs_web / needs_history / needs_general / freshness / entities /
-  scope_evidence_ids / unresolved_terms / reason_summary。不要输出额外字段、不要输出置信度。"""
+  scope_evidence_ids / reuse_evidence_ids / read_evidence_ids / needs_source_search / unresolved_terms / reason_summary。不要输出额外字段、不要输出置信度。"""
 
 
 class RoutePrompt(_RoutingModel):
@@ -1068,6 +1515,10 @@ class IntentAgent:
         # 回忆讨论（R8）必须查历史。
         if "R8" in rule_ids:
             merged = adjust_route_decision(merged, needs_history=True)
+            if not rule_decision.needs_knowledge:
+                merged = adjust_route_decision(merged, needs_knowledge=False)
+            if not rule_decision.needs_web:
+                merged = adjust_route_decision(merged, needs_web=False)
         # 空知识库（R9）保持规则层的资料情况说明。
         if "R9" in rule_ids and rule_decision.needs_knowledge:
             merged = adjust_route_decision(merged, needs_knowledge=True)
@@ -1081,7 +1532,7 @@ class IntentAgent:
             )
         if not merged.reason_summary:
             merged = adjust_route_decision(merged, reason_summary=rule_decision.reason_summary)
-        return merged
+        return _apply_source_exclusions(merged, rule_decision.question)
 
 
 def _response_content(response: Any) -> Any:

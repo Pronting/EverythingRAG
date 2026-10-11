@@ -13,9 +13,8 @@ import type {
   TaskStatus,
   ToolCompletedPayload,
   ToolStartedPayload,
-  VerificationResult,
-  VerifierVerdict,
 } from "../types";
+import { requiredActionText } from "../util/runError";
 
 /**
  * 过程区域归约器（PRD 14.2）。
@@ -49,7 +48,7 @@ export const TOOL_ACTION_LABELS: Record<string, string> = {
 /** Agent 种类 → 行动说明。 */
 export const AGENT_ACTION_LABELS: Record<string, string> = {
   intent: "正在理解问题",
-  planner: "正在拆解研究任务",
+  planner: "正在安排研究任务",
   general: "正在组织通用回答",
   rag: "正在本地知识中查证",
   web: "正在联网核实",
@@ -59,20 +58,43 @@ export const AGENT_ACTION_LABELS: Record<string, string> = {
   memory_extractor: "正在整理工作区记忆",
 };
 
+/**
+ * 「结果条数」对哪些工具有意义（PRD 14.2：条目说明按实际动作生成）。
+ *
+ * 只有这些工具的 `result_count` 是**真实结果条数**，0 才能如实说成「未找到可用资料」。
+ * 其余工具（获取工作区概览、核对图片、向你确认）没有「资料条数」这一说，收口成
+ * 「已完成」—— 不能因为负载里该字段缺省为 0，就把「做完了」说成「什么都没找到」。
+ */
+const COUNTED_TOOLS: ReadonlySet<string> = new Set([
+  "lookup_catalog",
+  "search_knowledge",
+  "search_history",
+  "read_history",
+  "web_search",
+  "read_web_page",
+  "rerank",
+]);
+
 /** 工具完成后按结果数量补一句明确说明（0 结果也必须说清楚）。 */
 export function toolResultText(payload: ToolCompletedPayload): string {
   const action = TOOL_ACTION_LABELS[payload.tool_name] ?? `正在执行 ${payload.tool_name}`;
+  const done = action.replace("正在", "");
   if (payload.status !== "succeeded") {
     const reason = payload.error_code === "" ? "执行失败" : `执行失败（${payload.error_code}）`;
-    return `${action.replace("正在", "")}：${reason}`;
+    return `${done}：${reason}`;
   }
+  if (payload.summary) return payload.summary;
   // 筛选进度事件的计数自 t5 起是**真实值**（入选数 / 候选数），按真实结果收口。
   if (payload.tool_name === "rerank") return rerankResultText(payload);
+  // 没有「条数」概念的工具：只说明它做完了，不编造条数。
+  if (!COUNTED_TOOLS.has(payload.tool_name)) {
+    return `${done}：已完成`;
+  }
   if (payload.result_count === 0) {
-    return `${action.replace("正在", "")}：未找到可用资料`;
+    return `${done}：未找到可用资料`;
   }
   const sourceNote = payload.source_count > 0 ? `，来自 ${payload.source_count} 个来源` : "";
-  return `${action.replace("正在", "")}：命中 ${payload.result_count} 条资料${sourceNote}`;
+  return `${done}：命中 ${payload.result_count} 条资料${sourceNote}`;
 }
 
 /**
@@ -173,25 +195,6 @@ export function runningEntryText(state: ProcessState): string | null {
   return (tool ?? latest)?.text ?? null;
 }
 
-/** 核对结论 → 行动说明（PRD 8.2 / 14.2）。 */
-export function verificationText(result: VerificationResult): string {
-  const verdict: VerifierVerdict = result.verdict;
-  switch (verdict) {
-    case "pass":
-      return "核对通过";
-    case "revise":
-      return "核对发现需要修正的陈述";
-    case "research":
-      return "发现资料差异，继续查阅发布说明";
-    case "clarify":
-      return "需要向你确认后才能继续";
-    case "insufficient":
-      return "现有资料不足以支持结论";
-    default:
-      return "核对进行中";
-  }
-}
-
 function nextSeq(state: ProcessState, seq: number): boolean {
   return seq > state.lastSeq;
 }
@@ -202,7 +205,7 @@ function upsertEntry(state: ProcessState, entry: ProcessEntry): ProcessState {
     return { ...state, entries: [...state.entries, entry] };
   }
   const entries = state.entries.slice();
-  entries[index] = entry;
+  entries[index] = { ...entry, reasoning: entry.reasoning ?? entries[index].reasoning };
   return { ...state, entries };
 }
 
@@ -232,7 +235,7 @@ function taskFromSummary(summary: PlanTaskSummary): ProcessTask {
 
 /** 空状态。 */
 export function emptyProcessState(): ProcessState {
-  return { entries: [], tasks: [], threads: [], lastSeq: 0 };
+  return { entries: [], tasks: [], activity: [], threads: [], lastSeq: 0 };
 }
 
 /**
@@ -298,7 +301,7 @@ export function reduceRunEvents(
 export function terminalStatusText(status: RunStatus): string {
   switch (status) {
     case "completed":
-      return "已完成并核对通过";
+      return "已完成";
     case "completed_with_gaps":
       return "已完成，但部分资料不足（已在正文标明影响）";
     case "failed":
@@ -323,7 +326,11 @@ export function terminalStatusText(status: RunStatus): string {
 /** 归约单个事件（纯函数，重复 `event_seq` 幂等）。 */
 export function applyRunEvent(state: ProcessState, event: RunEventTyped): ProcessState {
   if (!nextSeq(state, event.event_seq)) return state;
-  const base: ProcessState = { ...state, lastSeq: event.event_seq };
+  const base: ProcessState = {
+    ...state,
+    lastSeq: event.event_seq,
+    activity: activityAfterEvent(state.activity ?? [], event),
+  };
   const seq = event.event_seq;
   const at = event.created_at;
   const entry = (partial: Omit<ProcessEntry, "seq" | "at">): ProcessEntry => ({
@@ -333,21 +340,46 @@ export function applyRunEvent(state: ProcessState, event: RunEventTyped): Proces
   });
 
   switch (event.type) {
+    case "model.reasoning": {
+      const payload = event.payload;
+      const previous = base.entries.find((item) => item.id === payload.step_id);
+      const reasoning = [...(previous?.reasoning ?? [])];
+      const index = reasoning.findIndex((item) => item.streamId === payload.stream_id);
+      if (index < 0) reasoning.push({ streamId: payload.stream_id, text: payload.text });
+      else reasoning[index] = { ...reasoning[index], text: reasoning[index].text + payload.text };
+      return upsertEntry(base, {
+        ...(previous ?? entry({
+          id: payload.step_id, kind: "status", text: payload.title,
+          status: "running", taskId: event.task_id,
+        })),
+        reasoning,
+      });
+    }
     case "run.status": {
       const payload = event.payload;
+      base.entries = base.entries.map((item) =>
+        item.kind === "status" && item.status === "running" ? { ...item, status: "done" } : item,
+      );
       // 有 message 的是**进度叙述**：独立条目，保留历史（每条叙述都是一步）。
       // 没有 message 的只维护「当前状态」这一条（按 id 覆盖，不刷屏）。
       if (payload.message !== "") {
+        const id = payload.phase ? `phase:${payload.phase}` : `status-note:${seq}`;
+        const previous = base.entries.find((item) => item.id === id);
         return upsertEntry(
           base,
           entry({
-            id: `status-note:${seq}`,
+            id,
             kind: "status",
             text: payload.message,
-            status: payload.status === "failed" ? "failed" : "running",
+            status: payload.status === "failed" ? "failed"
+              : payload.model_call?.ended_at
+                ? payload.model_call.outcome === "completed" ? "done"
+                  : payload.model_call.outcome === "CancelledError" ? "cancelled" : "failed"
+                : "running",
             taskId: event.task_id,
             tag: payload.status,
-            details: payload.phase === "" ? [] : [`阶段：${payload.phase}`],
+            details: [],
+            reasoning: previous?.reasoning,
           }),
         );
       }
@@ -365,7 +397,7 @@ export function applyRunEvent(state: ProcessState, event: RunEventTyped): Proces
                 : "done",
           taskId: event.task_id,
           tag: payload.status,
-          details: payload.phase === "" ? [] : [`阶段：${payload.phase}`],
+          details: [],
         }),
       );
     }
@@ -377,10 +409,7 @@ export function applyRunEvent(state: ProcessState, event: RunEventTyped): Proces
       if (decision.needs_web) chosen.push("联网核实");
       if (decision.needs_history) chosen.push("历史会话");
       if (decision.needs_general) chosen.push("通用解释");
-      const text =
-        decision.reason_summary !== ""
-          ? decision.reason_summary
-          : `处理路径：${chosen.length > 0 ? chosen.join(" + ") : "直接回答"}`;
+      const text = chosen.length > 0 ? `使用${chosen.join("、")}回答问题` : "直接回答当前问题";
       return upsertEntry(
         base,
         entry({
@@ -390,29 +419,31 @@ export function applyRunEvent(state: ProcessState, event: RunEventTyped): Proces
           status: "done",
           taskId: null,
           tag: decision.intent,
-          details: [`来源：${chosen.length > 0 ? chosen.join("、") : "无外部资料"}`],
+          details: [decision.resolved_question || decision.question].filter(Boolean),
         }),
       );
     }
 
     case "plan.updated": {
       const payload = event.payload;
-      let next = base;
+      let next: ProcessState = {
+        ...base,
+        entries: base.entries.map((item) =>
+          item.id === "phase:plan" && item.status === "running"
+            ? { ...item, status: "done" } : item,
+        ),
+      };
       for (const summary of payload.tasks ?? []) {
         next = upsertTask(next, taskFromSummary(summary));
       }
       const count = (payload.tasks ?? []).length;
-      const details: string[] = [];
-      if (count > 0) details.push(`共 ${count} 个研究任务`);
-      if ((payload.uncovered_requirements ?? []).length > 0) {
-        details.push(`尚无任务覆盖的要求：${(payload.uncovered_requirements ?? []).join("、")}`);
-      }
+      const details = (payload.tasks ?? []).map((task) => task.question).filter(Boolean);
       return upsertEntry(
         next,
         entry({
           id: "plan",
           kind: "plan",
-          text: count > 0 ? `已拆解为 ${count} 个子问题` : "无需拆分，直接处理",
+          text: count > 0 ? `本次查询 ${count} 个问题` : "直接处理当前问题",
           status: "done",
           taskId: null,
           details,
@@ -487,14 +518,13 @@ export function applyRunEvent(state: ProcessState, event: RunEventTyped): Proces
     case "tool.started": {
       const payload: ToolStartedPayload = event.payload;
       const action = TOOL_ACTION_LABELS[payload.tool_name] ?? `正在执行 ${payload.tool_name}`;
-      const details =
-        payload.args_summary === "" ? [] : [`参数：${payload.args_summary}`];
+      const details: string[] = [];
       return upsertEntry(
         base,
         entry({
           id: `tool:${payload.operation_id || payload.tool_name}`,
           kind: "tool",
-          text: action,
+          text: payload.summary || action,
           status: "running",
           taskId: payload.task_id,
           tag: payload.tool_name,
@@ -505,17 +535,22 @@ export function applyRunEvent(state: ProcessState, event: RunEventTyped): Proces
 
     case "tool.completed": {
       const payload: ToolCompletedPayload = event.payload;
+      const id = `tool:${payload.operation_id || payload.tool_name}`;
+      // 保留本次查询或阅读的对象，与操作结果一起展示。
+      const previous = base.entries.find((item) => item.id === id);
+      const details = [...(payload.details ?? [])];
+      if (previous?.text && previous.text !== toolResultText(payload)) details.unshift(previous.text);
       return upsertEntry(
         base,
         entry({
-          id: `tool:${payload.operation_id || payload.tool_name}`,
+          id,
           kind: "tool",
           text: toolResultText(payload),
           status: payload.status === "succeeded" ? "done" : "failed",
           taskId: event.task_id,
           tag: payload.tool_name,
-          details:
-            payload.error_code === "" ? [] : [`错误码：${payload.error_code}`],
+          details,
+          sources: payload.sources,
         }),
       );
     }
@@ -580,7 +615,7 @@ export function applyRunEvent(state: ProcessState, event: RunEventTyped): Proces
           id: `approval:${payload.approval_id}`,
           kind: "approval",
           text: label,
-          status: payload.decision_kind === "deny" ? "failed" : "done",
+          status: payload.decision_kind === "deny" ? "cancelled" : "done",
           taskId: event.task_id,
         }),
       );
@@ -615,31 +650,6 @@ export function applyRunEvent(state: ProcessState, event: RunEventTyped): Proces
       );
     }
 
-    case "verification.updated": {
-      const result = event.payload.result;
-      const details: string[] = [];
-      if ((result.conflicts ?? []).length > 0) {
-        details.push(`发现版本差异：${(result.conflicts ?? []).join("；")}`);
-      }
-      for (const issue of result.issues ?? []) {
-        details.push(`${issue.check}：${issue.required_action || issue.statement}`);
-      }
-      const pending = event.payload.pending ?? [];
-      if (pending.length > 0) details.push(`待补充：${pending.join("；")}`);
-      return upsertEntry(
-        base,
-        entry({
-          id: "verification",
-          kind: "verification",
-          text: verificationText(result),
-          status: result.verdict === "pass" ? "done" : "waiting",
-          taskId: event.task_id,
-          tag: result.verdict,
-          details: details.slice(0, 8),
-        }),
-      );
-    }
-
     case "memory.updated": {
       const payload = event.payload;
       return upsertEntry(
@@ -669,6 +679,9 @@ export function applyRunEvent(state: ProcessState, event: RunEventTyped): Proces
 
     case "run.completed": {
       const payload = event.payload;
+      base.entries = base.entries.map((item) =>
+        item.status === "running" ? { ...item, status: "done" } : item,
+      );
       const gaps = payload.gaps ?? [];
       const text =
         payload.status === "completed_with_gaps"
@@ -690,6 +703,9 @@ export function applyRunEvent(state: ProcessState, event: RunEventTyped): Proces
 
     case "run.failed": {
       const error = event.payload.error;
+      base.entries = base.entries.map((item) =>
+        item.status === "running" ? { ...item, status: "failed" } : item,
+      );
       return upsertEntry(
         base,
         entry({
@@ -699,18 +715,28 @@ export function applyRunEvent(state: ProcessState, event: RunEventTyped): Proces
           status: "failed",
           taskId: null,
           tag: error.error_code,
-          details: error.required_action === "" ? [] : [`建议：${error.required_action}`],
+          details: requiredActionText(error) ? [`建议：${requiredActionText(error)}`] : [],
         }),
       );
     }
 
     case "run.cancelled": {
+      base.tasks = base.tasks.map((task) =>
+        ["completed", "completed_with_gaps", "failed", "cancelled"].includes(task.status)
+          ? task : { ...task, status: "cancelled" },
+      );
+      base.entries = base.entries.map((item) =>
+        ["running", "waiting"].includes(item.status)
+          ? { ...item, status: "cancelled", text: `${item.text}（已停止）` } : item,
+      );
       return upsertEntry(
         base,
         entry({
           id: "status",
           kind: "status",
-          text: event.payload.resumable ? "已停止（可继续）" : "已停止",
+          text: event.payload.stop_reason === "approval_denied"
+            ? "已按你的选择终止本次任务，未执行被拒绝的操作"
+            : event.payload.resumable ? "已停止（可继续）" : "已停止",
           status: "done",
           taskId: null,
           tag: event.payload.stop_reason,
@@ -727,6 +753,21 @@ export function applyRunEvent(state: ProcessState, event: RunEventTyped): Proces
     default:
       return base;
   }
+}
+
+function activityAfterEvent(
+  activity: ProcessState["activity"], event: RunEventTyped,
+): ProcessState["activity"] {
+  const closing = ["run.completed", "run.failed", "run.cancelled", "approval.requested", "input.requested"].includes(event.type)
+    || (event.type === "run.status" && ["waiting_approval", "waiting_input", "interrupted"].includes(event.payload.status));
+  const latest = activity.at(-1);
+  if (latest?.endedAt === null) {
+    if (!closing) return activity;
+    return [...activity.slice(0, -1), { ...latest, endedAt: event.created_at }];
+  }
+  const starting = ["route.decided", "agent.started", "tool.started", "approval.resolved", "input.resolved"].includes(event.type)
+    || (event.type === "run.status" && event.payload.status === "running");
+  return starting ? [...activity, { startedAt: event.created_at, endedAt: null }] : activity;
 }
 
 /** 父任务整体完成情况（PRD 14.2：父任务展示整体完成情况）。 */
@@ -746,12 +787,14 @@ export function taskProgress(tasks: ProcessTask[]): {
     (status) =>
       status === "waiting_approval" || status === "waiting_input" || status === "waiting_children",
   );
-  const failed = count((status) => status === "failed" || status === "cancelled");
+  const failed = count((status) => status === "failed");
+  const cancelled = count((status) => status === "cancelled");
   const total = tasks.length;
   const parts: string[] = [`${done}/${total} 已完成`];
   if (running > 0) parts.push(`${running} 进行中`);
   if (waiting > 0) parts.push(`${waiting} 等待处理`);
   if (failed > 0) parts.push(`${failed} 失败`);
+  if (cancelled > 0) parts.push(`${cancelled} 已终止`);
   return { total, done, running, waiting, failed, text: parts.join("，") };
 }
 

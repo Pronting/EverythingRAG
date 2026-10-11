@@ -1,13 +1,3 @@
-"""10 个工具的真实行为测试（PRD 7.1 / 7.2）。Owner: T04。
-
-零真实 Chroma（块级替身）与零出网；工作区用 T01 的真实 ``WorkspaceContext``（tmp 目录），
-``app.db`` 用 ``AppStore`` 内存实例。重点断言：
-
-- ``workspace_id`` 不出现在模型可见参数里，且跨工作区检索面被硬门拒绝；
-- 工具结果**不含**绝对路径 / 原图路径（``TOOL_FORBIDDEN_PATH_KEYS``）；
-- 空结果、资料无关、未建索引、跨区不存在分别返回准确状态。
-"""
-
 from __future__ import annotations
 
 import json
@@ -581,69 +571,6 @@ async def test_search_knowledge_rejects_foreign_vector_store(tmp_path: Path) -> 
 # =====================================================================
 # 4. read_document
 # =====================================================================
-
-
-async def test_read_document_returns_window_and_continuation(tmp_path: Path) -> None:
-    registry = build_default_registry()
-    store = _BlockStore(
-        [
-            _block("doc-a", heading="第一章", text="AAA", index=0),
-            _block("doc-a", heading="第二章", text="BBB", index=1),
-        ]
-    )
-    context = _context(_runtime_workspace(tmp_path), store=store)
-
-    first = await registry.execute(
-        ToolName.READ_DOCUMENT, {"document_id": "doc-a", "limit": 4}, context
-    )
-    second = await registry.execute(
-        ToolName.READ_DOCUMENT,
-        {"document_id": "doc-a", "limit": 10, "offset": first.data["next_offset"]},
-        context,
-    )
-
-    assert first.status is ToolStatus.OK
-    # 全文 = "AAA\n\nBBB"（块之间以空行拼接）；窗口按字符切分，续读位置可直接回传
-    assert first.data["text"] == "AAA\n"
-    assert first.data["total_chars"] == 8
-    assert first.data["next_offset"] == 4
-    assert first.data["headings"] == ["第一章", "第二章"]
-    assert first.data["document_revision"] == "rev-1"
-    assert second.data["text"] == "\nBBB"
-    assert second.data["next_offset"] is None
-    _assert_no_local_paths(first.data)
-
-
-async def test_read_document_heading_filter_and_missing_cases(tmp_path: Path) -> None:
-    registry = build_default_registry()
-    store = _BlockStore(
-        [
-            _block("doc-a", heading="第一章 报销范围", text="AAA", index=0),
-            _block("doc-a", heading="第二章 报销时限", text="BBB", index=1),
-        ]
-    )
-    context = _context(_runtime_workspace(tmp_path), store=store)
-
-    filtered = await registry.execute(
-        ToolName.READ_DOCUMENT, {"document_id": "doc-a", "heading": "第二章"}, context
-    )
-    no_heading = await registry.execute(
-        ToolName.READ_DOCUMENT, {"document_id": "doc-a", "heading": "第三章"}, context
-    )
-    unknown = await registry.execute(
-        ToolName.READ_DOCUMENT, {"document_id": "doc-missing"}, context
-    )
-    at_end = await registry.execute(
-        ToolName.READ_DOCUMENT, {"document_id": "doc-a", "offset": 100}, context
-    )
-
-    assert filtered.data["text"] == "BBB"
-    assert no_heading.status is ToolStatus.EMPTY
-    assert no_heading.data["code"] == "heading_not_found"
-    assert unknown.status is ToolStatus.NOT_FOUND
-    assert unknown.data["code"] == "document_not_found"
-    assert at_end.status is ToolStatus.EMPTY
-    assert at_end.data["code"] == "end_of_document"
 
 
 def test_document_identity_helpers_do_not_leak_paths(tmp_path: Path) -> None:

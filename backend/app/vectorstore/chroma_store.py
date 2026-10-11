@@ -191,6 +191,15 @@ class ChromaVectorStore:
             for block_id, text, meta in zip(ids, documents, metadatas, strict=True)
         ]
 
+    def update_metadata(self, records: list[tuple[str, dict[str, Any]]]) -> None:
+        if records:
+            with exclusive_write_lock(self._write_lock_path):
+                self._collection_guard(
+                    lambda c: c.update(ids=[item[0] for item in records],
+                                       metadatas=[item[1] for item in records]),
+                    write_lock_held=True,
+                )
+
     def find_cached_image_description_by_source(self, src: str) -> tuple[str, str] | None:
         """Recover ``(content_hash, raw_description)`` from any retained collection.
 

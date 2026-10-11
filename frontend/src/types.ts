@@ -1,6 +1,8 @@
 /** SSE 来源块：对齐后端 chat_service._meta_frame 的来源投影（见 BlockMetadata）。 */
 export interface Source {
   image_url?: string | null;
+  /** 来源文档或网页的可读标题；缺省时继续使用 source_file。 */
+  document_title?: string | null;
   /** 本轮稳定引用编号：本地来源 S1...，联网来源 W1...。 */
   source_id: string;
   block_id: string;
@@ -13,7 +15,7 @@ export interface Source {
    * 重排分数只进 ``rerank_score``，不得改写本字段（PRD §8.3）。
    */
   similarity: number | null;
-  match_type?: "dense" | "hybrid" | "lexical" | "expanded" | "web" | "memory" | "rerank";
+  match_type?: "dense" | "hybrid" | "lexical" | "expanded" | "read" | "web" | "memory" | "rerank";
   heading_path: string | null;
   anchor: string | null;
   chunk_type: string;
@@ -168,6 +170,61 @@ export interface ImportStatus {
   updated_at: string;
 }
 
+/** 供应商下的一个模型：`id` 是真实调用名，`name` 只用于显示。 */
+export interface ProviderModelView {
+  id: string;
+  name: string;
+  /** 多模态（可直接接收图片输入）：选中它即开启「图片输入」。 */
+  vision: boolean;
+}
+
+/** 供应商可用状态：已就绪 / 缺少密钥 / 配置不完整。 */
+export type ProviderStatus = "ready" | "needs_key" | "unconfigured";
+
+/** /api/settings 的供应商投影（密钥只给 api_key_set + 尾4位）。 */
+export interface ProviderView {
+  id: string;
+  name: string;
+  kind: "builtin" | "custom";
+  protocol: string;
+  base_url: string | null;
+  api_key_set: boolean;
+  api_key_hint: string | null;
+  models: ProviderModelView[];
+  status: ProviderStatus;
+  /** 是否是当前选中的供应商。 */
+  selected: boolean;
+}
+
+/** 预置目录项（设置页「添加提供方」列表）。 */
+export interface ModelCatalogEntry {
+  id: string;
+  name: string;
+  base_url: string;
+  summary: string;
+  requires_api_key: boolean;
+  docs_url: string | null;
+  models: ProviderModelView[];
+}
+
+/** 当前选中的供应商 + 模型（界面触发器与勾选态都看它）。 */
+export interface ModelSelectionView {
+  provider_id: string;
+  provider_name: string;
+  model_id: string;
+  model_name: string;
+  vision: boolean;
+}
+
+/** POST /api/settings/providers/models：按端点拉取可用模型（真实出网，服务端不落盘密钥）。 */
+export interface ProviderModelsResult {
+  success: boolean;
+  message?: string;
+  models: { id: string }[];
+  count: number;
+  latency_ms?: number;
+}
+
 /** /api/settings 脱敏视图（key 只给 hint）。 */
 export interface SettingsView {
   chat: {
@@ -201,6 +258,15 @@ export interface SettingsView {
     api_key_hint: string | null;
   };
   rerank: RerankSettingsView;
+  /** 对话模型供应商列表（可配置多个；`providers` 为整表替换语义）。 */
+  providers: ProviderView[];
+  /** 当前选中的供应商 + 模型；null = 未选择。 */
+  model_selection: ModelSelectionView | null;
+  /** 预置供应商目录（「添加提供方」）。 */
+  model_catalog: ModelCatalogEntry[];
+  /** 本版支持的 API 协议（设置页下拉选项）。 */
+  model_protocols: string[];
+  memory_enabled: boolean;
   answer_preferences: {
     language: "auto" | "zh-CN" | "en";
     verbosity: "concise" | "balanced" | "detailed";
@@ -294,8 +360,21 @@ export interface RerankTestResult {
   message?: string;
 }
 
+/** PUT /api/settings 中的一条供应商（整表替换：每条都要给全）。 */
+export interface ProviderUpdate {
+  id: string;
+  name: string;
+  kind: "builtin" | "custom";
+  protocol?: string;
+  base_url?: string | null;
+  /** 省略 = 保留已保存密钥；空串 = 清除；非空 = 设置。 */
+  api_key?: string;
+  models: { id: string; name?: string | null; vision: boolean }[];
+}
+
 /** PUT /api/settings 局部更新负载（null = 保留原值；api_key 空串 = 清除）。 */
 export interface SettingsUpdate {
+  memory_enabled?: boolean;
   chat?: {
     provider_type?: string;
     base_url?: string;
@@ -303,6 +382,10 @@ export interface SettingsUpdate {
     api_key?: string | null;
     supports_image?: boolean;
   };
+  /** 整表替换：省略的供应商即被删除。 */
+  providers?: ProviderUpdate[];
+  /** 当前选中的供应商 + 模型；两个字段都为空 = 清除选择。 */
+  model_selection?: { provider_id: string | null; model_id: string | null };
   embed?: {
     mode?: "cloud";
     base_url?: string;
@@ -345,6 +428,9 @@ export interface SettingsUpdate {
 
 /** 持久化的对话消息（只含可展示正文、思维链、依据标签与来源快照）。 */
 export interface ConversationMessage {
+  message_id?: string | null;
+  run_id?: string | null;
+  citations?: CitationEntry[] | null;
   role: "user" | "assistant";
   content: string;
   sources: Source[] | null;
@@ -372,12 +458,12 @@ export interface ConversationSummary {
   forked_from_title?: string | null;
   /** 所属工作区（对话分区）id。 */
   workspace_id?: string;
-  /** 工作区内手工排序位（拖拽排序后写入）；null/缺省 = 按更新时间。 */
-  sort_index?: number | null;
 }
 
 /** 完整会话（含消息列表）。 */
 export interface Conversation {
+  permission_mode?: PermissionMode;
+  reasoning_level?: ReasoningLevel;
   id: string;
   title: string;
   created_at: string;
@@ -392,6 +478,8 @@ export interface Conversation {
 
 /** 工作区（对话分区）：侧边栏文件夹树的条目。 */
 export interface Workspace {
+  default_permission_mode?: PermissionMode;
+  default_reasoning_level?: ReasoningLevel;
   id: string;
   name: string;
   created_at: string;
@@ -468,7 +556,7 @@ export type AgentKind =
 /** 权限模式（PRD 10.1，默认请求批准）。 */
 export type PermissionMode = "ask" | "auto" | "full";
 
-/** 思考深度（PRD 9.1，默认深度思考）。 */
+/** 思考深度（PRD 9.1，默认关闭思考）。 */
 export type ReasoningLevel = "off" | "low" | "high" | "max";
 
 export type ApprovalDecisionKind = "allow_once" | "allow_scope" | "deny";
@@ -516,6 +604,7 @@ export type EventType =
   | "plan.updated"
   | "agent.started"
   | "agent.completed"
+  | "model.reasoning"
   | "tool.started"
   | "tool.completed"
   | "approval.requested"
@@ -573,10 +662,20 @@ export interface CitationEntry {
   /**
    * **原始向量分数**（检索阶段的相似度；PRD §304：不得存入重排分数）。
    *
-   * 纯词法命中、未启用筛选或旧记录缺该键时为 `null` ⇒ 界面按 §52 显示「词法命中」，
+   * 缺少分数时保留来源类型；仅明确标记为 lexical 的记录显示「词法命中」。
    * **绝不**编造 0%，也绝不把 `rerank_score` 写进这个字段。
    */
   similarity?: number | null;
+  match_type?: Source["match_type"];
+  /**
+   * 证据所属**章节标题**（人读的位置，如「3.3 记忆管理 > 3.3.5 记忆关联与概念标签」）。
+   *
+   * 与 `source_ref`（文档 ID / 版本 / block ID，仅供定位）分开表达：来源面板显示正文 +
+   * 章节标题，内部标识只用于定位。旧记录缺该键时为空串（界面不显示标题行）。
+   */
+  heading_path?: string;
+  /** 证据所属文档或网页的完整标题；旧记录缺省为空串。 */
+  document_title?: string;
 }
 
 export interface WebReadRange {
@@ -800,6 +899,19 @@ export interface ToolStartedPayload {
   args_summary: string;
   operation_id: string;
   task_id: string | null;
+  summary?: string;
+}
+
+export interface ProcessSource {
+  title: string;
+  text: string;
+}
+
+export interface ModelReasoningPayload {
+  step_id: string;
+  stream_id: string;
+  title: string;
+  text: string;
 }
 
 export interface ToolCompletedPayload {
@@ -809,9 +921,13 @@ export interface ToolCompletedPayload {
   result_count: number;
   source_count: number;
   error_code: string;
+  summary?: string;
+  details?: string[];
+  sources?: ProcessSource[];
 }
 
 export interface RunStatusPayload {
+  model_call?: { call_id: string; ended_at: string | null; outcome: string; usage: Record<string, number> | null } | null;
   status: RunStatus;
   phase: string;
   message: string;
@@ -960,6 +1076,7 @@ export type RunStreamFrame = RunEvent | RunProtocolErrorFrame;
 
 /** 带具体负载的强类型事件，供事件归约器使用。 */
 export type RunEventTyped =
+  | RunEvent<"model.reasoning"> & { payload: ModelReasoningPayload }
   | RunEvent<"run.status"> & { payload: RunStatusPayload }
   | RunEvent<"route.decided"> & { payload: { decision: RouteDecision } }
   | RunEvent<"plan.updated"> & { payload: PlanUpdatedPayload }
@@ -1006,12 +1123,14 @@ export interface ProcessEntry {
   /** 事件序号（排序与去重依据）。 */
   seq: number;
   at: string;
-  status: "running" | "done" | "failed" | "waiting";
+  status: "running" | "done" | "failed" | "waiting" | "cancelled";
   taskId: string | null;
   /** 工具名 / Agent 名 / 核对项目键（测试与样式挂钩）。 */
   tag?: string;
   /** 可展开的细项（读过的来源、结果摘要、核对发现）。 */
   details?: string[];
+  sources?: ProcessSource[];
+  reasoning?: { streamId: string; text: string }[];
 }
 
 /** 过程区域内的研究任务视图（父任务展示整体完成情况，PRD 14.2）。 */
@@ -1034,6 +1153,8 @@ export interface ProcessTask {
 export interface ProcessState {
   entries: ProcessEntry[];
   tasks: ProcessTask[];
+  /** 每次实际执行的起止时间；暂停等待用户或服务恢复的时间不计入用时。 */
+  activity: { startedAt: string; endedAt: string | null }[];
   /** 主图与子图的 thread_id（`run:<id>:main` / `run:<id>:task:<task_id>`）。 */
   threads: string[];
   /** 已处理的最大事件序号（去重与断线补读的游标）。 */

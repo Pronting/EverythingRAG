@@ -154,6 +154,7 @@ const REQUIRED_PAYLOAD_FIELDS: Record<string, string[]> = {
   "plan.updated": [],
   "agent.started": ["agent_kind"],
   "agent.completed": ["agent_kind"],
+  "model.reasoning": ["step_id", "stream_id", "title", "text"],
   "tool.started": ["tool_name"],
   "tool.completed": ["tool_name"],
   "approval.requested": ["approval"],
@@ -228,6 +229,9 @@ export function parseRunEvent(raw: unknown): EventParseOutcome {
   }
 
   const payload = raw.payload;
+  if (type === "model.reasoning" && ["step_id", "stream_id", "title", "text"].some(
+    (field) => typeof payload[field] !== "string",
+  )) return { ok: false, reason: "模型思考事件字段必须是文本" };
   for (const field of REQUIRED_PAYLOAD_FIELDS[type]) {
     if (!(field in payload)) {
       return { ok: false, reason: `事件 ${type} 的 payload 缺少 ${field}` };
@@ -283,6 +287,7 @@ export interface CreateRunInput {
    * 并展示，否则用户会以为历史凭空消失。
    */
   originRunId?: string | null;
+  replaceFromMessageId?: string | null;
 }
 
 /** 一次 run 允许附带的图片张数（与后端 `MAX_RUN_IMAGES` 一致，超出 422）。 */
@@ -318,6 +323,7 @@ export async function createRun(
         images: input.images ?? [],
         // 来源 run（PRD 5.4）：只在确有承接关系时带上。
         origin_run_id: input.originRunId ?? null,
+        replace_from_message_id: input.replaceFromMessageId ?? null,
       }),
     },
     signal,
@@ -529,7 +535,7 @@ export async function submitInput(
   );
 }
 
-/** 停止：终止主任务与活动子任务（等模型请求退出后记完成，PRD 12.4）。 */
+/** 停止：立即请求取消主任务与活动子任务。 */
 export async function cancelRun(
   workspaceId: string,
   runId: string,

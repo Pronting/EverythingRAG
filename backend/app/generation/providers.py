@@ -19,8 +19,11 @@ V1.2.0（PRD 9.1 / 9.2 / 7.4）：
 
 from __future__ import annotations
 
+import asyncio
 import os
+import threading
 from collections.abc import AsyncIterator, Mapping, Sequence
+from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from typing import Any
 from urllib.parse import urlsplit
@@ -52,15 +55,19 @@ from app.generation.capabilities import (
     resolve_capabilities,
     resolve_reasoning_params,
 )
+from app.generation.context import ContextBudget, budget_for_request
+from app.generation.tokenizer import PromptCounter, default_prompt_counter
 
 __all__ = [
     "REASONING_REPLAY_TOOLS",
     "ChatProviderError",
+    "ContextWindowExceededError",
     "OpenAICompatChatModel",
     "ProviderRequestError",
     "UnconfiguredChatModel",
     "create_chat_model",
     "create_chat_model_from_config",
+    "exception_type_chain",
     "features_from_request",
     "prepare_messages",
     "reference_only_messages",
@@ -71,6 +78,12 @@ __all__ = [
 
 #: 全量重放推理内容的场景（带 tools 的会话，PRD 9.2 末段）。
 REASONING_REPLAY_TOOLS = "tools"
+
+_DEEPSEEK_V41_BUDGET_MODELS = frozenset({
+    ("api.deepseek.com", "deepseek-flash"),
+    ("api.commandcode.ai", "deepseek/deepseek-v4.1-flash"),
+})
+_PROMPT_BUDGET_LOCK = threading.Lock()
 
 #: 需要的显式能力声明（缺失时一次报全，不让用户逐个试错）。
 _REQUIRED_DECLARATION = (
@@ -90,6 +103,37 @@ class ChatProviderError(Exception):
 
 class ProviderRequestError(ChatProviderError):
     """Provider 提交前的配置错误：不支持所选功能、协议不满足（PRD 9.2）。"""
+
+
+class ContextWindowExceededError(ProviderRequestError):
+    """完整请求及输出预留超过模型声明的上下文容量。"""
+
+    code = "context_limit_exceeded"
+
+    def __init__(self, budget: ContextBudget) -> None:
+        self.budget = budget
+        self.user_message = (
+            f"请求需要 {budget.local_prompt_tokens} 个输入 tokens，"
+            f"预留 {budget.reserved_output_tokens} 个输出 tokens，"
+            f"超过模型的 {budget.provider_context_limit} tokens 上下文容量。"
+            "请整理上下文或减少请求内容后重新发送。"
+        )
+        super().__init__(self.user_message)
+
+
+def exception_type_chain(error: BaseException) -> list[str]:
+    # 只记录类型，不读取异常消息、请求、响应或认证信息。
+    names: list[str] = []
+    seen: set[int] = set()
+    current: BaseException | None = error
+    while current is not None and id(current) not in seen and len(names) < 8:
+        seen.add(id(current))
+        kind = type(current)
+        names.append(f"{kind.__module__}.{kind.__qualname__}")
+        current = current.__cause__ or (
+            None if current.__suppress_context__ else current.__context__
+        )
+    return names
 
 
 class OpenAICompatChatModel:
@@ -138,10 +182,22 @@ class OpenAICompatChatModel:
             self._capabilities is not None and self._capabilities.supports_image_input
         )
         self._timeout = timeout
-        # PRD 7.4：关闭 SDK 隐式重试（重试由用户选择继续后发起）。
-        self._client = AsyncOpenAI(
-            base_url=base_url, api_key=api_key or "local", max_retries=0, timeout=timeout
+        self._api_key = api_key or "local"
+        self._prompt_counter: PromptCounter | None = None
+
+    def _new_client(self) -> AsyncOpenAI:
+        # 每次调用拥有自己的客户端；共享模型与出网审计对象继续由调用者管理。
+        return AsyncOpenAI(
+            base_url=self._base_url, api_key=self._api_key,
+            max_retries=0, timeout=self._timeout,
         )
+
+    @asynccontextmanager
+    async def _stream_response(self, request: dict[str, Any]) -> AsyncIterator[Any]:
+        async with self._new_client() as client:
+            response = await client.chat.completions.create(**request)
+            async with response:
+                yield response
 
     # ------------------------------------------------------------ 能力
 
@@ -181,6 +237,53 @@ class OpenAICompatChatModel:
         """能力位：是否支持多模态输入（v0.2 喂图增强用，MVP 恒 False）。"""
         return self._supports_image_input
 
+    def context_budget(self, request: Mapping[str, Any]) -> ContextBudget | None:
+        """核对已确认使用 V4.1 tokenizer 的模型完整请求。"""
+
+        payload = dict(request)
+        extra_body = payload.pop("extra_body", None)
+        if isinstance(extra_body, Mapping):
+            payload.update(extra_body)
+        model = str(payload.get("model") or self._model)
+        if (self._destination, model.casefold()) not in _DEEPSEEK_V41_BUDGET_MODELS:
+            return None
+        if extra_body is not None and not isinstance(extra_body, Mapping):
+            raise ProviderRequestError("extra_body 必须是对象")
+        capabilities = (
+            self.require_capabilities()
+            if model == self._model
+            else resolve_capabilities(model, self._base_url)
+        )
+        output_limits = [
+            payload[name]
+            for name in ("max_tokens", "max_completion_tokens")
+            if payload.get(name) is not None
+        ]
+        for limit in output_limits:
+            if not isinstance(limit, int) or isinstance(limit, bool) or limit <= 0:
+                raise ProviderRequestError("输出 token 上限必须是正整数")
+            if limit > capabilities.max_output_tokens:
+                raise ProviderRequestError(
+                    f"输出 token 上限 {limit} 超过模型声明的最大输出 "
+                    f"{capabilities.max_output_tokens}"
+                )
+        reserved_output = max(output_limits) if output_limits else capabilities.max_output_tokens
+        with _PROMPT_BUDGET_LOCK:
+            if self._prompt_counter is None:
+                self._prompt_counter = default_prompt_counter()
+            return budget_for_request(
+                capabilities,
+                payload,
+                counter=self._prompt_counter,
+                reserved_output_tokens=reserved_output,
+                protocol_margin=0,
+            )
+
+    async def _check_context_budget(self, request: Mapping[str, Any]) -> None:
+        budget = await asyncio.to_thread(self.context_budget, request)
+        if budget is not None and not budget.fits:
+            raise ContextWindowExceededError(budget)
+
     # ------------------------------------------------------------ 请求体
 
     def require_features(
@@ -197,6 +300,19 @@ class OpenAICompatChatModel:
         uses_tools = bool(tools)
         if not uses_tools and reasoning_level is None and not image_input:
             return None
+        # 此端点的纯文本思考参数独立于工具能力声明。
+        if (
+            not uses_tools and not image_input and reasoning_level is not None
+            and self._destination == "api.commandcode.ai"
+            and self._model == "deepseek/deepseek-v4.1-flash"
+            and self._capabilities is None
+        ):
+            level = ReasoningLevel(reasoning_level)
+            return ProviderReasoningParams(
+                level=level,
+                thinking_type="disabled" if level is ReasoningLevel.OFF else "enabled",
+                reasoning_effort=None if level is ReasoningLevel.OFF else level.value,
+            )
         if self._capabilities is None:
             raise ProviderRequestError(
                 self._capabilities_error
@@ -246,9 +362,9 @@ class OpenAICompatChatModel:
     ) -> dict[str, Any]:
         """构造完整 Chat Completions 请求体（纯函数，可直接单测）。
 
-        ``reasoning_level`` 未显式传入时不改写请求：DeepSeek 官方默认即为
-        ``thinking.type=enabled`` + ``reasoning_effort=high``（PRD 9.1 默认 ``high``），
-        运行层把工作区/会话选择的档位传进来即可生效。
+        ``reasoning_level`` 未显式传入时不改写请求：Provider（DeepSeek 官方）自身默认即
+        ``thinking.type=enabled`` + ``reasoning_effort=high``。本产品的默认档位是 ``off``
+        （PRD 18.1，用户裁定），运行层**总是**显式把会话档位传进来，因此产品默认关闭思考。
         """
         prepared = prepare_messages(
             messages,
@@ -270,6 +386,15 @@ class OpenAICompatChatModel:
         if params is not None:
             request.update(params.request_params())
         request.update(kwargs)
+        if (
+            reasoning_level == ReasoningLevel.OFF
+            and self._destination == "api.commandcode.ai"
+            and self._model == "deepseek/deepseek-v4.1-flash"
+        ):
+            # CommandCode 使用 low 限制服务端推理计算量，同时发送关闭思考的要求。
+            request["reasoning_effort"] = "low"
+            if max_tokens is None:
+                request["max_tokens"] = 4096
         return request
 
     # ------------------------------------------------------------ 流式
@@ -305,23 +430,24 @@ class OpenAICompatChatModel:
             reasoning_replay=reasoning_replay,
             **kwargs,
         )
+        await self._check_context_budget(request)
         started_at = _utcnow() if self._outbound is not None else None
         try:
-            response = await self._client.chat.completions.create(**request)
-            async for chunk in response:
-                if not chunk.choices:  # usage-only 收尾 chunk（MEDIUM-1）
-                    error = getattr(chunk, "error", None)
-                    if error is not None:  # MEDIUM-3：流式中途报错
-                        message = getattr(error, "message", None) or str(error)
-                        raise ChatProviderError(f"对话服务流式中止: {message}")
-                    continue
-                delta = chunk.choices[0].delta
-                token = _attr(delta, "content") or ""
-                if token:
-                    yield ChatChunk("content", token)
-                reasoning = _attr(delta, "reasoning_content") or ""
-                if reasoning:
-                    yield ChatChunk("reasoning", reasoning)
+            async with self._stream_response(request) as response:
+                async for chunk in response:
+                    if not chunk.choices:  # usage-only 收尾 chunk（MEDIUM-1）
+                        error = getattr(chunk, "error", None)
+                        if error is not None:  # MEDIUM-3：流式中途报错
+                            message = getattr(error, "message", None) or str(error)
+                            raise ChatProviderError(f"对话服务流式中止: {message}")
+                        continue
+                    delta = chunk.choices[0].delta
+                    reasoning = _attr(delta, "reasoning_content") or _attr(delta, "reasoning") or ""
+                    token = _attr(delta, "content") or ""
+                    if token:
+                        yield ChatChunk("content", token)
+                    if reasoning:
+                        yield ChatChunk("reasoning", reasoning)
         except BaseException:
             # 异常含 GeneratorExit（SSE 客户端断开触发 aclose）：已发生出网也要记审计
             self._record_outbound(started_at, status=None)
@@ -341,6 +467,8 @@ class OpenAICompatChatModel:
         到达并校验通过后才在结果里 ``complete=True``（PRD 9.2）。
         """
         request = self.build_request(messages, stream=True, **kwargs)
+        request.setdefault("stream_options", {"include_usage": True})
+        await self._check_context_budget(request)
         assembler = ToolCallAssembler()
         content_parts: list[str] = []
         reasoning_parts: list[str] = []
@@ -349,41 +477,41 @@ class OpenAICompatChatModel:
         provider_request_id = ""
         started_at = _utcnow() if self._outbound is not None else None
         try:
-            response = await self._client.chat.completions.create(**request)
-            provider_request_id = provider_request_id_from_headers(
-                getattr(response, "headers", None)
-            )
-            async for chunk in response:
-                if not chunk.choices:  # usage-only 收尾 chunk
-                    error = getattr(chunk, "error", None)
+            async with self._stream_response(request) as response:
+                provider_request_id = provider_request_id_from_headers(
+                    getattr(response, "headers", None)
+                )
+                async for chunk in response:
+                    if not chunk.choices:  # usage-only 收尾 chunk
+                        error = getattr(chunk, "error", None)
+                        usage = getattr(chunk, "usage", None)
+                        if usage is not None:
+                            usage_payload = usage
+                        if error is not None:
+                            message = getattr(error, "message", None) or str(error)
+                            raise ChatProviderError(f"对话服务流式中止: {message}")
+                        continue
+                    if not provider_request_id:
+                        provider_request_id = str(getattr(chunk, "id", "") or "")
+                    choice = chunk.choices[0]
+                    delta = choice.delta
+                    reasoning = _attr(delta, "reasoning_content") or _attr(delta, "reasoning") or ""
+                    token = _attr(delta, "content") or ""
+                    if token:
+                        content_parts.append(token)
+                        yield ChatChunk("content", token)
+                    if reasoning:
+                        reasoning_parts.append(reasoning)
+                        yield ChatChunk("reasoning", reasoning)
+                    for raw_call in _attr(delta, "tool_calls") or []:
+                        fragment = ToolCallFragment.from_delta(raw_call)
+                        assembler.add(fragment)
+                        yield fragment
+                    if choice.finish_reason:
+                        finish_reason = str(choice.finish_reason)
                     usage = getattr(chunk, "usage", None)
                     if usage is not None:
                         usage_payload = usage
-                    if error is not None:
-                        message = getattr(error, "message", None) or str(error)
-                        raise ChatProviderError(f"对话服务流式中止: {message}")
-                    continue
-                if not provider_request_id:
-                    provider_request_id = str(getattr(chunk, "id", "") or "")
-                choice = chunk.choices[0]
-                delta = choice.delta
-                token = _attr(delta, "content") or ""
-                if token:
-                    content_parts.append(token)
-                    yield ChatChunk("content", token)
-                reasoning = _attr(delta, "reasoning_content") or ""
-                if reasoning:
-                    reasoning_parts.append(reasoning)
-                    yield ChatChunk("reasoning", reasoning)
-                for raw_call in _attr(delta, "tool_calls") or []:
-                    fragment = ToolCallFragment.from_delta(raw_call)
-                    assembler.add(fragment)
-                    yield fragment
-                if choice.finish_reason:
-                    finish_reason = str(choice.finish_reason)
-                usage = getattr(chunk, "usage", None)
-                if usage is not None:
-                    usage_payload = usage
         except BaseException:
             self._record_outbound(started_at, status=None)
             raise
@@ -425,14 +553,17 @@ class OpenAICompatChatModel:
             reasoning_replay=reasoning_replay,
             **kwargs,
         )
+        await self._check_context_budget(request)
         started_at = _utcnow() if self._outbound is not None else None
         try:
-            raw = await self._client.chat.completions.create(**request)
+            async with self._new_client() as client:
+                raw = await client.chat.completions.create(**request)
         except BaseException:
             self._record_outbound(started_at, status=None)
             raise
         self._record_outbound(started_at, status=200)
-        return response_from_completion(self._model, raw)
+        result = response_from_completion(self._model, raw)
+        return result
 
     # ------------------------------------------------------------ 审计
 
@@ -553,7 +684,7 @@ def response_from_completion(model: str, raw: Any) -> ModelResponse:
     return _assemble_response(
         model=str(_attr(raw, "model") or model),
         content=str(_attr(message, "content") or ""),
-        reasoning_content=str(_attr(message, "reasoning_content") or ""),
+        reasoning_content=str(_attr(message, "reasoning_content") or _attr(message, "reasoning") or ""),
         tool_calls=tool_calls_from_message(message),
         finish_reason=str(finish_reason) if finish_reason else None,
         usage_payload=_attr(raw, "usage"),
@@ -584,6 +715,7 @@ def _assemble_response(
         finish_reason=finish_reason,
         status=status,
         usage=usage_from_payload(usage_payload),
+        usage_available=usage_payload is not None,
         provider_request_id=provider_request_id,
         model=model,
         notes=list(notes),

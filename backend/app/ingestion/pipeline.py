@@ -396,14 +396,14 @@ class IngestionPipeline:
         """一次嵌入多份已切文档，再按文件幂等写库；返回逐文件写入块数。"""
 
         flattened = [
-            (file, chunk)
+            (file, chunk, document_order)
             for file, chunks in prepared
-            for chunk in chunks
+            for document_order, chunk in enumerate(chunks)
             if chunk.kind != "image"
         ]
         vectors = embed_document_texts(
             self._embedder,
-            [chunk_embedding_text(chunk) for _file, chunk in flattened],
+            [chunk_embedding_text(chunk) for _file, chunk, _order in flattened],
         )
         if len(vectors) != len(flattened):
             raise RuntimeError(
@@ -411,10 +411,11 @@ class IngestionPipeline:
             )
         # Commit text across files in bounded writes, then enqueue images and persist fingerprints.
         text_blocks = []
-        for (file, chunk), vector in zip(flattened, vectors, strict=True):
+        for (file, chunk, document_order), vector in zip(flattened, vectors, strict=True):
             block_id = make_block_id(file.content_hash, chunk.block_id, source_file=file.path)
             text_blocks.append(
-                (block_id, chunk.text, vector, make_chunk_metadata(block_id, file, chunk))
+                (block_id, chunk.text, vector,
+                 make_chunk_metadata(block_id, file, chunk, document_order=document_order))
             )
         for start in range(0, len(text_blocks), 512):
             self._vectorstore.upsert(text_blocks[start : start + 512])
@@ -425,20 +426,27 @@ class IngestionPipeline:
                 self.invalidate_image_context(str(file.path))
 
             image_chunks = [chunk for chunk in chunks if chunk.kind == "image"]
+            document_orders = {chunk.block_id: index for index, chunk in enumerate(chunks)}
             if self._worker is not None:
                 for chunk in image_chunks:
-                    task = self.make_image_task(file, chunk)
+                    task = self.make_image_task(
+                        file, chunk, document_order=document_orders[chunk.block_id]
+                    )
                     if task is not None:
                         self._worker.enqueue(task)
             else:
-                blocks = self.sync_image_blocks(file, image_chunks)
+                blocks = self.sync_image_blocks(
+                    file, image_chunks, document_orders=document_orders
+                )
                 if blocks:
                     self._vectorstore.upsert(blocks)
                     upserted += len(blocks)
             counts.append(upserted)
         return counts
 
-    def make_image_task(self, file: DiscoveredFile, chunk: Chunk) -> ImageTask | None:
+    def make_image_task(
+        self, file: DiscoveredFile, chunk: Chunk, *, document_order: int | None = None
+    ) -> ImageTask | None:
         """把图片引用块转为持久化任务（无 src 时返回 None）。"""
         src = chunk.src
         if not src:
@@ -454,17 +462,23 @@ class IngestionPipeline:
             source_file=str(file.path),
             heading_path=chunk.heading_path,
             anchor=chunk.anchor,
+            document_order=document_order,
         )
 
     def sync_image_blocks(
         self,
         file: DiscoveredFile,
         image_chunks: list[Chunk],
+        *,
+        document_orders: dict[str, int] | None = None,
     ) -> list[tuple[str, str, list[float], BlockMetadata]]:
         """同步处理图片引用（无 worker 兜底）：逐引用 process_image_task，聚合成功块。"""
         blocks: list[tuple[str, str, list[float], BlockMetadata]] = []
         for chunk in image_chunks:
-            task = self.make_image_task(file, chunk)
+            task = self.make_image_task(
+                file, chunk,
+                document_order=(document_orders or {}).get(chunk.block_id),
+            )
             if task is None:
                 continue
             try:
@@ -560,6 +574,7 @@ class IngestionPipeline:
             platform="local",
             heading_path=task.heading_path or None,
             anchor=task.anchor or None,
+            document_order=task.document_order,
             chunk_type="image_description",
             image_path=task.src,
             image_content_hash=content_hash,
@@ -636,7 +651,9 @@ def _normalize_source_file(source_file: str | Path) -> str:
     return unicodedata.normalize("NFC", normalized)
 
 
-def make_chunk_metadata(block_id: str, file: DiscoveredFile, chunk: Chunk) -> BlockMetadata:
+def make_chunk_metadata(
+    block_id: str, file: DiscoveredFile, chunk: Chunk, *, document_order: int | None = None
+) -> BlockMetadata:
     """组装块元数据：doc_id 用内容指纹（幂等去重键）；来源与锚点取自 Chunk。
 
     公共助手，全量导入与增量同步（sync.py）共用同一元数据规则。
@@ -654,6 +671,7 @@ def make_chunk_metadata(block_id: str, file: DiscoveredFile, chunk: Chunk) -> Bl
             else None
         ),
         anchor=chunk.anchor or None,
+        document_order=document_order,
         chunk_type=chunk.kind if chunk.kind in {"table", "code"} else "text",
     )
 
