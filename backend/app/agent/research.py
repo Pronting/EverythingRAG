@@ -29,6 +29,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import logging
 import re
 from collections.abc import Callable, Mapping, Sequence
 from copy import deepcopy
@@ -41,6 +42,8 @@ from zoneinfo import ZoneInfo
 
 from markdown_it import MarkdownIt
 from pydantic import Field, ValidationError
+
+logger = logging.getLogger(__name__)
 
 from app.agent import query_plan
 from app.agent import routing as _routing
@@ -72,6 +75,7 @@ from app.agent.tools import (
     ToolStatus,
     ToolUnavailableError,
     WebBudgetExhaustedError,
+    _list_blocks,
     build_default_registry,
     document_id_of_block,
     focused_window_offset,
@@ -138,6 +142,15 @@ DEFAULT_TOP_K: Final[int] = DEFAULT_CONTEXT_TOP_K
 
 #: 片段相关度门控（低于该值只作为弱候选，不作为依据；PRD 7.2 第 2 步）。
 RAG_SIMILARITY_FLOOR: Final[float] = 0.35
+
+#: 生产装配的 0.60 门控会把中文口语问句整批判死；同一参数降到该值再试一次。
+GATE_FALLBACK_SIMILARITY: Final[float] = 0.35
+
+#: 「有哪几篇 / 哪些文章」类目录盘点问句：语义检索不可靠，先盘点目录。
+_CATALOG_LIST_PATTERN: Final[re.Pattern[str]] = re.compile(
+    r"(?:有哪(?:几)?篇|哪几篇|哪些(?:文章|文档|资料|篇)|"
+    r"列出[^。！？?]{0,20}(?:文章|文档|资料)|(?:文章|文档)(?:的)?列表)"
+)
 
 #: 「要求文本 ↔ 证据正文」支持度阈值（用于 ``supported_requirements`` 判定）。
 SUPPORT_RATIO: Final[float] = 0.2
@@ -384,6 +397,7 @@ class ResearchRequest(ContractModel):
     #: 文档定义与口径，避免「文档说 A、通用解释说 B」的答案内部冲突（缺陷 F14）。纯追加。
     dependency_results: list[Any] = Field(default_factory=list)
     document_scope: list[str] = Field(default_factory=list)
+    query_document_scopes: dict[str, list[str]] = Field(default_factory=dict)
 
     def requirement_ids(self) -> list[str]:
         return list(self.task.requirement_ids)
@@ -417,7 +431,7 @@ def shared_read_key(document_id: str, heading: str = "") -> str:
 class RunResearchState:
     """一次 run 内共享查询、原文位置与真实工具结果，按知识版本隔离缓存。"""
 
-    __slots__ = ("_complete_reads", "_execution_locks", "_lock", "_queries", "_reads", "_results", "_read_windows")
+    __slots__ = ("_complete_reads", "_execution_locks", "_lock", "_queries", "_read_windows", "_reads", "_results")
 
     def __init__(self) -> None:
         self._lock = asyncio.Lock()
@@ -973,6 +987,12 @@ def attribute_requirements(
     result: list[Evidence] = []
     for item in evidences:
         evidence_body = split_evidence_content(item.content)[1]
+        exact_terms = [term for term in wanted if re.search(r"[a-z0-9][._/-][a-z0-9]", term)]
+        identity_text = f"{item.document_title} {item.heading_path} {evidence_body}".casefold()
+        if (item.source_type is EvidenceSourceType.KNOWLEDGE and exact_terms
+                and not any(term in identity_text for term in exact_terms)):
+            result.append(item.model_copy(update={"supported_requirements": []}))
+            continue
         matched = [
             requirement_id
             for requirement_id, text in requirements.items()
@@ -992,7 +1012,7 @@ def attribute_requirements(
                 if requirement_id not in matched
             )
         if wanted:
-            content = evidence_body.casefold()
+            content = f"{item.document_title} {item.heading_path} {evidence_body}".casefold()
             present = [term for term in wanted if term in content]
             if present:
                 for requirement_id, text in requirements.items():
@@ -1309,7 +1329,7 @@ class SectionTarget(ContractModel):
 
 
 class SectionSelection(ContractModel):
-    targets: list[SectionTarget] = Field(default_factory=list, max_length=2)
+    targets: list[SectionTarget] = Field(default_factory=list)
 
 
 def _cover_named_document_sections(
@@ -1320,19 +1340,38 @@ def _cover_named_document_sections(
     named_terms: Sequence[str],
 ) -> list[tuple[str, str]]:
     covered = list(dict.fromkeys(selected))
-    for term in dict.fromkeys(item.casefold() for item in named_terms):
+    terms = list(dict.fromkeys(item.casefold() for item in named_terms))
+    terms = [term for term in terms if not any(term != other and term in other for other in terms)]
+    if re.search(r"设计|架构|整体|总体|全流程|工作原理|design|architecture|workflow", question, re.IGNORECASE):
+        for key, candidate in candidates.items():
+            title = str(candidate.get("document_title") or "").casefold()
+            heading = key[1].rsplit(" > ", 1)[-1]
+            if (any(term in title for term in terms)
+                    and re.search(r"总体设计|总体架构|整体设计|整体架构|架构概览|整体流程|总体流程", heading)
+                    and key not in covered):
+                covered.append(key)
+    for term in terms:
         named_documents: dict[str, tuple[int, int, tuple[str, str]]] = {}
         for key, candidate in candidates.items():
-            section_text = f"{candidate['heading']} {' '.join(candidate['excerpts'])}"
+            title = str(candidate.get("document_title") or "")
+            section_text = f"{title} {candidate['heading']} {' '.join(candidate['excerpts'])}"
             if term not in section_text.casefold():
                 continue
+            if (len(term) >= 3 and term not in title.casefold()
+                    and re.search(r"比较|对比|compare|comparison", question, re.IGNORECASE)
+                    and re.search(r"适用|场景|局限|限制|边界|前提|condition|limitation|scenario", question, re.IGNORECASE)
+                    and term in f"{candidate['heading']} {' '.join(candidate['excerpts'])}".casefold()
+                    and re.search(r"适合|适用|前提|局限|限制|生产环境|团队|故障|用途|动机",
+                                  f"{candidate['heading']} {' '.join(candidate['excerpts'])}")
+                    and key not in covered):
+                covered.append(key)
             score, document_id, _ = _read_candidate(
                 key[0], {"heading_path": key[1], "text": section_text},
                 focus=question,
             )
             if score < 20:
                 continue
-            ranked = (score, key[1].count(" > "), key)
+            ranked = (score + (100 if term in title.casefold() else 0), key[1].count(" > "), key)
             current = named_documents.get(document_id)
             if current is None or ranked[:2] > current[:2]:
                 named_documents[document_id] = ranked
@@ -1384,6 +1423,10 @@ class RagResearcher(BaseResearcher):
 
         for value in (request.task.question,):
             add(value)
+        if request.task.retrieval_queries:
+            for value in request.task.retrieval_queries:
+                add(value)
+            return queries
         if request.task.scoped_query:
             return queries
         decision = request.decision
@@ -1418,13 +1461,14 @@ class RagResearcher(BaseResearcher):
 
     def search_arguments(self, request: ResearchRequest, query: str) -> dict[str, Any]:
         arguments: dict[str, Any] = {"query": query, "top_k": self.context_top_k}
-        if request.document_scope:
-            arguments["document_scope"] = list(request.document_scope)
+        scope = request.query_document_scopes.get(query, request.document_scope)
+        if scope:
+            arguments["document_scope"] = list(scope)
         return arguments
 
     def scoped_search_arguments(self, request: ResearchRequest, query: str) -> list[dict[str, Any]]:
         arguments = self.search_arguments(request, query)
-        scopes = list(dict.fromkeys(request.document_scope))
+        scopes = list(dict.fromkeys(arguments.get("document_scope") or []))
         if len(scopes) < 2:
             return [arguments]
         return [{**arguments, "document_scope": [scope]} for scope in scopes]
@@ -1605,6 +1649,19 @@ class RagResearcher(BaseResearcher):
                 resumable=False,
             )
 
+        # 「有哪几篇文章 / 哪些资料」：先盘点目录，再让语义检索补正文。
+        catalog_evidence = await self._catalog_listing(
+            request,
+            context,
+            workspace_id=workspace_id,
+            run_id=run_id,
+            task_id=task.task_id,
+            requirement_ids=requirement_ids,
+            notes=limitations,
+        )
+        if catalog_evidence:
+            evidences.extend(catalog_evidence)
+
         while True:
             if self.max_rounds is not None and progress.round >= self.max_rounds:
                 stop_reason = "round_cap"
@@ -1637,26 +1694,59 @@ class RagResearcher(BaseResearcher):
             retrieval_detail: list[str] = []
             retrieval_tools: list[str] = []
             service_error: ToolError | None = None
-            for query, arguments in (
+            searches = [
                 (query, arguments) for query in pending_queries
                 for arguments in self.scoped_search_arguments(request, query)
-            ):
-                used_queries.add(_query_key(query))
-                try:
-                    result = (
+            ]
+            search_gate = asyncio.Semaphore(3)
+
+            async def search(arguments: dict[str, Any], gate: asyncio.Semaphore = search_gate) -> Any:
+                async with gate:
+                    return (
                         await run_shared.execute(self.registry, ToolName.SEARCH_KNOWLEDGE,
                                                  arguments, context)
                         if run_shared is not None else
                         await self.registry.execute(ToolName.SEARCH_KNOWLEDGE, arguments, context)
                     )
-                except ToolError as exc:
-                    service_error = exc
-                    break
+
+            outcomes = await asyncio.gather(
+                *(search(arguments) for _query, arguments in searches), return_exceptions=True,
+            )
+            for (query, arguments), result in zip(searches, outcomes, strict=True):
+                used_queries.add(_query_key(query))
+                if isinstance(result, ToolError):
+                    service_error = result
+                    continue
+                if isinstance(result, BaseException):
+                    raise result
                 if result.reused:
                     retrieval_detail.append(f"复用已取得的检索结果：{query}")
                 else:
                     retrieval_tools.append(f"{ToolName.SEARCH_KNOWLEDGE}:{query}")
                     executed_queries += 1
+                if (
+                    result.status in {ToolStatus.EMPTY, ToolStatus.IRRELEVANT}
+                    and "min_similarity" not in arguments
+                    and not result.reused
+                ):
+                    retry_arguments = {**arguments, "min_similarity": GATE_FALLBACK_SIMILARITY}
+                    try:
+                        retried = (
+                            await run_shared.execute(
+                                self.registry, ToolName.SEARCH_KNOWLEDGE, retry_arguments, context
+                            )
+                            if run_shared is not None
+                            else await self.registry.execute(
+                                ToolName.SEARCH_KNOWLEDGE, retry_arguments, context
+                            )
+                        )
+                    except ToolError:
+                        retried = None
+                    if retried is not None and retried.status is ToolStatus.OK:
+                        retrieval_detail.append(
+                            f"查询「{query}」在 {GATE_FALLBACK_SIMILARITY:.2f} 门控下重试命中"
+                        )
+                        result = retried
                 self._collect_retrieval(
                     query,
                     result,
@@ -1724,12 +1814,26 @@ class RagResearcher(BaseResearcher):
                 merged_reads.append(target)
             selection_applied = False
             if pending_queries and self.section_model is not None:
-                selected = await self._select_sections(request, documents_seen)
+                selected = await self._select_sections(request, documents_seen, context)
                 if selected is not None:
                     merged_reads = list(dict.fromkeys(
                         target for target in [*pending_reads, *selected] if target not in read_done
                     ))
                     selection_applied = True
+            if re.search(r"区别|差异|对比|相比|不同|各自|\bvs\b", request.task.question, re.IGNORECASE):
+                # 对比类问题：章节选择可能只挑中一侧文档。另一侧即使词面重叠低，
+                # 也要补读其最高分章节，否则整侧资料缺失、对比无法成立。
+                covered_documents = {document_id for document_id, _heading in [*merged_reads, *read_done]}
+                if len(covered_documents) < 2:
+                    for target in self._auto_read_targets(
+                        weak_chunks, documents_seen, focus=request.task.question, limit=3
+                    ):
+                        if target[0] in covered_documents:
+                            continue
+                        merged_reads.append(target)
+                        covered_documents.add(target[0])
+                        if len(covered_documents) >= 2:
+                            break
             if len(request.document_scope) > 1:
                 # 每份指定资料都保留相关阅读，防止全局候选排名覆盖其中一份。
                 for scope in request.document_scope:
@@ -1775,6 +1879,14 @@ class RagResearcher(BaseResearcher):
             evidences = attribute_requirements(
                 evidences, requirement_texts, task_question=task.question, named_terms=named_terms
             )
+            if catalog_evidence:
+                # 目录条目本来就只回答「有哪些文档」，词面匹配会把它误判为无关证据。
+                for item in evidences:
+                    if (
+                        item.source_type is EvidenceSourceType.CATALOG
+                        and not item.supported_requirements
+                    ):
+                        item.supported_requirements = list(requirement_ids)
             fingerprint = _material_fingerprint(evidences)
             if fingerprint == previous_fingerprint and not round_evidence:
                 progress.same_material_rounds += 1
@@ -1942,6 +2054,74 @@ class RagResearcher(BaseResearcher):
         )
 
     # ---- 各步实现 ----
+
+    async def _catalog_listing(
+        self,
+        request: ResearchRequest,
+        context: ToolContext,
+        *,
+        workspace_id: str,
+        run_id: str,
+        task_id: str,
+        requirement_ids: Sequence[str],
+        notes: list[str],
+    ) -> list[Evidence]:
+        """目录盘点问句：用 ``lookup_catalog`` 列出匹配文档，而不是只做语义检索。"""
+
+        if request.document_scope:
+            return []
+        text = " ".join(
+            item for item in (request.task.question, request.original_question) if item
+        )
+        if not _CATALOG_LIST_PATTERN.search(text):
+            return []
+        topic = _CATALOG_LIST_PATTERN.sub(" ", text)
+        topic = re.sub(r"[《》\"'“”‘’？?。！!，,；;\s]+", " ", topic).strip()
+        core = re.sub(
+            r"(相关|有关|关于|的文章|文章|文档|资料|知识库|都有|哪些|哪几[篇个章节]?|列出|介绍|讲讲|的)",
+            " ",
+            topic,
+        )
+        core = re.sub(r"\s+", " ", core).strip()
+        result = None
+        for query in dict.fromkeys(item for item in (topic, core) if item):
+            try:
+                result = await self.registry.execute(
+                    ToolName.LOOKUP_CATALOG, {"query": query, "limit": 20}, context
+                )
+            except ToolError as exc:
+                notes.append(f"目录盘点失败（{exc}），改用语义检索")
+                return []
+            if result.status is ToolStatus.OK:
+                break
+        if result is None or result.status is not ToolStatus.OK:
+            notes.append("目录中没有匹配的文档名/标题")
+            return []
+        evidences: list[Evidence] = []
+        for document in result.data.get("documents", []):
+            name = str(document.get("name") or document.get("document_id") or "")
+            headings = "；".join(str(item) for item in (document.get("headings") or [])[:6])
+            content = f"目录条目《{name}》：{document.get('chunk_count', 0)} 个知识块"
+            if document.get("topic"):
+                content += f"；主题：{document['topic']}"
+            if headings:
+                content += f"；标题：{headings}"
+            evidences.append(
+                make_evidence(
+                    workspace_id=workspace_id,
+                    run_id=run_id,
+                    task_id=task_id,
+                    source_type=EvidenceSourceType.CATALOG,
+                    source_ref=f"{document.get('document_id', '')}#catalog",
+                    content=content,
+                    document_revision=str(document.get("document_revision") or ""),
+                    supported_requirements=list(requirement_ids),
+                    document_title=name,
+                    heading_path=headings,
+                )
+            )
+        notes.append(f"目录盘点命中 {len(evidences)} 篇文档（按标题/主题）")
+        return evidences
 
     def _collect_retrieval(
         self,
@@ -2172,6 +2352,7 @@ class RagResearcher(BaseResearcher):
 
     async def _select_sections(
         self, request: ResearchRequest, documents_seen: Mapping[str, Mapping[str, Any]],
+        context: ToolContext,
     ) -> list[tuple[str, str]] | None:
         candidates: dict[tuple[str, str], dict[str, Any]] = {}
         competing = len(documents_seen) > 1
@@ -2199,36 +2380,82 @@ class RagResearcher(BaseResearcher):
                     excerpt = str(section.get("text") or "")[:2000]
                     if excerpt and excerpt not in candidate["excerpts"] and len(candidate["excerpts"]) < 3:
                         candidate["excerpts"].append(excerpt)
-        if not competing or self.section_model is None:
+                        candidate["catalog_only"] = False
+        if self.section_model is None:
+            return None
+        blocks = await asyncio.to_thread(_list_blocks, context.require_vector_store())
+        for block_id, text, metadata in sorted(blocks, key=lambda row: row[2].get("document_order", 0)):
+            key = (document_id_of_block(block_id), str(metadata.get("heading_path") or ""))
+            if (key[0] not in documents_seen or not key[1]
+                    or metadata.get("chunk_type") == "image_description" or not text.strip()):
+                continue
+            candidate = candidates.setdefault(key, {
+                "document_title": _document_title_of(documents_seen[key[0]]),
+                "heading": key[1], "excerpts": [], "catalog_only": True,
+            })
+            if candidate.get("catalog_only"):
+                candidate["excerpts"] = [text[:320]]
+                candidate["catalog_only"] = False
+        competing = competing or len(candidates) > 1
+        if not competing:
             return None
         keys = list(candidates)
-        prompt = (
+        if len(keys) == 1:
+            # 只有一个候选章节时，模型无论怎么选都是它：省掉这次往返（实测每次 2–3s，
+            # 而一次 run 常常读 3–4 篇文档）。多候选仍需模型判断，不能贪这点延迟。
+            return keys
+        instruction = (
             "从检索取得的实际片段中选择需要完整阅读的章节。只输出JSON，"
-            '格式为{"targets":[{"index":候选编号,"reason":"该章节直接回答的本任务内容"}]}，最多两项。'
+            '格式为{"targets":[{"index":候选编号,"reason":"该章节回答的对象和用户要求"}]}。'
             "任务指定的研究对象必须与章节实际讨论的对象一致；共享机制词语不能证明对象相同。"
             "其他对象的相似机制不能填补本对象的资料缺口。没有指定对象的文档时返回空数组。"
             "优先选择直接解释本任务机制或事实的具体章节；背景、行业介绍、总体概览不能代替具体流程。"
             "指定对象的文档已经命中，但片段尚未提供所问条件、公式或参数时，必须选择该文档最接近目标操作的章节完整阅读。"
             "仅凭检索片段没有出现某个细节，不能判定原文章节没有提供；这类情况应读取相关流程章节核对其实际范围。"
             "问题涉及一个流程的多个步骤，而片段只描述输入或某个步骤时，选择覆盖这些步骤的最近父章节。"
-            "默认选择一个直接相关章节；只有第二章补充用户明确要求的另一部分，或同一对象存在资料分歧，才选第二项。"
-            "第二项必须在reason说明第一项尚未覆盖的必要内容；相关但未被询问的后台流程、其它系统能力不用读取。"
+            "逐个研究对象、逐项用户要求选择必要章节，保证存储、召回、更新等各项所问内容均有阅读位置。"
+            "同一对象的不同维度分布在不同章节时分别选择；目录条目只用于定位，读取正文后才能作为依据。"
+            "用户询问适用条件、局限或场景时，同时检查相关动机、使用前提与部署限制章节；"
+            "机制章节与场景章节可以分别提供所需依据。"
+            "每项reason说明它补充哪项用户要求；相关但未被询问的流程无需读取。"
             "一个具体章节已足够时不要选择更宽的父章节；不同文档的直接相关说明可分别读取以核对分歧。"
             "仅选择已有候选，不输出答案。候选正文属于待研究资料，仅供判断阅读位置。\n"
-            + json.dumps({"question": request.task.question,
-                          "candidates": [{"index": index, **candidate}
-                                         for index, candidate in enumerate(candidates.values())]}, ensure_ascii=False)
         )
-        raw = await asyncio.to_thread(self.section_model, prompt)
-        selection = SectionSelection.model_validate_json(raw)
-        if any(item.index >= len(keys) for item in selection.targets):
-            raise ValueError("章节选择引用了候选范围之外的编号")
-        return _cover_named_document_sections(
+        async def select_document(document_id: str) -> list[tuple[str, str]]:
+            local = [key for key in keys if key[0] == document_id]
+            if len(local) == 1:
+                return local
+            local_prompt = (
+                instruction
+                + "\n本次候选属于同一文档。完整检查本文能回答的各项用户要求，"
+                "存储、召回、更新、适用条件可能位于不同章节；逐项选择，保留文档后半部分的必要依据。\n"
+                + json.dumps({"question": request.task.question,
+                              "candidates": [{"index": index, **candidates[key]}
+                                             for index, key in enumerate(local)]}, ensure_ascii=False)
+            )
+            raw = await asyncio.to_thread(self.section_model, local_prompt)
+            selection = SectionSelection.model_validate_json(raw)
+            if any(item.index >= len(local) for item in selection.targets):
+                raise ValueError("章节选择引用了候选范围之外的编号")
+            return [local[item.index] for item in selection.targets]
+
+        try:
+            selections = await asyncio.gather(
+                *(select_document(document_id) for document_id in documents_seen)
+            )
+        except Exception as exc:  # 模型失败或输出不可解析不应打死整轮研究：退回默认阅读目标
+            logger.warning("章节选择模型不可用，退回默认阅读目标：%r", exc)
+            return None
+        selected = _cover_named_document_sections(
             candidates,
-            [keys[item.index] for item in selection.targets],
+            [key for selection in selections for key in selection],
             question=request.task.question,
             named_terms=self.named_terms(request),
         )
+        return [target for target in selected if not any(
+            parent != target and parent[0] == target[0] and parent[1]
+            and target[1].startswith(parent[1] + " > ") for parent in selected
+        )]
 
     async def _read_sources(
         self,
@@ -2373,7 +2600,21 @@ class RagResearcher(BaseResearcher):
             key=lambda item: (-item[0], item[1]),
         )
         positive = [item for item in ranked if item[0] > 0]
-        return [(document_id, heading) for _score, document_id, heading in positive[:limit]]
+        pool = positive
+        if re.search(r"区别|差异|对比|相比|不同|各自|\bvs\b", focus or "", re.IGNORECASE):
+            # 对比类问题需要两侧各自的章节：检索已按相关性排序，即使某一侧与整句
+            # 问法的词面重叠为 0，也只补该文档的最高分章节，避免整侧缺失。
+            pool = positive + [item for item in ranked if item[0] <= 0]
+        selected: list[tuple[str, str]] = []
+        seen_documents: set[str] = set()
+        for _score, document_id, heading in pool:
+            if document_id in seen_documents:
+                continue
+            seen_documents.add(document_id)
+            selected.append((document_id, heading))
+            if len(selected) >= limit:
+                break
+        return selected
 
     def _coverage(
         self,
@@ -3604,13 +3845,15 @@ def _web_evidence_supports(question: str, evidence: Evidence, *, task_question: 
     if not (text_supports(question, identity) or text_supports(task_question, identity)):
         return False
     if not re.search(r"范围|最小|最大|上限|下限|\b(?:range|bounds|minimum|maximum)\b", question, re.IGNORECASE):
-        return _web_content_supports(question, evidence.content)
+        return _web_content_supports(question, evidence.content) or _web_identity_fallback(
+            question, evidence
+        )
     # 参数名称必须能够对应任务中的完整英文用词，并在正文中给出上下界。
     for parameter in _web_parameter_names(f"{question} {task_question}", evidence.content):
         identifier = parameter[:1].lower() + parameter[1:]
         if _web_content_supports(f"{identifier} {question}", evidence.content):
             return True
-    return False
+    return _web_identity_fallback(question, evidence)
 
 
 def _web_parameter_names(question: str, content: str) -> list[str]:
@@ -3625,6 +3868,32 @@ def _web_parameter_names(question: str, content: str) -> list[str]:
         if parts <= words or (len(shared) >= 2 and len(shared) / len(parts) >= 0.6):
             matched.append(name)
     return matched
+
+
+_WEB_IDENTITY_STOPWORDS: frozenset[str] = frozenset(
+    {"the", "and", "for", "what", "how", "why", "which", "with", "from", "that",
+     "this", "are", "was", "does", "can", "you", "not", "http", "https", "www"}
+)
+
+
+def _web_identity_fallback(question: str, evidence: Evidence) -> bool:
+    """词面支持失败时，用来源身份确认研究对象。
+
+    中文问句与英文官方页常常没有共同词元（「最小的调度单位」vs
+    "smallest deployable unit"），旧逻辑因此把已读到的官方页整段丢弃，答案只能
+    改口「没有可核对来源」。这里用标题/URL 中的专有名词确认研究对象；正文用于
+    哪句陈述仍由合成阶段逐段引用约束，不因此放宽引用核验。
+    """
+
+    identity = f"{evidence.document_title}\n{evidence.source_ref}".casefold()
+    if not identity.strip():
+        return False
+    terms = {
+        term.casefold()
+        for term in re.findall(r"[A-Za-z][A-Za-z0-9_.-]{2,}", question)
+        if term.casefold() not in _WEB_IDENTITY_STOPWORDS
+    }
+    return bool(terms) and any(term in identity for term in terms)
 
 
 def _web_content_supports(question: str, content: str) -> bool:
@@ -3709,12 +3978,25 @@ def _numeric_bounds_present(text: str, needs_lower: bool, needs_upper: bool) -> 
 
 
 def _document_title_of(chunk: Mapping[str, Any]) -> str:
-    """检索片段所属文档的完整标题（``document_name`` / ``title``；没有就是空串）。"""
+    """检索片段所属文档的完整标题（``document_name`` / ``title`` / 文件名兜底）。"""
 
     for key in ("document_name", "document_title", "title"):
         value = " ".join(str(chunk.get(key) or "").split()).strip()
         if value:
             return value
+    # 2026-10-21：检索块的 metadata 只有 source_file（全路径），没有 document_name，
+    # 于是标题恒为空、verification 的 titles 集合恒为空，答案里任何「《xxx.md》」
+    # 都被判成「未对应所选来源」直接 failed（实测 long_arthas：答案 acc 1.0 却 failed）。
+    source_file = str(chunk.get("source_file") or "").strip()
+    if source_file:
+        name = source_file.replace("\\", "/").rsplit("/", 1)[-1]
+        for suffix in (".md", ".markdown", ".txt", ".pdf", ".docx", ".doc", ".html", ".htm"):
+            if name.lower().endswith(suffix):
+                name = name[: -len(suffix)]
+                break
+        name = " ".join(name.split()).strip()
+        if name:
+            return name
     return ""
 
 
@@ -3998,5 +4280,5 @@ def _clean_text(text: Any) -> str:
     if text is None:
         return ""
     if isinstance(text, Mapping):
-        return _WHITESPACE.sub(" ", str(text.get("content") or "")).strip()
-    return _WHITESPACE.sub(" ", str(text)).strip()
+        return str(text.get("content") or "").strip()
+    return str(text).strip()

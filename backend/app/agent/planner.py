@@ -226,8 +226,8 @@ TASK_SOURCES: Final[dict[TaskSource, tuple[AgentKind, str]]] = {
         "通用解释或设计建议（标记 general_knowledge / proposal，不生成文档引用编号）",
     ),
     TaskSource.PRODUCT: (
-        AgentKind.RAG,
-        "产品说明与结构化统计（get_workspace_overview / lookup_catalog）",
+        AgentKind.GENERAL,
+        "产品说明（内置产品事实，不检索用户文档）",
     ),
 }
 
@@ -733,7 +733,7 @@ def _sources_for(requirement: UserRequirement, decision: RouteDecision | None) -
         sources.append(TaskSource.HISTORY)
     if decision.needs_web:
         sources.append(TaskSource.WEB)
-    if explicit_general or (decision.needs_general and not sources):
+    if explicit_general or decision.needs_general:
         sources.append(TaskSource.GENERAL)
     if not sources and decision.intent.value != "clarification":
         # 路由没有给出明确来源（例如纯 product 之外的 intent）：按文本线索兜底，
@@ -812,20 +812,7 @@ def _apply_retrieval_queries(
     *,
     context_text: str = "",
 ) -> list[ResearchTask]:
-    """把「每条用户要求一个检索任务」替换成「按整理后的查询执行」（PRD 7.2 第 1 步）。
-
-    用户实测缺陷（C02/C03）：一个问题被句末标点切成两句时，第二句会变成**独立检索
-    查询**（「有哪些维度值得考虑」「类似 OpenClaw 的那种方案」），既丢研究对象又与
-    第一句意图重复。整理后的查询（见 :mod:`app.agent.query_plan`）已经把补充句合并、
-    把研究对象与关注主题都带上，因此这里按整理结果重建知识 / 联网任务：
-
-    - **一项要求仍会被覆盖**：每个新任务承接原任务的全部 ``requirement_ids``；
-    - **依赖关系不丢**：原任务被替换时，指向它的 ``depends_on`` 重定向到**仍然存在**的
-      新任务（见 :func:`_replacement_target`）——包括「后续旧任务被合并成空列表」的情况
-      （用户实测缺陷 F01：``t-r2-general`` 依赖被删掉的 ``t-r2-knowledge``，整轮
-      ``PlanValidationError`` 失败）；
-    - 查询条数为 0 或来源不变时，任务保持原样（不改既有行为）。
-    """
+    """整理各来源查询，知识查询共享研究任务，并保留全部要求与任务依赖。"""
 
     active = [str(query) for query in queries if str(query or "").strip()]
     if not active:
@@ -841,7 +828,7 @@ def _apply_retrieval_queries(
                 item for item in task.requirement_ids if item not in requirement_ids
             )
         agent_kind, expected = TASK_SOURCES[source]
-        if source is TaskSource.HISTORY:
+        if source in {TaskSource.HISTORY, TaskSource.KNOWLEDGE}:
             source_queries, reuse_notes = list(dict.fromkeys(active)), []
         else:
             source_queries, reuse_notes = query_plan.merge_semantic_queries(
@@ -867,14 +854,26 @@ def _apply_retrieval_queries(
             )
             for index, query in enumerate(source_queries[:cap], 1)
         ]
+        if source is TaskSource.KNOWLEDGE:
+            created = [ResearchTask(
+                task_id="t-q1-knowledge",
+                question=context_text or source_queries[0],
+                scoped_query=True,
+                retrieval_queries=source_queries,
+                requirement_ids=list(requirement_ids),
+                agent_kind=agent_kind,
+                expected_evidence=expected,
+                query_identity=query_plan.stable_query_identity(
+                    context_text or source_queries[0], source_kind=source.value,
+                ).key,
+            )]
         if not created:
             continue
         replaced[origin[0].task_id] = created
         for task in origin[1:]:
             replaced[task.task_id] = []
         notes.append(
-            f"{source.value} 检索按整理后的 {len(created)} 条查询执行"
-            f"（原 {len(origin)} 个按句切分的查询已合并）"
+            f"{source.value} 使用 {len(created)} 个研究任务，保留 {len(source_queries)} 条查询表达"
         )
 
     if not replaced:
@@ -890,9 +889,7 @@ def _apply_retrieval_queries(
                 continue
             seen.add(created.task_id)
             kept.append(created)
-    # 依赖重定向：**每个**被替换掉的旧任务都必须映射到一个仍然存在的新任务。
-    # 旧实现只给「拿到新查询的第一项旧任务」登记目标，后续旧任务（``created`` 为空列表）
-    # 没有目标，于是依赖它们的任务保留了一个已被删除的任务 ID，校验随即整轮失败。
+    # 同一来源的任务依赖统一指向共享研究任务。
     redirect: dict[str, str] = {}
     for task_id, created in replaced.items():
         target = _replacement_target(task_id, replaced=replaced)

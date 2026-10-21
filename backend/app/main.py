@@ -38,7 +38,7 @@ from app.api.routes.knowledge import router as knowledge_router
 from app.api.routes.memory import router as memory_router
 from app.api.routes.runs import router as runs_router
 from app.api.routes.settings import router as settings_router
-from app.api.run_services import build_run_manager
+from app.api.run_services import build_run_manager, warm_retrieval_indexes
 from app.core.config import settings
 from app.core.outbound import outbound_client
 from app.core.settings_store import get_settings_store, is_search_configured, is_vision_configured
@@ -146,6 +146,8 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
                 f"RunManager 初始化失败（步骤=build_run_manager, error={type(exc).__name__}）"
             ) from exc
         resume_pending_image_tasks()
+        # 后台预热词法索引：把 BM25 构建成本（4.7k 块约 2–3.4s）从第一问挪到启动期。
+        warm_retrieval_indexes()
         yield
     finally:
         if manager is not None:
@@ -218,7 +220,7 @@ async def status(
     if workspace_id:
         context = api_deps.get_workspace_context(workspace_id)
         active_workspace = context.workspace_id
-        vectorstore = api_deps.workspace_vector_store(context)
+        vectorstore = api_deps.get_workspace_vector_store(context)
         state_store = api_deps.workspace_state_store(context)
         image_store = api_deps.workspace_image_state_store(context)
     last_sync = task_store.last_success_at

@@ -36,6 +36,7 @@ import hashlib
 import inspect
 import json
 import logging
+import os
 import re
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable, Mapping, Sequence
@@ -53,6 +54,7 @@ from markdown_it import MarkdownIt
 
 from app.agent import events as agent_events
 from app.agent import graph as agent_graph
+from app.agent.answer_stream import AnswerStream
 from app.agent.app_store import AppStore, BackgroundJobSpec
 from app.agent.approval import (
     PERMISSION_ALLOW_NOW,
@@ -82,7 +84,6 @@ from app.agent.contracts import (
     InputRequest,
     InputRequestStatus,
     PermissionMode,
-    ReasoningLevel,
     ResearchTask,
     RouteDecision,
     RunStatus,
@@ -104,6 +105,7 @@ from app.agent.models import (
 )
 from app.agent.process_display import tool_result_display, tool_start_summary
 from app.agent.web_budget import local_only_question
+from app.generation.model_runtime import MODEL_OWNER, model_runtime
 from app.memory.locking import conversation_async_lock, workspace_async_lock
 
 if TYPE_CHECKING:
@@ -139,13 +141,12 @@ logger = logging.getLogger(__name__)
 GENERAL_MODEL_TIMEOUT_SECONDS: Final[float] = 120.0
 GENERAL_MODEL_TOTAL_TIMEOUT_SECONDS: Final[float] = 300.0
 RUN_ACTIVE_TIMEOUT_SECONDS: Final[float] = 900.0
-OFF_RUN_TIMEOUT_SECONDS: Final[float] = 30.0
 _EXECUTION_DEADLINE: ContextVar[float | None] = ContextVar("execution_deadline", default=None)
 
 
 def model_time_remaining(reasoning_level: Any, stage: str = "") -> float:
     level = str(getattr(reasoning_level, "value", reasoning_level) or "")
-    limit = OFF_RUN_TIMEOUT_SECONDS if level == "off" else GENERAL_MODEL_TOTAL_TIMEOUT_SECONDS
+    limit = GENERAL_MODEL_TOTAL_TIMEOUT_SECONDS
     if stage == "general_verification":
         limit = min(limit, 10.0 if level == "off" else 30.0)
     deadline = _EXECUTION_DEADLINE.get()
@@ -154,13 +155,6 @@ def model_time_remaining(reasoning_level: Any, stage: str = "") -> float:
     if limit <= 0:
         raise TimeoutError("本轮执行时间已用完")
     return limit
-
-#: 同步桥用的 worker：每次调用在自己的线程里 ``asyncio.run``，避免与主循环共享 provider
-#: 客户端（httpx 客户端与首次使用的事件循环绑定，跨循环复用会报错）。
-_GENERAL_EXECUTOR: Final[ThreadPoolExecutor] = ThreadPoolExecutor(
-    max_workers=2, thread_name_prefix="general-model"
-)
-
 
 @dataclass
 class ModelCallTiming:
@@ -186,6 +180,7 @@ class ModelCallTiming:
     reasoning_characters: int = 0
     outcome: str = "pending"
     usage: dict[str, int] | None = None
+    cache_hit: bool = False
     _lock: Any = field(default_factory=Lock, repr=False)
     started_event: Any = field(default_factory=Event, repr=False)
     finished_event: Any = field(default_factory=Event, repr=False)
@@ -267,6 +262,7 @@ class ModelCallTiming:
                 "reasoning_characters": self.reasoning_characters,
                 "outcome": self.outcome,
                 "usage": self.usage,
+                "cache_hit": self.cache_hit,
             }
 
     def log(self, outcome: str) -> None:
@@ -281,6 +277,52 @@ def _chat_config_from_settings() -> Any:
     from app.core.settings_store import get_settings_store
 
     return get_settings_store().load().chat
+
+
+# 指代/跨轮衔接词：出现时规则无法独立还原检索对象，需要模型整理查询。
+_ANAPHORA_MARKERS = (
+    "那", "它", "这个", "这些", "那些", "该文档", "此文", "这篇文章", "上面", "上述",
+    "前述", "刚才", "前面提到", "其中", "两者", "分别", "对比", "相比",
+)
+# 单次检索能覆盖的问题长度上限（字符）：再长通常含多个子问题或额外限定语。
+_QUERY_PLAN_CHAR_LIMIT = 60
+
+
+def _merge_retrieval_queries(question: str, planned: Sequence[str] | None) -> list[str]:
+    """把模型给的检索查询与原句合并：原句永远第一，模型查询去重后补位。
+
+    2026-10-21 离线实测：模型把问句压成关键词串后单独检索，金标块会从 rank 1 掉到
+    rank 3–4（sem_cache 甚至整轮不召回），因为它丢掉了问句里的语义关系词。原句留在
+    首位、模型查询只做补充，既不丢语义也不丢模型认为重要的实体。
+    """
+
+    base = " ".join(question.split())
+    merged = [base] if base else []
+    for item in planned or []:
+        text = " ".join(str(item).split())
+        if text and text not in merged:
+            merged.append(text)
+    return merged
+
+
+def _question_needs_query_plan(
+    question: str, retrieval_requirements: Sequence[Any], decision: Any
+) -> bool:
+    """是否值得为「整理检索查询」多付一次模型调用。
+
+    ``QueryPlannerAgent`` 的职责是合并同义补充句、承接上文主题、补齐研究对象——这些
+    只有长问题、多要求或含指代词时才需要。短的单要求问题直接用原问题检索，省掉一次
+    云端往返（实测每次约 2–4s），召回不受影响（检索层仍会自动生成规则变体）。
+    """
+
+    if getattr(decision, "needs_history", False):
+        return True
+    if len(retrieval_requirements) > 1:
+        return True
+    text = (question or "").strip()
+    if len(text) >= _QUERY_PLAN_CHAR_LIMIT:
+        return True
+    return any(marker in text for marker in _ANAPHORA_MARKERS)
 
 
 def effective_answer_preferences() -> Any:
@@ -479,31 +521,36 @@ async def _chat_text(
     """
 
     from app.generation.base import StreamResult
-    from app.generation.providers import create_chat_model_from_config
-
     timing = timing or ModelCallTiming()
     remaining = model_time_remaining(reasoning_level, timing.stage)
     timing.start()
     timing.log("started")
     report_call = getattr(on_reasoning, "model_call", None)
+    report_content = getattr(on_reasoning, "content", None)
     if report_call is not None:
         report_call(timing.snapshot())
     parts: list[str] = []
     stream_id = timing.call_id
     pending = ""
     emitted_at = time.monotonic()
+    content_emitted_at = 0.0
     outcome = "completed"
     timing.attach()
     deadline = asyncio.timeout(remaining)
     idle_seconds = min(GENERAL_MODEL_TIMEOUT_SECONDS, remaining)
     idle_deadline = asyncio.timeout(idle_seconds)
     try:
-        model = create_chat_model_from_config(chat_config)
+        model = model_runtime.model(chat_config)
         async with deadline, idle_deadline:
             messages = await _prepare_chat_messages(
                 model, chat_config, prompt, duty_prompt, history, reasoning_level, on_reasoning,
                 max_tokens=max_tokens, compact_history=compact_history,
             )
+            selection_key = model_runtime.selection_key(timing.stage, chat_config, messages, reasoning_level)
+            previous_selection = model_runtime.selection(selection_key)
+            if previous_selection is not None:
+                timing.cache_hit = True
+                return previous_selection
             async for chunk in model.stream_result(
                 messages, reasoning_level=reasoning_level, max_tokens=max_tokens,
             ):
@@ -521,6 +568,9 @@ async def _chat_text(
                     timing.log("first_delta")
                 if kind == "content":
                     parts.append(text)
+                    if report_content is not None and time.monotonic() - content_emitted_at >= 0.08:
+                        report_content(stream_id, timing.stage, "".join(parts))
+                        content_emitted_at = time.monotonic()
                 elif kind == "reasoning" and on_reasoning is not None and reasoning_level != "off":
                     pending += text
                     if len(pending) >= 256 or time.monotonic() - emitted_at >= 0.1:
@@ -529,6 +579,19 @@ async def _chat_text(
                         emitted_at = time.monotonic()
             if pending and on_reasoning is not None and reasoning_level != "off":
                 on_reasoning(stream_id, pending)
+            if report_content is not None and parts:
+                report_content(stream_id, timing.stage, "".join(parts))
+            if selection_key is not None:
+                from app.agent.research import SectionSelection
+
+                selected = _structured_json("".join(parts))
+                try:
+                    selection = SectionSelection.model_validate_json(selected)
+                except ValueError as exc:
+                    logger.warning("selection_validation_error call_id=%s error=%s", timing.call_id, str(exc))
+                    raise
+                parts = [selection.model_dump_json()]
+                model_runtime.remember_selection(selection_key, parts[0])
     except TimeoutError:
         outcome = "stream_total_timeout" if deadline.expired() else (
             "stream_idle_timeout" if idle_deadline.expired() else "call_stage_timeout"
@@ -581,21 +644,21 @@ def _run_general_blocking(
     if track_call is not None:
         track_call(timing, True)
 
-    def generate() -> str:
+    async def generate() -> str:
         timing.start()
-        return asyncio.run(_generate_general_text(
+        return await _generate_general_text(
             chat_config, prompt, reasoning_level, duty_prompt, on_reasoning, timing, history,
             max_tokens=max_tokens,
-        ))
+        )
 
     bridge_deadline = time.monotonic() + remaining
-    future = _GENERAL_EXECUTOR.submit(copy_context().run, generate)
+    future = model_runtime.submit(generate)
     try:
         if not timing.started_event.wait(min(GENERAL_MODEL_TIMEOUT_SECONDS, remaining)):
             raise FutureTimeoutError()
         return future.result(timeout=max(0.0, bridge_deadline - time.monotonic()))
     except FutureTimeoutError as exc:
-        cancelled = future.cancel()
+        cancelled = not timing.started_event.is_set() and future.cancel()
         if cancelled:
             timing.finish("queue_timeout")
         elif not future.done():
@@ -666,6 +729,10 @@ def _general_prompt(request: Any) -> str:
         "只完成本任务负责的部分；完整问题用于理解对象和限制，其他任务的内容无需重复作答。",
         "如果用户是在问方案或设计，请给出可执行的建议；如果是在问原理，请解释清楚。",
         (
+            "用户邀请补充观点或评价已有做法时，结合当前对话直接表达判断、理由及适用条件。"
+            "区分已有事实和你的分析，资料未给出量化成效不妨碍评价思路，不自行增加成效核验任务。"
+        ),
+        (
             "使用已提供的文档定义解释问题，再以通用知识提供有明确假设的例子，不要编造来源；"
             "不要输出任何形如 [S1] / [W1] 的引用编号。"
         ),
@@ -700,10 +767,10 @@ def _general_prompt(request: Any) -> str:
             [
                 "",
                 (
-                    "本轮**没有**取得本工作区的文档原文（没有检索到、也没有可供引用的资料）。"
-                    "请如实按通用知识作答，**不要**说「根据资料 / 文档 / 检索结果」，"
-                    "**不要**提及你不掌握的文档或链接（用户实测缺陷 F15：通用回答被包装成"
-                    "「上面两份依据」「本轮检索没有找到」这类自相矛盾的说法）。"
+                    "当前对话中的背景可以作为讨论前提，并结合通用知识直接分析。"
+                    "本任务没有提供可引用的原文，不声称执行了检索，也不编造文档事实或链接。"
+                    "评价做法时直接说明你的判断及理由，必要处说明推断条件。"
+                    "无需以没有原文、没有检索或无法确认成效作为开场和结尾。"
                 ),
             ]
         )
@@ -859,6 +926,13 @@ def general_model_for_chat(
     duty_prompt = _with_workspace_memory_duty(_general_duty_prompt(effective), memory_context)
 
     def call(request: Any) -> str:
+        question = str(getattr(request, "original_question", "") or getattr(request.task, "question", ""))
+        prepare_answer = getattr(on_reasoning, "prepare_answer", None)
+        if prepare_answer is not None:
+            prepare_answer([], question, [], not (
+                general_review_required(question, reasoning_level)
+                or _strict_three_item_format_issue(question, "")
+            ))
         text = _run_general_blocking(
             config,
             _general_prompt(request),
@@ -869,7 +943,6 @@ def general_model_for_chat(
             trigger_reason=str(getattr(getattr(request, "task", None), "task_id", "")),
             history=history,
         )
-        question = str(getattr(request, "original_question", "") or getattr(request.task, "question", ""))
         if text.strip() and general_review_required(question, reasoning_level):
             text = _review_general_answer(config, request, text, reasoning_level, on_reasoning)
         return _correct_strict_three_item_format(
@@ -880,7 +953,7 @@ def general_model_for_chat(
 
 
 def general_review_required(question: str, reasoning_level: Any) -> bool:
-    if re.search(r"核查|核实|校验|验证|查证|是否正确|是否成立|检查.{0,12}(?:回答|结论|说法|事实)", question):
+    if re.search(r"核查|核实|核对|校验|验证|查证|是否正确|是否成立|检查.{0,12}(?:回答|结论|说法|事实)", question):
         return True
     level = str(getattr(reasoning_level, "value", reasoning_level) or "")
     return level in {"high", "max"} and bool(
@@ -937,15 +1010,17 @@ def _review_general_answer(
 
 
 def _auxiliary_reasoning_level(config: Any, requested: Any) -> Any:
-    """结构化辅助任务使用已声明的较短推理档位。"""
+    """结构化选择使用 provider 已声明支持的短调用设置。"""
 
     level = str(getattr(requested, "value", requested) or "")
-    if level not in {"high", "max"}:
-        return requested
     from app.agent.contracts import ReasoningLevel
     from app.generation.providers import create_chat_model_from_config
 
     capabilities = create_chat_model_from_config(config).capabilities
+    if capabilities.supports_level(ReasoningLevel.OFF):
+        return "off"
+    if level not in {"high", "max"}:
+        return requested
     return "low" if capabilities.supports_level(ReasoningLevel.LOW) else requested
 
 
@@ -965,12 +1040,12 @@ def section_model_for_chat(
     )
 
     def call(prompt: str) -> str:
-        return _run_general_blocking(
+        return _structured_json(_run_general_blocking(
             config, prompt, auxiliary_level,
             selection_instruction, on_reasoning,
             stage="history_selection" if history else "section_selection",
             trigger_reason="historical_source_request" if history else "competing_document_sections",
-        )
+        ))
 
     return call
 
@@ -1062,7 +1137,7 @@ def query_model_for_chat(
 
 @dataclass
 class SynthesisCorrectionBudget:
-    mechanical_used: bool = False
+    mechanical_used: int = 0
     semantic_corrections: int = 0
     semantic_calls: int = 0
 
@@ -1072,9 +1147,9 @@ class SynthesisCorrectionBudget:
                 return False
             self.semantic_corrections += 1
             return True
-        if self.mechanical_used:
+        if self.mechanical_used >= 2:
             return False
-        self.mechanical_used = True
+        self.mechanical_used += 1
         return True
 
     def begin_semantic(self) -> None:
@@ -1126,6 +1201,14 @@ def semantic_review_decision(
 ) -> tuple[bool, str]:
     """机械核查结束后，判定是否仍需一次独立语义核查。"""
 
+    if (review.source_scope and not re.search(
+        r"核查|核实|核对|校验|验证|查证|是否正确|是否成立", request.question,
+    ) and not any(paragraph.calculation or paragraph.inputs or paragraph.result is not None
+                  for paragraph in review.paragraphs)):
+        from app.agent.research import detect_numeric_conflicts
+
+        if not detect_numeric_conflicts(citable):
+            return True, "scoped_factual_claims"
     requirement_ids = set(request.requirements)
     if review.gaps:
         return True, "answer_contains_gaps"
@@ -1140,6 +1223,14 @@ def semantic_review_decision(
         return True, "calculation_present"
     if any(not paragraph.citations for paragraph in review.paragraphs):
         return True, "uncited_paragraph_present"
+    from app.agent.query_plan import is_fragment_follow_up
+
+    if re.search(r"为什么|为何|推断|推测|意味着|只[^。！？?]{0,24}(?:会|能否|是否)", request.question) or (
+        is_fragment_follow_up(request.question)
+        and any(re.search(r"推断|推测|意味着|由此|据此|因而|因此|所以", paragraph.text)
+                for paragraph in review.paragraphs)
+    ):
+        return True, "derived_factual_claims"
     source_by_id = {
         evidence_id: item.source_ref.split("#", 1)[0]
         for item in citable
@@ -1181,6 +1272,281 @@ def _contradicts_tool_history(content: str, executed_tools: frozenset[str]) -> b
     ))
 
 
+def _comparison_has_global_format(text: str) -> bool:
+    return bool(re.search(
+        r"表格|字数|篇幅|一段话|单段|合计|总共|总计|word count|single paragraph"
+        r"|(?:用|不超过|控制在|限制为|至多|最多|至少|不少于)\s*(?:\d+|[一二两三四五六七八九十百]+)\s*(?:字|词|段|句|条)"
+        r"|\d+\s*(?:字|词|words|characters)\s*(?:以内|之内|左右|maximum|minimum)",
+        text, re.IGNORECASE,
+    ))
+
+
+def _comparison_requires_joint_reasoning(question: str) -> bool:
+    return _comparison_has_global_format(question) or bool(re.search(
+        r"计算|推导|推演|证明|评估|判断|权衡|推荐|选择|如何设计|设计方案|方案设计|优化|迁移|为什么|为何"
+        r"|核查|核实|核对|校验|验证|查证|是否正确|是否成立"
+        r"|哪个|哪种|谁|更好|更快|更适合|表格|一张表|汇总|排序|排名|优缺点|差异|区别|共同点|异同"
+        r"|calculate|derive|evaluate|recommend|why|proof|design a|optimiz|migrat|trade.?off"
+        r"|how much|which|better|faster|matrix|table|rank|pros and cons",
+        question, re.IGNORECASE,
+    ))
+
+
+def _collect_comparison(
+    config: Any, request: Any, citable: Sequence[Evidence], scopes: Sequence[Any],
+    reasoning_level: Any, duty_prompt: str, on_reasoning: Any,
+    history: Sequence[Any], limits: Sequence[str], replay: SynthesisReplay | None,
+    on_review: Any,
+) -> str:
+    from app.agent.contracts import EvidenceSourceType
+    from app.agent.tools import document_id_of_block
+    from app.agent.verification import ParagraphSynthesisReview
+
+    level = str(getattr(reasoning_level, "value", reasoning_level) or "")
+    factual_comparison = level == "low"
+    part_level = _auxiliary_reasoning_level(config, reasoning_level) if factual_comparison else reasoning_level
+
+    def generate(scope: Any) -> Any:
+        source_documents = {
+            document_id_of_block(item.source_ref.split("#", 1)[0])
+            for item in citable if item.evidence_id in scope.evidence_ids
+            and item.source_type is EvidenceSourceType.KNOWLEDGE
+        }
+        sources = [item for item in citable if item.evidence_id in scope.evidence_ids or (
+            item.source_type is EvidenceSourceType.KNOWLEDGE
+            and document_id_of_block(item.source_ref.split("#", 1)[0]) in source_documents
+        )]
+        scoped = request.model_copy(update={
+            "question": request.question + f"\n本次只编写{scope.subject}的比较内容，逐项保留用户询问的维度。",
+            "requirements": {
+                key: f"{scope.subject}：{'、'.join(scope.requested_dimensions)}"
+                for key in request.requirements
+            },
+            "conclusions": [], "evidence": sources,
+        })
+        prompt = _synthesis_prompt(scoped, sources, (), limits, structured=True)
+        prompt += (
+            "\n已独立核对的对象范围与来源：\n" + scope.model_dump_json()
+            + "\n正文只写本对象，按所问维度组织，保留各维度的关键步骤与成立条件。"
+            "每项事实引用所给原文中直接支持的行。未被询问的实例、参数清单无需展开。"
+            "适用条件可以依据已提供机制说明其适用前提；推断须明确表述。"
+            "原文的应用场景或机制前提已经说明适用条件时，登记该维度完成。"
+            "provided_dimensions已确认的维度依据来源正常回答，不因缺少额外参数或正式清单登记缺口。"
+            "只对用户明确要求且无法回答的内容登记gaps。"
+            "保留组件、操作、阶段各自的条件；具体配置中的行为不能扩展成整个系统的行为。"
+            "原文并列列举多个阶段与多个作用时，只有明确逐项对应才能建立一一对应关系。"
+            "用户询问系统设计时，总体架构明示的在线、离线等核心阶段均应覆盖；"
+            "内部步骤未披露时保留阶段职责及来源范围。"
+            "同义概括保留原文含义，原文分歧注明各自来源；不得编造数值或把未取得写成不存在。"
+            "每个自然段或列表项输出一个paragraph，text保留Markdown，引用使用citations。"
+            "一个text只包含一个自然段或列表项，不包含空行；需要分段时增加paragraph对象。"
+            "仅逐字摘用原文时使用引号；机制概括使用普通文字或Markdown强调，引用行包含完整原词。"
+            "citations只填写evidence_id、start_line、end_line，直接选择支持各项陈述的原文行；"
+            "每条引用都必须直接支持本段事实；仅提及同一对象的背景简介无法支持具体机制，不加入引用。"
+            "行号从1开始，每个引用范围最多12行，数值和术语须在所选行中出现。"
+            "不得在text中自编引用编号或内部标识。"
+            "推断应标明前提并引用其依据，假设示例单独形成无citations的正文项。"
+            "covered_requirements和gaps共同覆盖下列要求ID，只使用这些ID：\n"
+            + json.dumps(scoped.requirements, ensure_ascii=False)
+            + "\n只返回以下Schema规定的JSON：\n"
+            + json.dumps(ParagraphSynthesisReview.model_json_schema(), ensure_ascii=False)
+        )
+        part_replay = None
+        if replay is not None:
+            identity = hashlib.sha256(scope.subject.encode()).hexdigest()[:20]
+            part_replay = SynthesisReplay(replay.path.parent / "comparison" / f"{identity}.json")
+        if on_review is not None:
+            on_review({"stage": "comparison_part_input", "subject": scope.subject,
+                       "prompt": prompt, "reasoning_level": str(part_level)})
+        raw = _collect_synthesis(
+            config, prompt, part_level, duty_prompt, "核查", on_reasoning,
+            history=history, replay=part_replay,
+        )
+        return ParagraphSynthesisReview.model_validate_json(_structured_json(raw))
+
+    with ThreadPoolExecutor(max_workers=min(3, len(scopes)), thread_name_prefix="comparison-answer") as executor:
+        futures = [executor.submit(copy_context().run, generate, scope) for scope in scopes]
+        parts = [future.result() for future in futures]
+    gaps = [gap for part in parts for gap in part.gaps]
+    missing = {key for gap in gaps for key in gap.requirement_ids}
+    combined = ParagraphSynthesisReview(
+        paragraphs=[paragraph for part in parts for paragraph in part.paragraphs],
+        covered_requirements=[key for key in request.requirements if key not in missing
+                              and all(key in part.covered_requirements for part in parts)],
+        gaps=gaps,
+    )
+    return combined.model_dump_json()
+
+
+def _collect_factual_assessment(
+    config: Any, request: Any, review: Any, citable: Sequence[Evidence], history: Sequence[Any],
+    reasoning_level: Any, on_reasoning: Any,
+    recheck_indices: set[int] | None, limits: Sequence[str], background: Sequence[Any],
+) -> Any:
+    from pydantic import create_model
+
+    from app.agent.contracts import ContractModel
+    from app.agent.verification import (
+        FactualAssessment,
+        FactualVerdict,
+        SemanticIssue,
+        SynthesisUnavailable,
+    )
+
+    active = [index for index in range(len(review.paragraphs))
+              if recheck_indices is None or index in recheck_indices]
+    if not active:
+        raise SynthesisUnavailable("事实复核未找到指定正文")
+
+    def assess(indices: list[int], findings: Sequence[Any] = ()) -> list[Any]:
+        schema = create_model("FactualBatchReview", __base__=ContractModel, **{
+            f"check_{index}": (FactualVerdict, ...) for index in range(len(indices))
+        })
+        prompt = _semantic_assessment_prompt(
+            request, review, citable, history, limits=limits, background=background,
+            recheck_indices=recheck_indices, facts_only=True, focus_indices=set(indices),
+            factual_schema=schema.model_json_schema(),
+        )
+        if findings:
+            prompt += (
+                "\n待复核的问题：\n" + json.dumps([item.reason for item in findings], ensure_ascii=False)
+                + "\n逐项复核这些判断。只有原文能证明的确定错误才设置has_error=true；"
+                "完整引用已支持陈述、同义概括保留成立条件或合理推断时，设置has_error=false。"
+            )
+        level = _auxiliary_reasoning_level(config, reasoning_level)
+        raw = _collect_synthesis(
+            config, prompt, level,
+            "独立核对指定正文的事实、引用与成立条件，只报告有原文位置证明的确定错误。只返回规定JSON。",
+            "事实验收", on_reasoning,
+        )
+        assessment = schema.model_validate_json(_structured_json(raw))
+        issues = []
+        for local_index, paragraph_index in enumerate(indices):
+            verdict = getattr(assessment, f"check_{local_index}")
+            if verdict.has_error:
+                if not verdict.reason.strip():
+                    raise SynthesisUnavailable("事实验收指出错误但没有提供原文依据")
+                issues.append(SemanticIssue(paragraph_index=paragraph_index, reason=verdict.reason))
+        return issues
+
+    issues = assess(active)
+    if issues:
+        issues = assess(sorted({item.paragraph_index for item in issues}), issues)
+    return FactualAssessment(issues=issues)
+
+
+def _merge_source_scope_subjects(review: Any) -> Any:
+    grouped: dict[str, list[Any]] = {}
+    for scope in review.source_scope:
+        grouped.setdefault(" ".join(scope.subject.split()).casefold(), []).append(scope)
+    merged = []
+    for scopes in grouped.values():
+        merged.append(scopes[0].model_copy(update={
+            "requested_operation": "；".join(dict.fromkeys(item.requested_operation for item in scopes)),
+            "documented_operation": "；".join(dict.fromkeys(item.documented_operation for item in scopes)),
+            "matches_request": any(item.matches_request for item in scopes),
+            "evidence_ids": list(dict.fromkeys(key for item in scopes for key in item.evidence_ids)),
+            "requested_dimensions": list(dict.fromkeys(key for item in scopes for key in item.requested_dimensions)),
+            "provided_dimensions": list(dict.fromkeys(
+                key for item in scopes if item.matches_request for key in item.provided_dimensions
+            )),
+        }))
+    review.source_scope = merged
+    return review
+
+
+def _refine_source_scope(
+    config: Any, question: str, evidence: Sequence[Evidence], review: Any,
+    reasoning_level: Any, on_reasoning: Any,
+) -> Any:
+    from app.agent.tools import document_id_of_block
+    from app.agent.verification import (
+        SourceScopeRefinements,
+        SynthesisUnavailable,
+        citation_source_lines,
+    )
+
+    sources = {item.evidence_id: item for item in evidence}
+    scope_positions = {id(item): index for index, item in enumerate(review.source_scope)}
+
+    uncertain = [item for item in review.source_scope if (
+        bool(item.evidence_ids) and (
+            not item.matches_request
+            or set(item.requested_dimensions) - set(item.provided_dimensions)
+        )
+        or not item.evidence_ids and any(
+            item.subject.casefold() in source.document_title.casefold() for source in evidence
+        )
+    )]
+    if uncertain:
+        wanted_ids = {key for item in uncertain for key in item.evidence_ids}
+        wanted_documents = {
+            document_id_of_block(source.source_ref.split("#", 1)[0])
+            for source in evidence if source.evidence_id in wanted_ids
+            and source.source_type.value == "knowledge"
+        }
+        wanted = [source for source in evidence if source.evidence_id in wanted_ids or (
+            source.source_type.value == "knowledge"
+            and document_id_of_block(source.source_ref.split("#", 1)[0]) in wanted_documents
+        ) or any(
+            item.subject.casefold() in source.document_title.casefold() for item in uncertain
+        )]
+        level = _auxiliary_reasoning_level(config, reasoning_level)
+        raw = _run_general_blocking(
+            config, json.dumps({
+                "question": question,
+                "subjects": [{"scope_index": index, **item.model_dump(mode="json")}
+                             for index, item in enumerate(uncertain)],
+                "sources": [{
+                    "source_index": index, "title": source.document_title,
+                    "heading": source.heading_path, "limitations": source.limitations,
+                    "lines": citation_source_lines(source),
+                } for index, source in enumerate(wanted)],
+                "schema": SourceScopeRefinements.model_json_schema(),
+            }, ensure_ascii=False), level,
+            "逐项核对subjects中尚未确认的对象与维度，只返回SourceScopeRefinements JSON。"
+            "subjects中的初步说明仅用于定位，依据全部sources重新确认该对象的操作和各项维度。"
+            "每个scope_index恰好返回一次，不新增对象；provided_dimension_indices对应"
+            "该对象requested_dimensions从0开始的序号。根据全部所给正文判断普通机制问题的覆盖情况，"
+            "用户未询问具体参数时，原文已说明操作过程即可确认该维度。"
+            "适用条件可以由原文的应用场景或机制前提支持，无需原文另列正式清单；"
+            "存在这些依据时，将该维度序号登记在provided_dimension_indices。"
+            "不同对象、插件与宿主、不同操作的规则必须分别处理。"
+            "source_indices填写直接支持本对象判断的sources序号，序号从0开始。"
+            "缺口限定于本轮可见原文。每个documented_operation最多120个汉字。",
+            on_reasoning, stage="source_scope_refinement", trigger_reason="uncertain_comparison_dimensions",
+        )
+        refined = SourceScopeRefinements.model_validate_json(_structured_json(raw))
+        positions = [item.scope_index for item in refined.scopes]
+        if len(positions) != len(set(positions)) or set(positions) != set(range(len(uncertain))):
+            raise SynthesisUnavailable("来源范围复核未完整返回指定对象")
+        replacements = {}
+        for item in refined.scopes:
+            original = uncertain[item.scope_index]
+            dimensions = item.provided_dimension_indices
+            if len(dimensions) != len(set(dimensions)) or any(
+                not 0 <= index < len(original.requested_dimensions) for index in dimensions
+            ):
+                raise SynthesisUnavailable("来源范围复核引用了无效的比较维度")
+            if len(item.source_indices) != len(set(item.source_indices)) or any(
+                not 0 <= index < len(wanted) for index in item.source_indices
+            ):
+                raise SynthesisUnavailable("来源范围复核引用了无效的来源序号")
+            replacements[scope_positions[id(original)]] = original.model_copy(update={
+                "documented_operation": item.documented_operation,
+                "matches_request": item.matches_request,
+                "evidence_ids": [wanted[index].evidence_id for index in item.source_indices],
+                "provided_dimensions": [original.requested_dimensions[index] for index in dimensions],
+            })
+        review.source_scope = [replacements.get(index, item) for index, item in enumerate(review.source_scope)]
+    for item in review.source_scope:
+        if not set(item.evidence_ids) <= sources.keys():
+            raise SynthesisUnavailable("来源范围引用了未提供的原文")
+        if not item.evidence_ids and (item.matches_request or item.provided_dimensions):
+            raise SynthesisUnavailable("来源范围缺少所确认对象的原文")
+    return review
+
+
 def synthesis_model_for_chat(
     chat_config: Any = None, *, reasoning_level: Any = None,
     history: Sequence[Mapping[str, str]] = (),
@@ -1197,7 +1563,7 @@ def synthesis_model_for_chat(
 
     未配置、模型调用失败或引用格式纠正失败时，抛出 ``SynthesisUnavailable``。
     文档来源使用 ``{{ev-…}}`` 占位符，由 :func:`assign_citation_ids` 分配编号。
-    有可引用证据时生成结构化正文并独立验收，机械问题至多纠正一次，语义问题至多纠正两次。
+    有可引用证据时生成结构化正文并独立验收，机械问题至多纠正两次，语义问题至多纠正两次。
 
     ``preferences`` 为设置页的回答偏好（含自定义提示词）；``None`` 表示按当前设置读取。
     偏好可以改变语气、角色与篇幅，但**不能**取消占位符与「不得编造」的硬性要求。
@@ -1223,6 +1589,12 @@ def synthesis_model_for_chat(
             if citation_prefix(item.source_type) is not None
             and item.supported_requirements
         ]
+        prepare_answer = getattr(on_reasoning, "prepare_answer", None)
+        if prepare_answer is not None:
+            prepare_answer(citable, request.question, list(limits), not citable and not (
+                general_review_required(request.question, reasoning_level)
+                or _strict_three_item_format_issue(request.question, "")
+            ))
         # 通用解释（模型已有知识）作为**背景**一并给出：术语含义、通用做法可以用它来讲，
         # 但它不生成引用编号，也不能被当成文档事实（用户实测缺陷 C01：模型明明能解释
         # 术语，却被挡在答案之外）。
@@ -1241,7 +1613,7 @@ def synthesis_model_for_chat(
         prompt = _synthesis_prompt(request, citable, background, limits, structured=bool(citable))
         confirmed_scope = []
         if citable and re.search(r"对比|比较|compare|comparison", request.question, re.IGNORECASE):
-            from app.agent.verification import SourceScopeReview
+            from app.agent.verification import SourceScopeReview, citation_source_lines
 
             scope_prompt = (
                 "核对比较问题中用户指定的操作与已取得原文描述的操作是否一致。只判断操作范围，不生成答案。"
@@ -1261,17 +1633,23 @@ def synthesis_model_for_chat(
                 "判断缺少细节时优先依据已读取的目标对象章节，documented_operation明确写出该章节的实际范围。"
                 "有来源的对象，其evidence_ids必须引用输入中实际支持该对象范围判断的来源。"
                 "没有来源的对象只能说明本轮未取得资料，不能断言该系统没有对应机制。每项说明简短、具体。只返回JSON。\n"
+                "documented_operation只写必要操作及边界，每个对象最多120个汉字。\n"
                 + json.dumps({"question": request.question, "requirements": request.requirements,
                               "sources": [{"evidence_id": item.evidence_id, "title": item.document_title,
                                            "source_ref": item.source_ref, "heading": item.heading_path,
                                            "limitations": item.limitations,
-                                           "content": item.content} for item in citable],
+                                           "content": "\n".join(
+                                               f"L{number}: {line}" for number, line in enumerate(
+                                                   citation_source_lines(item), 1
+                                               )
+                                           )} for item in citable],
                               "schema": SourceScopeReview.model_json_schema()}, ensure_ascii=False)
             )
             raw_scope = _run_general_blocking(
-                config, scope_prompt, reasoning_level,
+                config, scope_prompt, _auxiliary_reasoning_level(config, reasoning_level),
                 "独立核对研究问题与原文的操作范围。只返回规定JSON，不编写用户答案。", on_reasoning,
                 stage="source_scope", trigger_reason="comparison_operation_scope",
+                max_tokens=4096,
             )
             scope_review = SourceScopeReview.model_validate_json(_structured_json(raw_scope))
             source_ids = {item.evidence_id for item in citable}
@@ -1280,6 +1658,16 @@ def synthesis_model_for_chat(
             if any(not item.evidence_ids and (item.matches_request or item.provided_dimensions)
                    for item in scope_review.source_scope):
                 raise SynthesisUnavailable("缺少对象原文时不能确认操作或比较维度")
+            if on_review is not None:
+                on_review({"stage": "source_scope_initial", "raw": raw_scope,
+                           "question": request.question, "requirements": request.requirements,
+                           "evidence": [item.model_dump(mode="json") for item in citable]})
+            if not _comparison_requires_joint_reasoning(request.question):
+                scope_review = _merge_source_scope_subjects(scope_review)
+            scope_review = _refine_source_scope(
+                config, request.question, citable, scope_review, reasoning_level, on_reasoning,
+            )
+            raw_scope = scope_review.model_dump_json()
             confirmed_scope = scope_review.source_scope
             if on_review is not None:
                 on_review({"stage": "source_scope", "raw": raw_scope, "question": request.question,
@@ -1310,7 +1698,11 @@ def synthesis_model_for_chat(
                 from app.generation.prompt_policy import render_user_preferences
 
                 unavailable_duty = (
-                    "本轮没有符合要求的来源正文。只用一到两句话说明执行记录中的真实原因及无法确认的内容。"
+                    "本轮没有符合要求的来源正文。用一句简短的话说明本轮未找到的依据或尚无法确认的内容。"
+                    "准确使用本轮、暂未找到或尚无法确认等范围表述，无需再用另一句话解释检索结果的含义。"
+                    "用户只追问是否存在资料时，用一句不超过80字的话回答，只保留相关对象和无法确认的内容。"
+                    "省略执行记录中的背景介绍和已完成操作；角色语气自然融入答案，不单独添加开场白。"
+                    "查询次数、改写次数、候选数量和内部核验要求只供内部判断，不写入正文。"
                     "没有执行搜索时，不得说搜索未找到；联网被禁用时，直接说明禁用原因和无法查询原文。"
                     "文档不存在时，直接说明指定文档未找到。不得扩展用户未要求的来源范围。"
                     "不输出任何引用标记或证据占位符，不补充一般知识、示例、建议、重复缺口或后续提问。\n"
@@ -1343,6 +1735,8 @@ def synthesis_model_for_chat(
                                "error": issue if invalid else ""})
                 if not invalid:
                     break
+                if getattr(on_reasoning, "answer_content", lambda: "")():
+                    raise SynthesisUnavailable("正文发布后验证未通过：" + issue)
                 if attempt:
                     raise SynthesisUnavailable("无来源正文核验未通过：" + issue)
                 text = _collect_synthesis(
@@ -1358,6 +1752,7 @@ def synthesis_model_for_chat(
             )
         if citable:
             from app.agent.verification import (
+                FactualAssessment,
                 ParagraphBindingError,
                 ParagraphCorrections,
                 ParagraphSynthesisReview,
@@ -1376,6 +1771,10 @@ def synthesis_model_for_chat(
                 "不同来源对同一阶段、定义或参数存在分歧时，分别注明文章名称及各自表述。"
                 "不得自行裁定哪篇正确，也不得把其中一种表述写成全部来源一致的结论。"
                 "检查数字、单位、公式分母、条件、首次与后续阶段；通用解释和例子必须遵守文档定义。"
+                "原文分别规定多个组件的职责时，总述及每个例子都必须保留这些职责和限制；"
+                "不得把一个组件的行为归给全部组件。总述与后续说明不得互相矛盾。"
+                "回答移除某组件的影响时，保留原文的可能性程度；补充信号或调整权重的职责不能写成取得候选的职责，"
+                "失去补充信号不能直接推出对应候选或信息必然缺失。"
                 "全文已出现的依据不能宣称缺失，研究子任务的失败或空结果不能覆盖其他任务取得的原文。"
                 "用户要求的来源、比较对象、参数边界、示例都必须逐项核对。示例允许自行构造，"
                 "但其假设和能力必须一致；未要求的额外信息无需登记缺口。"
@@ -1396,6 +1795,7 @@ def synthesis_model_for_chat(
                 "每项citations直接选择支持本项陈述的证据ID及正文行范围，不生成引用标记、不抄写摘录。"
                 "text内不要添加[1]、[2]、[S1]等引用编号，显示编号由citations统一生成。"
                 "每个来源范围最多12行；多条独立陈述分别输出，不得用整篇或主题简介支持具体公式。"
+                "每项citations的end_line减start_line必须小于12；相距较远的支持行分别填写引用项。"
                 "数字、公式、定义的来源行必须包含具体值、运算方式或定义全文。"
                 "引号内摘用原文术语时，citations必须包含该术语所在行；相邻行不能代替。"
                 "来源位置含章节或窗口时，否定结论必须限定为该章节或本轮取得的原文；"
@@ -1430,21 +1830,38 @@ def synthesis_model_for_chat(
                 )
             rejected_review = None
             rejected_positions: set[int] = set()
+            general_correction_indices: set[int] = set()
             correction_budget = SynthesisCorrectionBudget()
             correction_prompt = review_prompt
             structure_correction_used = False
+            factual_validation = False
+            last_bound = ""
+            last_unbound = ""
+            review = None
             for attempt in range(5):
                 semantic_started = False
                 parsing_correction = rejected_review is not None
-                raw = _collect_synthesis(
-                    config, review_prompt, reasoning_level,
-                    _with_workspace_memory_duty(
-                        _synthesis_duty_prompt(effective, structured=True), memory_context
-                    ),
-                    "纠正" if rejected_review is not None else "核查", on_reasoning,
-                    history=history,
-                    replay=replay,
+                structured_duty = _with_workspace_memory_duty(
+                    _synthesis_duty_prompt(effective, structured=True), memory_context
                 )
+                if (attempt == 0 and len(confirmed_scope) > 1
+                        and not _comparison_requires_joint_reasoning(request.question)
+                        and not _comparison_has_global_format(str(getattr(effective, "custom_instructions", "")))):
+                    raw = _collect_comparison(
+                        config, request, citable, confirmed_scope,
+                        reasoning_level, structured_duty, on_reasoning, history, limits, replay,
+                        on_review,
+                    )
+                else:
+                    call_level = (
+                        _auxiliary_reasoning_level(config, reasoning_level)
+                        if attempt and (not correction_budget.semantic_corrections or factual_validation) else reasoning_level
+                    )
+                    raw = _collect_synthesis(
+                        config, review_prompt, call_level, structured_duty,
+                        "纠正" if rejected_review is not None else "核查", on_reasoning,
+                        history=history, replay=replay,
+                    )
                 try:
                     if rejected_review is None:
                         review = SynthesisReview.model_validate(
@@ -1456,6 +1873,12 @@ def synthesis_model_for_chat(
                         corrections = ParagraphCorrections.model_validate_json(_structured_json(raw))
                         review = apply_paragraph_corrections(
                             rejected_review, corrections, rejected_positions, set(request.requirements),
+                            allow_general_explanation=bool(background),
+                        )
+                        general_correction_indices.update(
+                            item.index for item in corrections.corrections
+                            if rejected_review.paragraphs[item.index].citations
+                            and not item.paragraph.citations and not item.gaps
                         )
                     parsing_correction = False
                     requirement_ids = set(request.requirements)
@@ -1475,26 +1898,43 @@ def synthesis_model_for_chat(
                     )
                     if not content.strip() or not _has_placeholders(content, citable):
                         raise SynthesisUnavailable("核查后的答案缺少正文或有效来源引用")
+                    last_bound = content
                     needs_semantic, semantic_reason = semantic_review_decision(
                         request, review, citable
                     )
+                    factual_validation = factual_validation or semantic_reason in {
+                        "scoped_factual_claims", "derived_factual_claims",
+                    }
                     if correction_budget.semantic_corrections:
                         needs_semantic, semantic_reason = True, "corrected_semantic_findings"
+                    elif general_correction_indices:
+                        needs_semantic, semantic_reason = True, "corrected_general_explanation"
                     if needs_semantic:
                         semantic_started = True
                         correction_budget.begin_semantic()
-                        assessment_raw = _collect_synthesis(
-                            config,
-                            _semantic_assessment_prompt(
-                                request, review, citable, history, limits=limits,
-                                recheck_indices=rejected_positions if correction_budget.semantic_corrections else None,
-                            ),
-                            reasoning_level,
-                            "你独立验收答案与真实证据的语义支持及用户要求。只输出指定JSON结构，不能改写整篇正文。",
-                            "语义验收",
-                            on_reasoning,
-                            replay=replay,
-                        )
+                        if factual_validation:
+                            factual = _collect_factual_assessment(
+                                config, request, review, citable, history, reasoning_level, on_reasoning,
+                                rejected_positions if correction_budget.semantic_corrections else None,
+                                limits, background,
+                            )
+                            assessment_raw = factual.model_dump_json()
+                        else:
+                            assessment_raw = _collect_synthesis(
+                                config,
+                                _semantic_assessment_prompt(
+                                    request, review, citable, history, limits=limits,
+                                    background=background,
+                                    recheck_indices=rejected_positions if correction_budget.semantic_corrections else None,
+                                ),
+                                reasoning_level,
+                                "你独立验收答案与真实证据的语义支持及用户要求。"
+                                "按每项陈述实际的主语及条件核对，不得把某个组件的限定扩大为整个系统的限定。"
+                                "只报告能够用原文具体位置证明的错误。只输出指定JSON结构，不能改写整篇正文。",
+                                "语义验收",
+                                on_reasoning,
+                                replay=replay,
+                            )
                         if on_review is not None:
                             on_review({
                                 "attempt": attempt + 1,
@@ -1506,8 +1946,18 @@ def synthesis_model_for_chat(
                                 "review": review.model_dump(mode="json"),
                                 "evidence": [item.model_dump(mode="json") for item in citable],
                             })
-                        assessment = SemanticAssessment.model_validate_json(_structured_json(assessment_raw))
-                        issues = apply_semantic_assessment(review, assessment, requirement_ids)
+                        if factual_validation:
+                            factual = FactualAssessment.model_validate_json(_structured_json(assessment_raw))
+                            issues = {}
+                            for item in factual.issues:
+                                if item.paragraph_index >= len(review.paragraphs):
+                                    raise SynthesisUnavailable("事实验收引用了不存在的正文项")
+                                issues[item.paragraph_index] = "; ".join(filter(None, [
+                                    issues.get(item.paragraph_index), item.reason,
+                                ]))
+                        else:
+                            assessment = SemanticAssessment.model_validate_json(_structured_json(assessment_raw))
+                            issues = apply_semantic_assessment(review, assessment, requirement_ids)
                         if issues:
                             raise ParagraphBindingError(issues)
                     elif on_review is not None:
@@ -1520,19 +1970,71 @@ def synthesis_model_for_chat(
                             "review": review.model_dump(mode="json"),
                         })
                 except (ValueError, SynthesisUnavailable) as exc:
+                    published_count = getattr(on_reasoning, "answer_paragraph_count", lambda: 0)()
+                    correctable_suffix = (
+                        isinstance(exc, ParagraphBindingError)
+                        and published_count > 0
+                        and all(index >= published_count for index in exc.issues)
+                    )
+                    if getattr(on_reasoning, "answer_content", lambda: "")() and not correctable_suffix:
+                        raise SynthesisUnavailable("正文发布后验证未通过：" + str(exc)) from exc
                     if on_review is not None:
                         on_review({"attempt": attempt + 1, "accepted": False, "error": str(exc),
                                    "stage": "semantic" if semantic_started else "mechanical",
                                    "raw": raw, "question": request.question,
                                    "requirements": request.requirements,
                                    "evidence": [item.model_dump(mode="json") for item in citable]})
+                    if not last_bound.strip() and review is not None:
+                        unbound = "\n\n".join(
+                            item.text.strip() for item in review.paragraphs if item.text.strip()
+                        )
+                        if unbound:
+                            last_unbound = unbound
+                    degraded = (last_bound or last_unbound).strip()
                     if semantic_started and not isinstance(exc, ParagraphBindingError):
+                        if degraded:
+                            # 语义复核模型自身失败（如推理吃满输出额度、桥接超时）时，
+                            # 不应把已通过机械核验的整篇正文一起丢掉。
+                            note = (
+                                "\n\n> 说明：本轮语义复核模型未能返回结果，以下正文"
+                                "仅通过机械核验（数值/引用行匹配），"
+                                f"语义层面的支撑度未经二次确认（{exc}）。"
+                            )
+                            if on_review is not None:
+                                on_review({"attempt": attempt + 1, "accepted": True,
+                                           "degraded": True, "error": str(exc), "raw": raw,
+                                           "question": request.question, "review": None,
+                                           "requirements": request.requirements,
+                                           "evidence": [item.model_dump(mode="json") for item in citable]})
+                            return degraded + note
                         raise SynthesisUnavailable("语义验收未返回有效结果：" + str(exc)) from exc
                     if parsing_correction:
                         if structure_correction_used:
                             raise SynthesisUnavailable("答案修正结构未通过：" + str(exc)) from exc
                         structure_correction_used = True
                     elif not correction_budget.reserve_correction(semantic=semantic_started):
+                        if last_bound.strip() or last_unbound.strip():
+                            # 纠正额度用完仍未通过核验：保留已经写好的正文并明确标注
+                            # 「未通过核验」，而不是抛错吞掉整篇回答（用户实测 P0：
+                            # 正文完整却对用户表现为空回答）。引用仍指向真实证据行，
+                            # 读者可自行复核。
+                            note = (
+                                "\n\n> 说明：本回答的部分数值或引用未能通过来源核验"
+                                f"（{exc}）。请以引用原文为准，存疑之处不要直接采信。"
+                            )
+                            if on_review is not None:
+                                on_review({
+                                    "attempt": attempt + 1,
+                                    "accepted": True,
+                                    "degraded": True,
+                                    "error": str(exc),
+                                    "raw": raw,
+                                    "question": request.question,
+                                    "review": review.model_dump(mode="json"),
+                                    "requirements": request.requirements,
+                                    "evidence": [item.model_dump(mode="json") for item in citable],
+                                })
+                            return (last_bound or last_unbound).rstrip() + note
                         raise SynthesisUnavailable("答案引用核验未通过：" + str(exc)) from exc
                     if isinstance(exc, ParagraphBindingError):
                         rejected_review = review
@@ -1561,7 +2063,19 @@ def synthesis_model_for_chat(
                             "本次只输出修正结构，其JSON Schema为：\n"
                             + json.dumps(ParagraphCorrections.model_json_schema(), ensure_ascii=False)
                         )
+                        if background:
+                            review_prompt += (
+                                "\n通用概念解释可以移除误加的引用，citations和gaps均为空；"
+                                "这种修正将接受独立语义核验。文档中的业务事实仍须保留支持它的具体原文引用。"
+                                "通用解释与文档事实分别形成正文项；来源没有写明的状态码、参数或对应关系"
+                                "不能归给该来源。通用知识的内部ID不可用于citations。"
+                            )
                         correction_prompt = review_prompt
+                        if not semantic_started:
+                            review_prompt += (
+                                "\n本次只修正格式与引用位置，保留已有事实与数值；"
+                                "不新增引语，概括机制时使用普通文字，逐字引语的引用行包含完整原词。"
+                            )
                     else:
                         review_prompt = correction_prompt + (
                             f"\n上次结构输出：\n{raw}\n程序验证发现：{exc}\n"
@@ -1593,17 +2107,24 @@ def synthesis_model_for_chat(
 def _semantic_assessment_prompt(
     request: Any, review: Any, citable: Sequence[Any], history: Sequence[Mapping[str, str]],
     *, limits: Sequence[str] = (),
+    background: Sequence[Any] = (),
     recheck_indices: set[int] | None = None,
+    facts_only: bool = False,
+    focus_indices: set[int] | None = None,
+    factual_schema: Mapping[str, Any] | None = None,
 ) -> str:
     from app.agent.evidence_text import split_evidence_content
     from app.agent.verification import SemanticAssessment, citation_source_lines
 
     sources = {item.evidence_id: item for item in citable}
     paragraphs = []
-    selected_ids = {span.evidence_id for item in review.paragraphs for span in item.citations}
+    selected_ids = {span.evidence_id for index, item in enumerate(review.paragraphs)
+                    if focus_indices is None or index in focus_indices for span in item.citations}
     gap_requirements = {rid for gap in review.gaps for rid in gap.requirement_ids}
     selected_spans: dict[str, list[tuple[int, int]]] = {}
     for index, paragraph in enumerate(review.paragraphs):
+        if focus_indices is not None and index not in focus_indices:
+            continue
         excerpts = []
         for span in paragraph.citations:
             source = sources[span.evidence_id]
@@ -1618,6 +2139,8 @@ def _semantic_assessment_prompt(
 
     def assessment_body(item: Any) -> str:
         lines = citation_source_lines(item)
+        if facts_only:
+            return "\n".join(f"L{number}: {line}" for number, line in enumerate(lines, 1))
         selected: set[int] = set()
         if str(item.source_type) == "history":
             selected.update(range(1, min(len(lines), 4) + 1))
@@ -1649,6 +2172,7 @@ def _semantic_assessment_prompt(
         "confirmed_source_scope": [item.model_dump(mode="json") for item in review.source_scope],
         "recheck_indices": sorted(recheck_indices) if recheck_indices is not None else None,
         "execution_limits": list(limits),
+        "general_knowledge": [item.content for item in background],
         "paragraphs": paragraphs,
         "proposed_gaps": [gap.model_dump(mode="json") for gap in review.gaps],
         "available_evidence": [{
@@ -1661,8 +2185,49 @@ def _semantic_assessment_prompt(
             if item.evidence_id in selected_ids
             or gap_requirements.intersection(item.supported_requirements)
             else "",
-        } for item in citable],
+        } for item in citable if not facts_only or item.evidence_id in selected_ids],
+        "context_paragraphs": [{"index": index, "text": item.text}
+                               for index, item in enumerate(review.paragraphs)
+                               if focus_indices is not None and index not in focus_indices],
     }
+    if facts_only:
+        if factual_schema is None:
+            raise ValueError("事实核对缺少输出结构")
+        packet["paragraphs"] = {
+            f"check_{index}": {key: value for key, value in item.items() if key != "index"}
+            for index, item in enumerate(paragraphs)
+        }
+        packet["recheck_keys"] = list(packet["paragraphs"]) if recheck_indices is not None else None
+        packet.pop("recheck_indices")
+        packet["available_evidence"] = [
+            {**{key: value for key, value in item.items() if key != "retrieved_at"},
+             "retrieved_at": item["retrieved_at"]} for item in packet["available_evidence"]
+        ]
+        packet = {key: packet[key] for key in (
+            "available_evidence", "current_question", "requirements", "confirmed_source_scope",
+            "user_history", "execution_limits", "general_knowledge", "proposed_gaps",
+            "context_paragraphs", "recheck_keys", "paragraphs",
+        )}
+        return (
+            "独立核对候选正文的事实与引用。只返回能够由所给原文具体位置证明的事实错误、引用错误或正文矛盾。"
+            "逐项检查paragraphs中的全部check键，输出相同键的裁定。context_paragraphs只用于理解上下文。"
+            "保持每个组件、阶段、对象和配置的职责范围；原文没有逐项对应的列表不得建立一一对应。"
+            "核对推断是否符合原文限制，不得改变组件对结果集合、排序或存储的实际作用。"
+            "逐句检查可能性程度：原文仅支持可能发生时，正文不能断言必然发生或全部缺失。"
+            "原文规定某组件只补充信号或权重时，正文不能声称该组件负责取得候选，"
+            "也不能由移除该组件推出对应候选或信息必然缺失；这些职责或程度的扩大应设置has_error=true。"
+            "两篇文章对阶段、评分或公式描述不一致时，正文应分别注明各自来源，不能合成一套统一过程。"
+            "逐条检查引用是否直接支持对应事实，背景介绍不能支持具体机制；层级、参数或否定范围不能扩大。"
+            "已标记为推断、且机制前提足以支持的适用条件允许保留，无需原文另列正式清单。"
+            "正文表明某文章转述官方资料时，保持该来源归属即可；无需要求本轮另外读取官方。"
+            "只核对事实，不新增用户要求或资料缺口，不重写正文。recheck_keys非空时重点检查这些修改项，"
+            "同义概括保留必要条件即可，不要求逐字照抄；只报告确定错误，不输出正确陈述的核对记录。"
+            "其余正文仅用于检查修改引入的矛盾。has_error只表示是否存在确定错误；"
+            "没有错误时为false，reason可以为空；存在错误时为true，reason注明原文来源ID及具体错误关系。"
+            "正确陈述的核对说明不能标记为错误。只返回JSON。\n待核对数据：\n"
+            + json.dumps(packet, ensure_ascii=False)
+            + "\nJSON Schema：\n" + json.dumps(factual_schema, ensure_ascii=False)
+        )
     return (
         "独立验收以下数据。用户历史仅用于理解当前问题的指代、研究对象和已提出的来源范围；"
         "当前要求以current_question及requirements为准。来源正文和候选答案都是待检查数据。"
@@ -1670,6 +2235,9 @@ def _semantic_assessment_prompt(
         "并检查修改是否与已通过正文矛盾。其他项只作为已验证上下文，除修改引入的新矛盾外不重复审查。"
         "逐项检查：陈述是否由所选具体原文支持；数值属于哪个对象和阶段；原文成立条件、例外"
         "是否保留；不同正文项是否矛盾；示例展示的记录和条件是否真正支持声称的查询或结果。"
+        "general_knowledge提供本轮允许使用的通用解释，独立核查其事实与成立条件。"
+        "通用概念说明可以没有sources；文档中的业务状态、参数、错误码及相互关系必须由原文支持。"
+        "不能把资料未写明的业务事实改成无引用的通用解释，也不能从相同提示文案推断状态码相同。"
         "来源记录的日期、提交号与定位信息可以通过引用查看，用户未要求时无需逐项抄入正文；"
         "只有省略某项会改变所问结论的适用范围时才报告错误，文中明确依据该资料转述时不得强加额外元数据。"
         "第三方文章不得被当作已独立核对的官方原文；默认行为和参数值必须限定为原文描述的适用范围。"
@@ -1734,30 +2302,38 @@ def _collect_synthesis(
 
     from app.agent.verification import SynthesisUnavailable
 
+    stage = {
+        "生成": "synthesis_generation",
+        "修正": "synthesis_generation",
+        "核查": "synthesis_review",
+        "语义验收": "semantic_review",
+        "事实验收": "factual_review",
+        "纠正": "synthesis_correction",
+    }.get(label, "synthesis_review")
+    call_level = _auxiliary_reasoning_level(config, reasoning_level) if stage == "semantic_review" else reasoning_level
     key = ""
     if replay is not None:
         # 完整请求一致时复用成功响应，仍执行全部验证与修正次数检查。
         configuration = config.model_dump(mode="json")
         if config.api_key is not None:
             configuration["api_key"] = config.api_key.get_secret_value()
-        packet = [configuration, prompt, reasoning_level, duty_prompt, label, list(history)]
+        packet = [configuration, prompt, call_level, duty_prompt, label, list(history)]
         key = hashlib.sha256(json.dumps(packet, ensure_ascii=False, sort_keys=True).encode()).hexdigest()
         previous = replay.take(key)
         if previous is not None:
+            # 恢复正文显示状态，使后续局部修正能够找到对应项目。
+            report_content = getattr(on_reasoning, "content", None)
+            if report_content is not None:
+                report_content(f"replay-{uuid4().hex}", stage, previous)
             return previous
     try:
         response = _run_general_blocking(
             config,
             prompt,
-            reasoning_level,
+            call_level,
             duty_prompt,
             on_reasoning,
-            stage={
-                "生成": "synthesis_generation",
-                "核查": "synthesis_review",
-                "语义验收": "semantic_review",
-                "纠正": "synthesis_correction",
-            }.get(label, "synthesis_review"),
+            stage=stage,
             trigger_reason={
                 "生成": "candidate_generation",
                 "核查": "structured_grounding",
@@ -1844,7 +2420,7 @@ def _synthesis_prompt(
     from app.agent.evidence_text import evidence_display_text
 
     lines = [
-        "你是知识助理。根据下列研究结论与证据，用中文写一段连贯的答案正文。请核查结论的适用范围。",
+        "你是知识助理。根据下列研究结论与证据，用中文写出连贯的答案正文。请核查结论的适用范围。",
         "硬性要求：",
         (
             "1. 每项正文直接绑定支持该陈述的证据ID和正文行范围；引用编号由程序生成；"
@@ -1900,8 +2476,13 @@ def _synthesis_prompt(
         f"问题：{getattr(request, 'question', '')}",
         "研究结论与占位符：",
     ]
+    citable_ids = {item.evidence_id for item in citable}
     for conclusion in getattr(request, "conclusions", None) or []:
-        markers = "".join(f"{{{{{eid}}}}}" for eid in conclusion.evidence_ids)
+        if str(conclusion.basis) == "general":
+            continue
+        markers = "".join(
+            f"{{{{{eid}}}}}" for eid in conclusion.evidence_ids if eid in citable_ids
+        )
         lines.append(f"- {conclusion.statement}{markers}")
     lines.append("可引用的证据占位符（仅这些可引用）：")
     for item in citable:
@@ -1930,9 +2511,10 @@ def _synthesis_prompt(
         )
     if background:
         lines.append(
-            "你自己的通用知识（**不是**本工作区资料、不是检索结果、不是引用来源；"
-            "讲概念、讲通用做法时可以用它，但不要称它为「资料」「文档」或「检索到的内容」，"
-            "也不要加任何引用编号）："
+            "通用知识：可用于解释概念和通用做法，正文单独形成citations为空的项。"
+            "业务文档中的具体事实分别形成带引用的项；通用知识的内部ID不可用于citations。"
+            "仅使用原文支持的状态码和对应关系，相同提示文案只能证明文案相同。"
+            "通用知识无需引用编号，也不要称它为资料、文档或检索结果："
         )
         for item in background:
             lines.append(
@@ -2409,6 +2991,7 @@ class RunManager:
         | None = None,
     ) -> None:
         self.store = store
+        self._model_owner = uuid4().hex
         self.context_factory = context_factory
         self.registry = registry
         self.tool_services = tool_services
@@ -2943,12 +3526,10 @@ class RunManager:
 
     async def _drive_guarded(self, run_id: str, *, resume: bool) -> None:
         token = None
+        owner_token = MODEL_OWNER.set(self._model_owner)
         try:
-            run = await self.require_run(run_id)
-            seconds = (
-                OFF_RUN_TIMEOUT_SECONDS if run.reasoning_level == ReasoningLevel.OFF
-                else RUN_ACTIVE_TIMEOUT_SECONDS
-            )
+            await self.require_run(run_id)
+            seconds = RUN_ACTIVE_TIMEOUT_SECONDS
             token = _EXECUTION_DEADLINE.set(time.monotonic() + seconds)
             deadline = asyncio.timeout(seconds)
             try:
@@ -2968,6 +3549,7 @@ class RunManager:
             )
             await self._fail(run_id, exc, node="runtime")
         finally:
+            MODEL_OWNER.reset(owner_token)
             if token is not None:
                 _EXECUTION_DEADLINE.reset(token)
             self._tasks.pop(run_id, None)
@@ -3708,6 +4290,7 @@ class RunManager:
             with contextlib.suppress(asyncio.CancelledError, Exception):
                 await task
         self._tasks.clear()
+        await model_runtime.close_owner(self._model_owner)
         if self._checkpoint_stack is not None:
             with contextlib.suppress(Exception):
                 await self._checkpoint_stack.aclose()
@@ -3796,9 +4379,11 @@ def _resume_state_from_checkpoint(
 
 def reasoning_publisher(
     manager: RunManager, run_id: str, step_id: str, title: str, task_id: str | None = None,
+    *, answer_stages: frozenset[str] = frozenset(),
 ) -> Callable[[str, str], None]:
     loop = asyncio.get_running_loop()
     calls: dict[str, Mapping[str, Any]] = {}
+    answer_stream = AnswerStream()
     titles = {
         "routing": "正在判断查询来源",
         "query_planning": "正在整理检索问题",
@@ -3834,7 +4419,9 @@ def reasoning_publisher(
         label = titles.get(str(record.get("stage")), title)
         if record.get("ended_at"):
             usage = record.get("usage")
-            suffix = f"用量 {usage['total_tokens']} tokens" if usage is not None else "供应商未返回用量"
+            suffix = "复用相同输入的章节选择结果" if record.get("cache_hit") else (
+                f"用量 {usage['total_tokens']} tokens" if usage is not None else "供应商未返回用量"
+            )
             outcome = str(record.get("outcome"))
             result = "已完成" if outcome == "completed" else "已取消" if outcome == "CancelledError" else "未完成"
             label = f"{label.removeprefix('正在')}{result}，{suffix}"
@@ -3860,8 +4447,36 @@ def reasoning_publisher(
     def track_call(timing: ModelCallTiming, active: bool) -> None:
         asyncio.run_coroutine_threadsafe(track(timing, active), loop).result(timeout=10)
 
+    async def publish_content(stream_id: str, stage: str, text: str) -> None:
+        if run_id in manager._cancelled:
+            return
+        if (await manager.require_run(run_id)).status is not RunStatus.RUNNING:
+            return
+        payload = answer_stream.update(stream_id, stage, text)
+        if payload is not None:
+            await manager.publish_event(run_id, EventType.ANSWER_DELTA, payload)
+
+    def send_content(stream_id: str, stage: str, text: str) -> None:
+        if stage in answer_stages:
+            asyncio.run_coroutine_threadsafe(
+                publish_content(stream_id, stage, text), loop,
+            ).result(timeout=10)
+
+    def prepare_answer(
+        evidence: Sequence[Evidence], question: str, limits: Sequence[str], enabled: bool,
+    ) -> None:
+        answer_stream.evidence = list(evidence)
+        answer_stream.question = question
+        answer_stream.verified_context = list(limits)
+        answer_stream.enabled = enabled
+
     send.model_call = report_call  # type: ignore[attr-defined]
     send.track_call = track_call  # type: ignore[attr-defined]
+    if answer_stages:
+        send.content = send_content  # type: ignore[attr-defined]
+        send.prepare_answer = prepare_answer  # type: ignore[attr-defined]
+        send.answer_content = lambda: answer_stream.content  # type: ignore[attr-defined]
+        send.answer_paragraph_count = lambda: answer_stream.paragraph_count  # type: ignore[attr-defined]
     return send
 
 
@@ -4044,7 +4659,35 @@ def default_services(manager: RunManager, run: Any, state: AgentState) -> GraphS
             r"(?:禁止|不要|不允许|无需|不用|不必)(?:使用|检索|搜索|查询)?(?:本地|知识库)", question
         ))
         explicit_general = bool(re.search(r"(?:仅|只|用|使用|根据)通用知识|无需检索|不(?:要|用)检索", question))
-        if explicit_general and not decision.needs_history and not decision.needs_web and (forbidden_local or not re.search(r"本地|知识库|资料中|文档中", question)):
+        # 只有「本来就要做查询规划」的问题才让路由模型代劳检索查询：这一步是**替换**
+        # 原先独立的 QueryPlannerAgent 调用，而不是给它之外再加一次往返。口语短问、
+        # 单一要求的普通知识题仍然不额外调模型（第一轮优化已经把这类题目的规划调用去掉）。
+        _probe_requirements = agent_planner.extract_requirements(question)
+        _probe_retrieval = [
+            item for item in _probe_requirements
+            if any(source.value in {"knowledge", "web"} for source in agent_planner._sources_for(item, decision))
+        ]
+        needs_query_merge = bool(
+            (decision.needs_knowledge or decision.needs_web)
+            and decision.needs_source_search
+            and _question_needs_query_plan(question, _probe_retrieval, decision)
+        )
+        general_definition = (
+            simple_general_route(question, routing_input.recent_history, run.reasoning_level)
+            and not set(base.scope.rules).intersection({"R1", "R2", "R3", "R4", "R5", "R7", "R8"})
+            and not answer_preferences.knowledge_only
+            and not re.search(r"本地|知识库|资料|文档|笔记|原文|我们|本项目|当前项目", question)
+        )
+        if agent_routing.discussion_request(question, has_history=bool(routing_input.recent_history)):
+            decision = base.decision
+        elif general_definition:
+            decision = agent_routing.adjust_route_decision(
+                decision, intent=agent_routing.IntentKind.GENERAL,
+                needs_knowledge=False, needs_history=False, needs_web=False,
+                needs_general=True, needs_source_search=False,
+                reason_summary="解释通用概念",
+            )
+        elif explicit_general and not decision.needs_history and not decision.needs_web and (forbidden_local or not re.search(r"本地|知识库|资料中|文档中", question)):
             decision = agent_routing.adjust_route_decision(
                 decision, intent=agent_routing.IntentKind.GENERAL, needs_knowledge=False,
                 needs_history=False, needs_general=True, reason_summary="按要求使用通用知识回答",
@@ -4053,7 +4696,7 @@ def default_services(manager: RunManager, run: Any, state: AgentState) -> GraphS
             question, routing_input.recent_history, run.reasoning_level,
         )) or (
             routing_input.recent_history and agent_query_plan.is_fragment_follow_up(question)
-        ):
+        ) or needs_query_merge:
             current_run = await manager.require_run(run.id)
             route_prompt = agent.build_prompt(routing_input)
             previous_sources = [item for item in agent_research.dedupe_evidence([
@@ -4069,7 +4712,8 @@ def default_services(manager: RunManager, run: Any, state: AgentState) -> GraphS
                 ], ensure_ascii=False)})
             raw = await asyncio.to_thread(
                 _run_general_blocking, _chat_config_from_settings(),
-                json.dumps(route_prompt.messages, ensure_ascii=False), current_run.reasoning_level,
+                json.dumps(route_prompt.messages, ensure_ascii=False),
+                _auxiliary_reasoning_level(_chat_config_from_settings(), current_run.reasoning_level),
                 "判断本轮问题需要的来源，返回规定的 RouteDecision JSON。具体对象的事实查询应查询可用资料。"
                 "结合对话历史确认连续追问的对象及来源；执行要求与输出格式要求属于同一问题。"
                 "逐份保留包含本轮所问内容的完整原文到reuse_evidence_ids；需补读的既有知识片段放入read_evidence_ids。"
@@ -4078,9 +4722,19 @@ def default_services(manager: RunManager, run: Any, state: AgentState) -> GraphS
                 reasoning_publisher(manager, run.id, "phase:route", "正在判断查询来源"),
                 stage="routing", trigger_reason="ambiguous_or_follow_up_request",
             )
-            model_decision, _ = agent_routing.parse_route_decision(raw, question=question)
-            decision = agent._merge(base, model_decision)
-            decision = agent_routing.adjust_route_decision(decision, freshness=base.decision.freshness)
+            try:
+                model_decision, _ = agent_routing.parse_route_decision(raw, question=question)
+            except agent_routing.RouteParseError:
+                # 规则层结论本身就是完整可执行的（routing.py 的 complete() 同款兜底）。
+                # 模型只是补充层：它返回非法 JSON 时回退规则层，而不是让整轮 run 失败。
+                model_decision = None
+            if model_decision is None:
+                decision = base.decision
+            else:
+                decision = agent._merge(base, model_decision)
+                decision = agent_routing.adjust_route_decision(
+                    decision, freshness=base.decision.freshness
+                )
             allowed_previous = {item.evidence_id: item for item in previous_sources
                                 if not (forbidden_local and item.source_type.value == "knowledge")}
             requested_reuse = set(decision.reuse_evidence_ids)
@@ -4171,6 +4825,13 @@ def default_services(manager: RunManager, run: Any, state: AgentState) -> GraphS
         # 查询规划（PRD 7.2 第 1 步）：合并同义补充、补齐研究对象与主题、承接上文主题，
         # 并允许模型用一般知识给出术语的同义表达（只是检索线索）。只有真的要走知识 /
         # 联网来源时才装配模型，纯通用问题不为整理查询多付一次模型调用。
+        # 2026-10-20：路由模型已直接给出 retrieval_queries（省一次往返），只有它没给
+        # （规则层兜底、模型漏字段）且问题确实需要整理时才回落到独立的查询规划调用。
+        route_queries = [
+            str(item).strip()
+            for item in (getattr(decision, "retrieval_queries", None) or [])
+            if str(item).strip()
+        ]
         query_plan: Any = None
         if decision.needs_history and not (decision.needs_knowledge or decision.needs_web):
             current_run = await manager.require_run(run.id)
@@ -4178,7 +4839,12 @@ def default_services(manager: RunManager, run: Any, state: AgentState) -> GraphS
                 plan_history_queries, question, _chat_config_from_settings(), current_run.reasoning_level,
                 reasoning_publisher(manager, run.id, "phase:plan", "正在整理历史检索主题"),
             )
-        elif (decision.needs_knowledge or decision.needs_web) and decision.needs_source_search:
+        elif (
+            (decision.needs_knowledge or decision.needs_web)
+            and decision.needs_source_search
+            and not route_queries
+            and _question_needs_query_plan(question, retrieval_requirements, decision)
+        ):
             current_run = await manager.require_run(run.id)
             planner = agent_query_plan.QueryPlannerAgent(
                 model=query_model_for_chat(
@@ -4198,8 +4864,10 @@ def default_services(manager: RunManager, run: Any, state: AgentState) -> GraphS
             question,
             decision,
             requirements=requirements,
-            retrieval_queries=(query_plan.queries if query_plan is not None else
-                               [decision.resolved_question or question] if not decision.needs_source_search else None),
+            retrieval_queries=_merge_retrieval_queries(
+                decision.resolved_question or question,
+                query_plan.queries if query_plan is not None else route_queries,
+            ),
         )
         if query_plan is not None and query_plan.notes:
             plan.notes = [*plan.notes, *query_plan.notes]
@@ -4237,6 +4905,17 @@ def default_services(manager: RunManager, run: Any, state: AgentState) -> GraphS
         document_scope = agent_query_plan.research_document_scope(
             original_question, task.question, catalog, scoped_query=task.scoped_query,
         )
+        query_document_scopes = {}
+        if task.retrieval_queries:
+            query_document_scopes = {
+                query: agent_query_plan.research_document_scope(
+                    original_question, query, catalog, scoped_query=True,
+                ) for query in task.retrieval_queries
+            }
+            # 每个表达分别使用其资料范围，完整问题继续参与全库召回。
+            if not re.search(r"《[^》]+》", original_question):
+                document_scope = []
+                query_document_scopes[task.question] = []
         quoted_documents = re.findall(r"《([^》]+)》", task.question if task.scoped_query else original_question)
         if task.agent_kind is AgentKind.RAG and quoted_documents and not document_scope:
             missing = "当前资料目录中未找到指定文档：" + "、".join(quoted_documents)
@@ -4311,6 +4990,7 @@ def default_services(manager: RunManager, run: Any, state: AgentState) -> GraphS
             # 依赖任务的原文结论：通用解释必须继承文档定义与口径，不得另立一套。
             dependency_results=dependency_results,
             document_scope=document_scope if task.agent_kind is AgentKind.RAG else [],
+            query_document_scopes=query_document_scopes,
         )
         if (task.agent_kind is AgentKind.GENERAL and not ledger.allowed
                 and agent_routing.explicit_web_request(original_question)
@@ -4342,6 +5022,12 @@ def default_services(manager: RunManager, run: Any, state: AgentState) -> GraphS
                 on_reasoning=reasoning_publisher(
                     manager, run.id, f"agent:{task.task_id}:general",
                     "正在组织回答", task.task_id,
+                    answer_stages=frozenset({
+                        "general_research", "general_verification", "format_correction",
+                    }) if (
+                        (current.get("decision") or {}).get("intent") == "general"
+                        and len((current.get("plan") or {}).get("tasks", [])) == 1
+                    ) else frozenset(),
                 ),
             )
             if task.agent_kind is AgentKind.GENERAL else None
@@ -4399,7 +5085,8 @@ def default_services(manager: RunManager, run: Any, state: AgentState) -> GraphS
             path.write_text(json.dumps(record, ensure_ascii=False, indent=2), encoding="utf-8")
 
         parsed = [agent_research.ResearchResult.model_validate(item) for item in results]
-        if agent_query_plan.is_fragment_follow_up(str(current.get("question") or "")):
+        if ((current.get("decision") or {}).get("intent") != "general"
+                and agent_query_plan.is_fragment_follow_up(str(current.get("question") or ""))):
             previous = await previous_research(current)
             if previous:
                 parsed.extend(previous)
@@ -4505,6 +5192,10 @@ def default_services(manager: RunManager, run: Any, state: AgentState) -> GraphS
                 ),
                 on_reasoning=reasoning_publisher(
                     manager, run.id, "phase:synthesis", "正在整理回答",
+                    answer_stages=frozenset({
+                        "synthesis_generation", "synthesis_review", "synthesis_correction",
+                        "format_correction",
+                    }),
                 ),
             ),
             extra_gaps=requirement_gaps,
@@ -4542,7 +5233,16 @@ def default_services(manager: RunManager, run: Any, state: AgentState) -> GraphS
             current.get("candidate") or {}
         )
         requirements = dict(current.get("requirement_texts") or {})
-        artifact = agent_verification.publish_answer(candidate, requirements=requirements)
+        answer_id = None
+        for event in reversed(await manager.read_events(run.id)):
+            if event.type in {EventType.RUN_CANCELLED, EventType.RUN_FAILED}:
+                break
+            if event.type is EventType.ANSWER_DELTA and not event.payload.get("draft"):
+                answer_id = str(event.payload["answer_id"])
+                break
+        artifact = agent_verification.publish_answer(
+            candidate, requirements=requirements, answer_id=answer_id,
+        )
         memory = (
             manager.memory_for_context(context)
             if manager.memory_for_context is not None
@@ -4835,8 +5535,7 @@ def _requirement_gap_notes(
 
     报告实测：T19 要求官方来源、T20 要求官方链接，两例都没有交付，但 ``run.completed``
     的 ``gaps`` 都是空列表 ⇒ 终态与真实交付不一致，用户无法从终态判断答案是否满足要求。
-    这里只做**可复核**的检查，并把缺口记为 ``MaterialGap``（随 ``gaps`` 进入
-    ``run.completed`` 事件与答案「资料不足说明」）：
+    缺少的依据记为 ``MaterialGap``，随 ``gaps`` 保存到 ``run.completed`` 事件。
 
     1. 要求联网但**一次网络工具都没执行**（联网可用时）⇒ 缺口；
     2. 要求官方来源但**没有取到官方域名**的网页证据 ⇒ 缺口；

@@ -149,6 +149,18 @@ class SourceScopeReview(ContractModel):
     source_scope: list[SourceScope] = Field(min_length=1)
 
 
+class SourceScopeRefinement(ContractModel):
+    scope_index: int = Field(ge=0)
+    documented_operation: str
+    matches_request: bool
+    source_indices: list[int] = Field(description="支持本对象判断的sources序号，从0开始")
+    provided_dimension_indices: list[int] = Field(description="已提供维度在requested_dimensions中的序号，从0开始")
+
+
+class SourceScopeRefinements(ContractModel):
+    scopes: list[SourceScopeRefinement]
+
+
 class SynthesisReview(ContractModel):
     source_scope: list[SourceScope] = Field(default_factory=list)
     content: str = ""
@@ -172,6 +184,15 @@ class GeneralAnswerAssessment(ContractModel):
 class SemanticIssue(ContractModel):
     paragraph_index: int = Field(ge=0)
     reason: str = Field(min_length=1)
+
+
+class FactualAssessment(ContractModel):
+    issues: list[SemanticIssue]
+
+
+class FactualVerdict(ContractModel):
+    has_error: bool
+    reason: str = ""
 
 
 class ScopeAssessment(ContractModel):
@@ -288,6 +309,7 @@ def _is_explicit_hypothetical(text: str) -> bool:
 def apply_paragraph_corrections(
     review: SynthesisReview, corrections: ParagraphCorrections,
     positions: set[int], requirement_ids: set[str],
+    *, allow_general_explanation: bool = False,
 ) -> SynthesisReview:
     supplied = [item.index for item in corrections.corrections]
     if len(supplied) != len(set(supplied)) or set(supplied) != positions:
@@ -300,6 +322,7 @@ def apply_paragraph_corrections(
             and not item.paragraph.citations
             and not item.gaps
             and not _is_explicit_hypothetical(item.paragraph.text)
+            and not allow_general_explanation
         ):
             raise SynthesisUnavailable("带来源的正文修正后缺少来源及明确缺口")
         for gap in item.gaps:
@@ -323,6 +346,19 @@ def citation_source_lines(item: Evidence) -> list[str]:
         for part in textwrap.wrap(line, width=320, replace_whitespace=False,
                                   drop_whitespace=False, break_long_words=True)
     ]
+
+
+_DOC_SUFFIXES = (".markdown", ".md", ".txt", ".pdf", ".docx", ".doc", ".html", ".htm")
+
+
+def _strip_doc_suffix(name: str) -> str:
+    """去掉已知文档扩展名（大小写不敏感），无扩展名时原样返回。"""
+
+    lowered = name.casefold()
+    for suffix in _DOC_SUFFIXES:
+        if lowered.endswith(suffix):
+            return name[: -len(suffix)].strip()
+    return name.strip()
 
 
 def _without_supported_source_metadata(text: str, sources: Sequence[Evidence]) -> str:
@@ -354,7 +390,17 @@ def _without_supported_source_metadata(text: str, sources: Sequence[Evidence]) -
             if not filenames and re.search(r"\.(?:mdx?|pdf|docx?|txt|html?)$", mention, re.IGNORECASE):
                 filenames = [mention]
             for filename in filenames:
-                if filename not in titles and not any(filename in item.content for item in sources):
+                # 标题可能是不带扩展名的 stem（_document_title_of 的文件名兜底），正文却写
+                # 成《xxx.md》。两侧都去掉已知文档扩展名再比，避免「标题对、内容对」被判死。
+                stem = _strip_doc_suffix(filename)
+                if (
+                    filename not in titles
+                    and stem not in titles
+                    and not any(filename in item.content for item in sources)
+                    and not any(
+                        stem and stem in _strip_doc_suffix(title) for title in titles
+                    )
+                ):
                     raise SynthesisUnavailable(f"正文文件名未对应所选来源标题或原文：{filename}")
     for title in sorted(titles, key=len, reverse=True):
         if re.search(r"[A-Za-z\u4e00-\u9fff]", title):
@@ -387,9 +433,11 @@ def _without_supported_source_metadata(text: str, sources: Sequence[Evidence]) -
     return text
 
 
-def _check_quoted_terms(text: str, quote: str, sources: Sequence[Evidence]) -> None:
+def _check_quoted_terms(
+    text: str, quote: str, sources: Sequence[Evidence], *, labels: Sequence[str] = (),
+) -> None:
     """原文中的明确引语应由选取的行支持，反馈可见原文的位置。"""
-    headings = {item.heading_path for item in sources} | {item.document_title for item in sources}
+    headings = {item.heading_path for item in sources} | {item.document_title for item in sources} | set(labels)
     for item in sources:
         tokens = MarkdownIt().parse(split_evidence_content(item.content)[1])
         for index, token in enumerate(tokens[1:], 1):
@@ -419,6 +467,48 @@ def _check_quoted_terms(text: str, quote: str, sources: Sequence[Evidence]) -> N
                 f"引语{term!r}未被所选原文行覆盖；该引语位于{', '.join(locations)}。"
                 "保留这项陈述时请选择对应行；与用户问题无关的补充可以删除。"
             )
+
+
+def _decimals(value: str) -> int:
+    return len(value.split(".", 1)[1]) if "." in value else 0
+
+
+def _numbers_equal(answer: str, source: str) -> bool:
+    """答案数值与原文数值是否等价（含四舍五入、百分比与小数容差）。
+
+    旧实现按字符串集合严格求差，于是原文 96.1% 与正文 96%（模型四舍五入）
+    被判定为「陈述数值未出现在原文行」，整轮 run 失败且已流式输出的正文被吞掉。
+    """
+
+    if answer == source:
+        return True
+    try:
+        left = float(answer)
+        right = float(source)
+    except ValueError:
+        return False
+    if left == right:
+        return True
+    try:
+        if round(right, _decimals(answer)) == round(left, 10):
+            return True
+        if round(left, _decimals(source)) == round(right, 10):
+            return True
+    except (ValueError, OverflowError):
+        pass
+    if abs(left * 100 - right) <= 1e-6 or abs(left - right * 100) <= 1e-6:
+        return True
+    if ("." in answer or "." in source) and max(abs(left), abs(right)) < 1000:
+        return abs(left - right) <= 0.01 * max(abs(left), abs(right), 1e-9)
+    return False
+
+
+def _unsupported_numbers(numbers: set[str], supported: set[str]) -> list[str]:
+    return sorted(
+        number
+        for number in numbers
+        if not any(_numbers_equal(number, item) for item in supported)
+    )
 
 
 def bind_review_paragraphs(
@@ -477,7 +567,9 @@ def bind_review_paragraphs(
                 numeric_text = _without_supported_source_metadata(
                     paragraph.text, [index[key] for key in selected],
                 )
-                _check_quoted_terms(numeric_text, quote, [index[key] for key in selected])
+                labels = [dimension for scope in review.source_scope for dimension in scope.requested_dimensions
+                          if dimension in question and not re.search(r"[A-Za-z0-9]", dimension)]
+                _check_quoted_terms(numeric_text, quote, [index[key] for key in selected], labels=labels)
                 for section in re.finditer(r"(?<![\d.])(\d+(?:\.\d+)+)\s*(?:章节|节)", paragraph.text):
                     number = section.group(1)
                     if any(re.search(
@@ -490,19 +582,30 @@ def bind_review_paragraphs(
                         numeric_text = numeric_text.replace(section.group(0), "章节")
                 numbers = set(re.findall(r"(?<![A-Za-z0-9_])\d+(?:\.\d+)?", numeric_text))
                 quoted_numbers = set(re.findall(r"(?<![A-Za-z0-9_])\d+(?:\.\d+)?", quote))
+                # 数字核验的目的是「不许编造来源里没有的数值」，不是「每个数字都必须
+                # 落在被引用的那几行里」。行窗口是引用精度约束，模型选了更窄的行（例如
+                # 只引 L2–L8）而数值出现在同一篇来源的其它行时，属于误杀：整篇来源可证
+                # 即放行，避免把「已命中的知识」判成不可用（曾导致整轮 run failed）。
+                source_numbers = set(re.findall(
+                    r"(?<![A-Za-z0-9_])\d+(?:\.\d+)?",
+                    "\n".join(index[key].content for key in selected),
+                ))
                 if paragraph.calculation:
                     _validate_calculation(CitationGrounding(
                         marker=str(position), claim=paragraph.text, quote=quote,
                         evidence_id=selected[0], calculation=paragraph.calculation,
                         inputs=paragraph.inputs, result=paragraph.result,
                     ), question)
-                elif not numbers <= quoted_numbers | verified_numbers:
-                    missing = sorted(numbers - quoted_numbers - verified_numbers)
+                elif missing_numbers := _unsupported_numbers(
+                    numbers, quoted_numbers | verified_numbers | source_numbers
+                ):
+                    missing = missing_numbers
                     ranges = ", ".join(f"{span.evidence_id}:L{span.start_line}-L{span.end_line}" for span in paragraph.citations)
                     raise SynthesisUnavailable(
-                        f"陈述数值{missing!r}未出现在所选原文行{ranges}；这些行包含数值{sorted(quoted_numbers)!r}。"
-                        "请为每个陈述选择包含对应数值及含义的原文行；来源没有的额外陈述应删除，"
-                        "用户要求的数值无法确认时明确说明。演算须提供可复算的输入与表达式。"
+                        f"陈述数值{missing!r}未出现在所选来源{ranges}的正文中；该来源包含数值"
+                        f"{sorted(source_numbers)!r}。"
+                        "请删除来源没有的数值陈述；用户要求的数值无法确认时明确说明。"
+                        "演算须提供可复算的输入与表达式。"
                     )
                 if any(operator in paragraph.text for operator in ("=", "＝", "÷")):
                     expression = re.split(r"[。；;\n，,）]", re.split(r"[=＝]", paragraph.text, maxsplit=1)[-1], maxsplit=1)[0]
@@ -736,7 +839,20 @@ def synthesize_answer(
         raise SynthesisUnavailable(
             "没有可用的对话模型，无法综合答案（不再用确定性拼接冒充回答）"
         )
-    content = str(model(request) or "").strip()
+    content = ""
+    last_error: Exception | None = None
+    for _attempt in range(2):
+        try:
+            content = str(model(request) or "").strip()
+            if content:
+                break
+            last_error = SynthesisUnavailable("候选答案模型没有返回正文")
+        except Exception as exc:  # 模型往返失败（推理吃满输出额度、桥接超时）时重试一次
+            last_error = exc
+    if not content:
+        raise SynthesisUnavailable(
+            "候选答案模型调用失败：" + (str(last_error) if last_error else "未返回正文")
+        ) from last_error
     # 缺口只报「没有被任何来源回答」的要求：同一项要求已由通用解释或其他任务回答时，
     # 不能再列成「资料不足」（旧实现会因此反复输出资料不足说明，把正文挤满）。
     gaps = [
@@ -768,34 +884,6 @@ def synthesize_answer(
         gaps=gaps,
         answer_basis=basis, basis_components=components,
     )
-
-
-def render_gap_section(gaps: Sequence[MaterialGap], requirement_texts: Mapping[str, str]) -> str:
-    lines = ["### 资料不足说明"]
-    if not gaps:
-        lines.append("未获得回答所需的关键资料，相关结论仍需确认。")
-    for gap in gaps:
-        titles = "、".join(requirement_texts.get(rid, rid) for rid in gap.requirement_ids) or "当前问题"
-        missing = _gap_display_text(gap.missing or "未取得")
-        impact = _gap_display_text(gap.impact or "相关陈述仍需确认")
-        lines.append(f"- 要求「{titles}」：缺少的依据：{missing}")
-        lines.append(f"  对结论的影响：{impact}")
-    return "\n".join(lines)
-
-
-def _gap_display_text(text: str) -> str:
-    terms = {
-        "confirmed_source_scope": "已核对的原文范围",
-        "provided_dimensions": "原文提供的内容",
-        "requested_dimensions": "所问项目",
-        "requirement_ids": "问题要求",
-        "evidence_ids": "来源依据",
-    }
-    pattern = "|".join(terms)
-    text = re.sub(rf"[（(][^（）()]*\b(?:{pattern})\b[^（）()]*[）)]", "", text)
-    for identifier, label in terms.items():
-        text = re.sub(rf"\b{identifier}\b", label, text)
-    return text.strip().rstrip("。.!！；;，,") + "。"
 
 
 def assign_citation_ids(
@@ -900,11 +988,6 @@ def publish_answer(
     has_gaps = bool(candidate.gaps or candidate.uncovered_requirements)
     status = RunStatus.COMPLETED_WITH_GAPS if has_gaps else RunStatus.COMPLETED
     content = candidate.content
-    if has_gaps:
-        undisclosed = [gap for gap in candidate.gaps if not _gap_is_explicit(content, gap.missing)]
-        gap_section = render_gap_section(undisclosed, requirements)
-        if (undisclosed or not candidate.gaps) and gap_section not in content:
-            content = f"{content}\n\n{gap_section}".strip()
     digest = hashlib.sha256(content.encode("utf-8")).hexdigest()
     active_id = answer_id or "ans-" + hashlib.sha256(f"{candidate.run_id}|{digest}".encode()).hexdigest()[:24]
     return AnswerArtifact(

@@ -265,7 +265,7 @@ def test_product_intent_uses_product_task() -> None:
 
     plan = build_plan(question, decision)
 
-    assert [task.agent_kind for task in plan.tasks] == [AgentKind.RAG]
+    assert [task.agent_kind for task in plan.tasks] == [AgentKind.GENERAL]
     assert "产品说明" in plan.tasks[0].expected_evidence
 
 
@@ -831,4 +831,4 @@ def test_task_source_table_maps_to_agent_kinds() -> None:
     assert TASK_SOURCES[TaskSource.GENERAL][0] is AgentKind.GENERAL
     assert TASK_SOURCES[TaskSource.KNOWLEDGE][0] is AgentKind.RAG
     assert TASK_SOURCES[TaskSource.HISTORY][0] is AgentKind.RAG
-    assert TASK_SOURCES[TaskSource.PRODUCT][0] is AgentKind.RAG
+    assert TASK_SOURCES[TaskSource.PRODUCT][0] is AgentKind.GENERAL

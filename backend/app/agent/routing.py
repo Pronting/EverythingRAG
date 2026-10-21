@@ -63,7 +63,7 @@ __all__ = [
 ]
 
 #: 路由规则版本（规则层语义变化时递增；路由评测报告会记录它）。
-ROUTING_RULES_VERSION: Final[str] = "routing-rules-v1"
+ROUTING_RULES_VERSION: Final[str] = "routing-rules-v2"
 
 #: 进入路由提示的目录条目数上限（完整目录留在本地，PRD 6.1）。
 DEFAULT_CATALOG_HIT_LIMIT: Final[int] = 6
@@ -79,7 +79,7 @@ CLARIFICATION_MAX_QUESTION_CHARS: Final[int] = 24
 #: 这类泛指问题误判成内部资料问题。
 CATALOG_CLUE_MIN_SCORE: Final[int] = 400
 
-#: PRD 6.3 决策规则表（九条），规则 id 与描述一一对应。
+#: PRD 6.3 决策规则表（规则 id 与描述一一对应；R11 为 2026-10 评测后新增的默认检索兜底）。
 RULE_DESCRIPTIONS: Final[dict[str, str]] = {
     "R1": "用户明确引用笔记、内部文档、既有方案或当前项目 → 查询知识库",
     "R2": "对话已围绕某内部资料展开，用户继续追问 → 历史补全对象并继续知识查询",
@@ -90,6 +90,8 @@ RULE_DESCRIPTIONS: Final[dict[str, str]] = {
     "R7": "仅询问产品功能或文档数量 → 使用产品说明或结构化统计",
     "R8": "用户回忆以前的讨论 → 查询工作区记忆与历史记录",
     "R9": "知识库为空 → 通用与网页问题仍可处理；内部资料问题说明当前资料情况",
+    "R10": "围绕已有对话补充观点或评价 → 使用当前上下文和通用知识",
+    "R11": "无法确定是否与本区资料相关 → 默认检索一次，检索不到再退回通用知识",
 }
 
 _INTERNAL_MARKERS: Final[tuple[str, ...]] = (
@@ -288,6 +290,31 @@ def history_only_request(question: str) -> bool:
     return bool(re.search(
         r"(?:查询|搜索|检索|查找|回顾)(?:一下)?(?:我|我们)?(?:以前|之前|历史)(?:的)?(?:一段|一次|一条)?(?:对话|会话|聊天记录)",
         question,
+    ))
+
+
+def discussion_request(question: str, *, has_history: bool) -> bool:
+    if not has_history:
+        return False
+    if _detect_freshness(question) is not Freshness.NONE or source_requirement(question):
+        return False
+    if re.search(
+        r"搜索|检索|查找|查询|联网|上网|核实|核查|核对|查证|验证|最新|今天|当前版本|"
+        r"引用|出处|证据|原文依据|补充(?:一些|更多|相关|的)?(?:资料|数据|事实|来源)|"
+        r"(?:根据|依据|按照|只用|仅用).{0,12}(?:原文|文档|资料|笔记)|"
+        r"(?:原文|文中|资料里|笔记里).{0,12}(?:说|写|提|补充|还有)|"
+        r"(?:叫什么|怎么做的|如何实现|具体做法|实际效果|量化结果)|"
+        r"\b(?:search|look up|verify|latest|sources?|citations?)\b",
+        question, re.IGNORECASE,
+    ):
+        return False
+    return bool(re.search(
+        r"你(?:自己)?(?:怎么(?:看|想|评价)|有(?:什么|哪些)(?:看法|观点|建议)|觉得|认为)|"
+        r"你(?:自己)?的(?:看法|观点|评价|建议)|"
+        r"(?:谈谈|说说|给出|补充).{0,8}(?:看法|观点|评价|建议)|"
+        r"(?:有(?:什么|哪些)|还(?:有|能)).{0,5}补充(?:的)?(?:说法|观点|看法|建议)?|"
+        r"\b(?:what do you think|your (?:opinion|thoughts)|anything to add)\b",
+        question, re.IGNORECASE,
     ))
 
 _GENERAL_MARKERS: Final[tuple[str, ...]] = (
@@ -596,6 +623,17 @@ _TOPIC_CUT_MARKERS: Final[tuple[str, ...]] = (
     "多少",
 )
 
+#: 明确的非知识对话（问候/致谢/翻译/代写/闲聊）：这些不该触发默认检索。
+_NON_KNOWLEDGE_CHAT: Final[re.Pattern[str]] = re.compile(
+    r"^(?:你好|hi|hello|在吗|谢谢|感谢|再见|你是谁|你能做(?:什么|啥)|"
+    r"(?:把|帮我把).{0,20}翻译|翻译(?:成|为)|帮我写(?:一段|一个|个|份)|润色|改写(?:这段|一下)|"
+    r"讲个笑话|随便聊聊|今天天气)",
+    re.IGNORECASE,
+)
+
+#: 默认检索兜底的最短问题长度：太短的追问（「好」「继续」）交给历史与澄清路径。
+_DEFAULT_RETRIEVAL_MIN_CHARS: Final[int] = 8
+
 _ROUTE_DECISION_FIELDS: Final[frozenset[str]] = frozenset(RouteDecision.model_fields)
 
 
@@ -735,6 +773,21 @@ def _topic_of(text: str) -> str:
     return query_plan.topic_phrase(text)
 
 
+def _default_retrieval_queries(question: str) -> list[str]:
+    """默认检索兜底的查询：**只发原句**，不做同义扩展，也不再拼主题短语。
+
+    实测依据（2026-10-20/21 评测）：原句在 BM25 上已能把金标文档排到 1–2 名；把同义词、
+    文档词汇拼进多查询融合反而给别的文档加词法分，让金标掉到 6–8 名。
+
+    再补一条「去掉问句尾巴的主题短语」同样有害：它与原句命中同一批文档（sem_daemon
+    两种发法都是 6 块 / 2 文档），却把上下文从 5–7 块顶到 8 块（sem_cache 5→8、
+    sem_attr2 7→8），多出来的是同一文档的相邻块，直接摊薄合成阶段的证据密度。
+    兜底只负责「把检索发出去」，扩词留给有 rerank 的场景。
+    """
+
+    return [" ".join(question.split())]
+
+
 def _longest_pronoun(question: str) -> str:
     for pronoun in sorted(_PRONOUNS, key=len, reverse=True):
         if pronoun in question:
@@ -850,6 +903,14 @@ def evaluate_route_rules(input: RoutingInput) -> RuleOutcome:
     )
     if reference_note:
         notes.append(reference_note)
+
+    if discussion_request(question, has_history=bool(input.recent_history)):
+        hit("R10", "本轮请求基于已有对话表达观点")
+        decision.intent = IntentKind.GENERAL
+        decision.needs_general = True
+        decision.needs_source_search = False
+        decision.reason_summary = "结合当前对话和通用知识补充观点"
+        return RuleOutcome(decision=decision, hits=hits, notes=notes)
 
     # ---- 内容线索（先算，R7 的早退要用它判断「产品/概览」是否其实是内容问题）----
     internal_marker = _contains(question, _INTERNAL_MARKERS)
@@ -982,13 +1043,18 @@ def evaluate_route_rules(input: RoutingInput) -> RuleOutcome:
         hit("R5", f"联网要求：{marker}")
         decision.needs_web = True
         decision.freshness = freshness
-        if (official_web or product_web) and not (internal_marker or memory_marker):
+        if official_web and not (internal_marker or memory_marker):
             decision.needs_knowledge = False
-            notes.append("本轮从产品官方网页查询所问内容")
+            notes.append("用户指定官方来源，本轮以其官方网页为准")
+        elif product_web and input.knowledge_available:
+            # 产品/厂商名命中只代表「优先官方来源」，不能反过来禁掉本地检索：
+            # 联网被策略关闭（关闭思考）时，否则既不查库也不查网，只剩模型常识。
+            decision.needs_knowledge = True
+            notes.append("产品机制题同时查本工作区资料，官方网页作补充")
         elif not decision.needs_knowledge and bool(explicit_web):
             decision.needs_knowledge = True
             notes.append("用户明确要求联网核实，同时也查本工作区资料作为对照")
-        if not decision.needs_knowledge:
+        if not decision.needs_knowledge and bool(explicit_web or official_web):
             decision.reason_summary = "根据请求联网查询公开资料"
 
     # ---- R6：通用解释同时涉及已有内部方案 / 术语需要先理解再检索
@@ -1010,7 +1076,7 @@ def evaluate_route_rules(input: RoutingInput) -> RuleOutcome:
             "文档观点与案例仍需原文证据"
         )
 
-    if (official_web or product_web) and not (internal_marker or memory_marker):
+    if official_web and not (internal_marker or memory_marker):
         decision.needs_knowledge = False
 
     # ---- R9：知识库为空
@@ -1020,6 +1086,27 @@ def evaluate_route_rules(input: RoutingInput) -> RuleOutcome:
             notes.append("当前工作区没有已登记资料：内部资料问题需说明资料情况")
         elif not decision.needs_web:
             notes.append("当前工作区没有已登记资料：通用或联网问题仍可处理")
+
+    # ---- R11：默认检索兜底（不确定与本区资料是否相关 → 先查一次）
+    # 实测缺陷 D2（2026-10-20 评测）：路由把「要不要检索」实现成「有没有明说文档/术语」，
+    # 口语改写与概念问法一律不出检索，答案退回模型自带知识（sem_cache/sem_coase/
+    # sem_attr2 三题 0 工具）。目录只按标题与术语做字面匹配，「没命中」不能当作
+    # 「本区没有资料」的证据；除明确闲聊外，默认先查一次，查不到再退回通用作答。
+    if (
+        not decision.needs_knowledge
+        and not decision.needs_web
+        and not decision.needs_history
+        and not discussion_request(question, has_history=bool(input.recent_history))
+        and not _NON_KNOWLEDGE_CHAT.match(question.strip())
+        and input.knowledge_available
+        and len(question.strip()) >= _DEFAULT_RETRIEVAL_MIN_CHARS
+    ):
+        hit("R11", "没有命中内部引用规则，按默认检索兜底")
+        decision.needs_knowledge = True
+        decision.needs_general = True
+        decision.needs_source_search = True
+        decision.retrieval_queries = _default_retrieval_queries(question)
+        notes.append("目录未命中只说明标题/术语没有字面命中，不构成跳过检索的理由")
 
     # ---- 兜底意图：没有内部/联网要求时按通用解释
     if (
@@ -1184,6 +1271,8 @@ def adjust_route_decision(
     unresolved_terms: Sequence[str] | None = None,
     reason_summary: str | None = None,
     intent: IntentKind | str | None = None,
+    needs_source_search: bool | None = None,
+    retrieval_queries: Sequence[str] | None = None,
 ) -> RouteDecision:
     """研究过程中调整来源需求（PRD 6.3 末段，Planner 使用）。
 
@@ -1203,6 +1292,8 @@ def adjust_route_decision(
         "unresolved_terms": list(unresolved_terms) if unresolved_terms is not None else None,
         "reason_summary": reason_summary,
         "intent": intent,
+        "needs_source_search": needs_source_search,
+        "retrieval_queries": list(retrieval_queries) if retrieval_queries is not None else None,
     }
     for key, value in updates.items():
         if value is None:
@@ -1232,19 +1323,32 @@ R6 通用解释同时涉及已有内部方案 → 通用解释与工作区资料
 R7 仅询问产品功能或文档数量 → 用产品说明或结构化统计，不要检索正文
 R8 用户回忆以前的讨论 → 查工作区记忆与历史记录
 R9 知识库为空 → 通用和联网问题仍可处理；内部资料问题要说明当前资料情况
+R10 用户邀请补充观点、表达看法或评价已有做法 → 结合当前对话和通用知识回答；沿用讨论对象无需重新检索。
+R11 无法确定是否与本区资料相关时 → 默认检索一次（needs_knowledge=true，retrieval_queries 给 1–2 条），
+    同时把 needs_general 设为 true；检索不到再退回通用知识作答。
 
 要求：
 - needs_knowledge 与 needs_web 可以同时为 true。
+- 当前对话已经提供的背景可直接用于讨论。needs_history只表示需要搜索其他历史记录。
+- 区分询问资料中的事实与邀请你分析评价；“你有什么补充的说法”“你怎么看他们的做法”属于观点讨论。
+- 用户同时明确要求新增来源、核实事实或查询最新情况时，保留相应查询任务。
+- retrieval_queries 是检索表达：每个用户明确询问的研究对象至少保留一条，覆盖该对象所问的全部维度；
+  每条包含专有名词、产品名、文件名与关键实体，同一对象的同义表达共用研究过程；
+  需要历史或通用来源、不需要检索时给空数组。
 - intent 只能取 general / research / product / catalog / memory / clarification。
 - freshness 只能取 none / current / date_range。
 - 目录片段只是定位线索，不能当作事实依据；不要引用其中的原文当答案。
+- **目录未命中不等于本区没有相关资料**：目录只按标题与术语做字面匹配，口语改写、同义表达、
+  概念问法（「为什么…」「怎么…」）本来就不会命中。判定 needs_knowledge=false 时，
+  reason_summary 必须给出「问题与本地资料无关」的具体理由，不能以「目录未命中」为由跳过检索。
+- 只有明确的问候、致谢、翻译、代写、闲聊才可以 needs_knowledge=false 且 retrieval_queries 为空。
 - reuse_evidence_ids逐份选择上一轮已完整阅读、且包含本轮所问事实的原文ID；另一份来源尚需补充时仍保留这些ID。
   read_evidence_ids选择上一轮尚未完整阅读、需要按其章节位置补全的知识片段ID；已经有完整原文的相同章节无需再次选择。
   needs_source_search表示是否还需搜索尚未定位的来源。既有完整原文与待补读章节已经定位本轮所需全部来源时为false，否则为true。
   用户要求当前状态或重新联网读取时，needs_source_search为true。核对刚才原文的含义、版本、来源可以复用；来源类型仍在needs_knowledge/needs_web中声明。
 - 只输出 JSON 对象，字段：question / resolved_question / intent / needs_knowledge /
   needs_web / needs_history / needs_general / freshness / entities /
-  scope_evidence_ids / reuse_evidence_ids / read_evidence_ids / needs_source_search / unresolved_terms / reason_summary。不要输出额外字段、不要输出置信度。"""
+  scope_evidence_ids / reuse_evidence_ids / read_evidence_ids / needs_source_search / unresolved_terms / reason_summary / retrieval_queries。不要输出额外字段、不要输出置信度。"""
 
 
 class RoutePrompt(_RoutingModel):
@@ -1290,9 +1394,14 @@ def build_route_prompt(
     if input.catalog_clues:
         dynamic_lines.append("工作区主题线索：" + "、".join(input.catalog_clues[:8]))
     if projection is not None and projection.text:
-        dynamic_lines.append("本轮相关目录条目（只用于定位原文）：" + projection.text)
+        dynamic_lines.append(
+            "本轮相关目录条目（字面匹配，只用于定位原文，不是相关性判定）：" + projection.text
+        )
     else:
-        dynamic_lines.append("本轮相关目录条目：无（目录未命中）")
+        dynamic_lines.append(
+            "本轮相关目录条目：无。目录按标题与术语做字面匹配，未命中只说明问法没对上字面，"
+            "不代表本区没有相关资料，也不构成跳过检索的理由。"
+        )
 
     history_messages = [
         {"role": turn.role, "content": turn.content}
@@ -1318,6 +1427,31 @@ def build_route_prompt(
 # =====================================================================
 # 5. 模型输出解析（严格、不过度信任）
 # =====================================================================
+
+
+_ROUTE_QUERY_LIMIT: Final[int] = 3
+
+
+def _normalize_queries(raw: Any) -> list[str]:
+    """把模型给的检索查询归一成「最多 3 条、去空、去重、去掉列表符号」的字符串列表。"""
+
+    if isinstance(raw, str):
+        items: Sequence[Any] = [raw]
+    elif isinstance(raw, (list, tuple)):
+        items = list(raw)
+    else:
+        return []
+    queries: list[str] = []
+    for item in items:
+        if not isinstance(item, str):
+            continue
+        text = re.sub(r"^\s*(?:[-*·]|\d+[.)、])\s*", "", item).strip()
+        if not text or text in queries:
+            continue
+        queries.append(text)
+        if len(queries) >= _ROUTE_QUERY_LIMIT:
+            break
+    return queries
 
 
 def parse_route_decision(
@@ -1359,6 +1493,9 @@ def parse_route_decision(
         data["resolved_question"] = data["question"]
     if "intent" not in data:
         raise RouteParseError("路由结论缺少 intent")
+    # retrieval_queries 是可选附加字段：模型偶尔会写成字符串或塞进非字符串项，
+    # 这里先做一次宽松归一，避免因为一个附加字段把整条路由结论判为协议错误。
+    data["retrieval_queries"] = _normalize_queries(data.get("retrieval_queries"))
     try:
         decision = RouteDecision.model_validate(data)
     except Exception as exc:  # pydantic 校验失败统一转成路由协议错误
@@ -1493,6 +1630,9 @@ class IntentAgent:
         rule_ids = set(base.scope.rules)
         merged = model_decision
 
+        if "R10" in rule_ids:
+            return rule_decision.model_copy(deep=True)
+
         # 产品 / 概览问题（R7）不接受模型的检索要求。
         if "R7" in rule_ids:
             merged = adjust_route_decision(
@@ -1512,6 +1652,19 @@ class IntentAgent:
         # 内部引用（R1/R2/R3）必须查资料。
         if rule_ids & {"R1", "R2", "R3"}:
             merged = adjust_route_decision(merged, needs_knowledge=True)
+        # 默认检索兜底（R11）同为硬规则：模型把 needs_knowledge 判成 false 不算通过。
+        # R7（产品/概览）优先，不抢它的否定结论。
+        if "R11" in rule_ids and "R7" not in rule_ids:
+            merged = adjust_route_decision(
+                merged,
+                needs_knowledge=True,
+                needs_source_search=True,
+                needs_general=True,
+            )
+            if not merged.retrieval_queries:
+                merged = adjust_route_decision(
+                    merged, retrieval_queries=rule_decision.retrieval_queries
+                )
         # 回忆讨论（R8）必须查历史。
         if "R8" in rule_ids:
             merged = adjust_route_decision(merged, needs_history=True)

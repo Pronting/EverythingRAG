@@ -214,6 +214,14 @@ class ReasoningLevel(StrEnum):
     HIGH = "high"  # thinking.type=enabled, reasoning_effort=high
     MAX = "max"  # thinking.type=enabled, reasoning_effort=max
 
+    @classmethod
+    def _missing_(cls, value: object) -> "ReasoningLevel | None":
+        """兼容旧 UI 的 medium：按 high 处理，不新增第四档。"""
+
+        if isinstance(value, str) and value.strip().casefold() in {"medium", "mid"}:
+            return cls.HIGH
+        return None
+
 
 # =====================================================================
 # t1 冻结区 · 4. 路由与 Agent 角色（PRD 6.2 / 4.2）
@@ -742,6 +750,9 @@ class RouteDecision(ContractModel):
     needs_source_search: bool = True
     unresolved_terms: list[str] = Field(default_factory=list)
     reason_summary: str = ""
+    # 路由与查询规划合并（2026-10-20）：路由模型在判定来源的同时直接给出检索查询，
+    # 省掉一次 ~3.5s 的独立查询规划往返。为空表示「沿用 resolved_question」。
+    retrieval_queries: list[str] = Field(default_factory=list)
 
     def needs_any_source(self) -> bool:
         """是否至少选择了一个来源路径（``clarification`` 之外必须为真）。"""
@@ -769,6 +780,7 @@ class ResearchTask(ContractModel):
     query_identity: str = ""
     query_reuse_reason: str = ""
     scoped_query: bool = False
+    retrieval_queries: list[str] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def _no_self_dependency(self) -> ResearchTask:

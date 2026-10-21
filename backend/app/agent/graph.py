@@ -177,6 +177,16 @@ def make_plan_node(services: GraphServices) -> Callable[[AgentState], Awaitable[
     async def node(state: AgentState) -> dict[str, Any]:
         plan: Plan = Plan.model_validate(await _maybe_await(services.plan(state)))
         requirement_texts = {item.requirement_id: item.text for item in plan.requirements}
+        covered = sorted({
+            requirement_id
+            for task in plan.tasks
+            for requirement_id in task.requirement_ids
+            if requirement_id in requirement_texts
+        })
+        uncovered = [
+            text for requirement_id, text in requirement_texts.items()
+            if requirement_id not in covered
+        ]
         await _emit(
             services,
             state,
@@ -195,8 +205,10 @@ def make_plan_node(services: GraphServices) -> Callable[[AgentState], Awaitable[
                     }
                     for task in plan.tasks
                 ],
-                "covered_requirements": [],
-                "uncovered_requirements": list(requirement_texts),
+                "covered_requirements": covered,
+                # 未覆盖项给要求文本：旧实现把 dict 的键（R1..Rn）当文本发出，
+                # 前端因此永远显示「全部未覆盖」。
+                "uncovered_requirements": uncovered,
             },
         )
         return {
