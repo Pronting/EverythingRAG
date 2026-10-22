@@ -212,24 +212,12 @@ export interface ProcessAreaProps {
   live?: boolean;
 }
 
-/**
- * 过程时间线：**默认折叠成一行摘要**（环节数 + 任务进度 + 用时），点开看完整环节流。
- *
- * 折叠语义（用户实测反馈）：正文出来之后过程区域应当收起成一行 —— 它只是「这次是怎么
- * 得到答案的」的审计入口，不该常驻在答案上方抢注意力；正在跑的时候则默认展开，让用户
- * 看到实时进展。用户手动点过之后就以用户的选择为准，不再自动收起。
- */
+/** 过程默认折叠为进度摘要，展开和收起由用户点击控制。 */
 export function ProcessArea({ process, live = false }: ProcessAreaProps) {
   const entries = process.entries.filter((entry) => entry.kind !== "evidence" && entry.id !== "settings");
   const running = entries.some((entry) => entry.status === "running");
-  const [open, setOpen] = useState<boolean>(running);
-  const [touched, setTouched] = useState(false);
+  const [open, setOpen] = useState(false);
   const [now, setNow] = useState<number>(() => Date.now());
-
-  useEffect(() => {
-    // 运行中 → 展开（看得见进展）；跑完 → 自动收起（正文成为主角），除非用户自己点过。
-    if (!touched) setOpen(running);
-  }, [running, touched]);
 
   useEffect(() => {
     if (!live) return;
@@ -258,7 +246,6 @@ export function ProcessArea({ process, live = false }: ProcessAreaProps) {
         data-testid="process-head"
         aria-expanded={open}
         onClick={() => {
-          setTouched(true);
           setOpen((value) => !value);
         }}
       >

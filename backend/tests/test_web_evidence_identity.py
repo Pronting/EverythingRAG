@@ -174,5 +174,5 @@ def test_deterministic_review_can_skip_second_model_call() -> None:
 
     assert semantic_review_decision(request, review, [evidence]) == (
         False,
-        "deterministic_checks_complete",
+        "generation_with_citation_validation",
     )

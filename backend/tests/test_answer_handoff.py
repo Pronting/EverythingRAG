@@ -375,7 +375,7 @@ def test_actual_review_distinguishes_section_identity_from_factual_values():
     assert bind_review_paragraphs(review, evidence, question=record["attempts"][0]["question"])
     paragraph = next(item for item in review.paragraphs if "3.1 节" in item.text)
     paragraph.text = paragraph.text.replace("3.1 节", "999.9 节")
-    with pytest.raises(ParagraphBindingError, match="未包含陈述数值"):
+    with pytest.raises(ParagraphBindingError, match="未出现在所选来源"):
         bind_review_paragraphs(review, evidence, question=record["attempts"][0]["question"])
 
 

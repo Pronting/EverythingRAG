@@ -562,8 +562,10 @@ def research_document_scope(
     original_scope = confirmed_document_scope(original_question, catalog)
     task_scope = confirmed_document_scope(task_question, catalog)
     exclusive = bool(re.search(r"(?:仅|只)(?:根据|依据|使用|参考|按照)", original_question))
-    if exclusive and original_scope:
-        return [document_id for document_id in task_scope if document_id in original_scope] or original_scope
+    scope_clause = re.split(r"[，,。；;]", original_question, maxsplit=1)[0]
+    exclusive_scope = confirmed_document_scope(scope_clause, catalog) if exclusive else []
+    if exclusive_scope:
+        return [document_id for document_id in task_scope if document_id in exclusive_scope] or exclusive_scope
     if task_scope:
         return task_scope
     return [] if scoped_query else original_scope

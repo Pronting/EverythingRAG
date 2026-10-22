@@ -386,7 +386,8 @@ def official_message_payload(request: Mapping[str, Any]) -> dict[str, Any]:
         payload["thinking"] = thinking
     effort = request.get("reasoning_effort")
     if effort is not None:
-        payload["reasoning_effort"] = effort
+        # 官方消息模板使用 none 表达网关 off 所指定的关闭推理状态。
+        payload["reasoning_effort"] = "none" if effort == "off" else effort
     return payload
 
 

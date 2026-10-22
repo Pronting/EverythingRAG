@@ -237,7 +237,7 @@ def render_user_preferences(
     }[prefs.language]
     verbosity = {
         "concise": "尽量简短，只保留结论和必要依据",
-        "balanced": "篇幅适中，兼顾结论、依据与关键细节",
+        "balanced": "简洁、准确地回答，保留必要依据和影响结论的条件；问题需要或用户要求时充分展开",
         "detailed": "在依据允许时给出较完整的细节与结构",
     }[prefs.verbosity]
     tone = {
@@ -268,6 +268,8 @@ def render_user_preferences(
         f"- 篇幅：{verbosity}\n"
         f"- 语气：{tone}\n"
         f"- 格式：{response_format}\n"
+        "- 表达：直接回答问题，同一事实或限制只说明一次。资料不足时，简短说明本轮未找到的依据或尚无法确认的内容。"
+        "查询次数、内部核验规则和执行过程放在过程记录中。正文不添加重复的免责声明、资料不足小节或结尾汇总。\n"
         f"- 知识范围：{knowledge_scope}{custom_section}"
     )
 

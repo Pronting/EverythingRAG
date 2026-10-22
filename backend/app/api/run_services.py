@@ -15,6 +15,8 @@
 from __future__ import annotations
 
 import asyncio
+import logging
+import threading
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from typing import Any
 
@@ -36,8 +38,13 @@ from app.generation.vision import VisionProviderError, create_vision_model_from_
 from app.ingestion.image_fetch import ImageFetcher
 from app.ingestion.pipeline import IngestionPipeline
 from app.retrieval.evidence_view import RetrievalScope
-from app.retrieval.hybrid_retriever import HybridRetriever
+from app.retrieval.hybrid_retriever import HybridRetriever, shared_retriever
 from app.retrieval.vector_retriever import DEFAULT_MIN_SIMILARITY
+
+logger = logging.getLogger(__name__)
+
+_WARM_LOCK = threading.Lock()
+_WARM_STARTED = False
 from app.search.base import SearchError
 from app.search.factory import create_search_provider_from_config
 
@@ -141,7 +148,10 @@ def tool_services_for(context: Any) -> Mapping[str, Any]:
         "embedder": deps.get_embedder(),
         "state_store": deps.workspace_state_store(context),
         "image_store": image_store,
-        "retriever": HybridRetriever(vector_store, min_similarity=DEFAULT_MIN_SIMILARITY),
+        # 检索器按「向量库实例 + 参数」在进程内共享：BM25 索引构建是本进程最贵的
+        # 一次性开销（4.7k 块约 2s），而本函数每次工具调用都会被重新装配。
+        # 集合规模变化时 retriever 自行失效重建，语义与「每次新建」一致，只是不再重复付费。
+        "retriever": shared_retriever(vector_store, min_similarity=DEFAULT_MIN_SIMILARITY),
         "knowledge_area": knowledge_area,
         "search_provider": search_provider,
         "extract_provider": search_provider,
@@ -161,6 +171,33 @@ def tool_services_for(context: Any) -> Mapping[str, Any]:
         # 本轮资料范围：与本区向量库同一句柄，scope 标识/索引版本因此不会串区。
         "rerank_scope": lambda: RetrievalScope.for_vectorstore(vector_store),
     }
+
+
+def warm_retrieval_indexes() -> None:
+    """启动期后台构建一次词法索引（幂等，只跑一次）。
+
+    BM25 索引是进程内最贵的一次性开销（4.7k 块实测 2–3.4s），原先是「第一问」替
+    整个进程付这笔钱。这里在 lifespan 里起一个 daemon 线程提前建好，第一问直接命中
+    缓存。预热失败只记类名（不打印异常正文），第一次检索会再试一次。
+    """
+
+    global _WARM_STARTED
+    with _WARM_LOCK:
+        if _WARM_STARTED:
+            return
+        _WARM_STARTED = True
+
+    def build() -> None:
+        try:
+            context = deps.get_workspace_context()
+            vector_store = deps.get_workspace_vector_store(context)
+            retriever = shared_retriever(vector_store, min_similarity=DEFAULT_MIN_SIMILARITY)
+            ready = retriever.ensure_index()
+            logger.info("检索索引预热完成：ready=%s", ready)
+        except Exception as exc:  # noqa: BLE001 - 预热失败不影响服务可用性
+            logger.warning("检索索引预热跳过：error=%s", type(exc).__name__)
+
+    threading.Thread(target=build, name="retrieval-warmup", daemon=True).start()
 
 
 def build_run_manager(store: AppStore) -> RunManager:

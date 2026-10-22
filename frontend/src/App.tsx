@@ -43,6 +43,7 @@ import {
   DEFAULT_REASONING_LEVEL,
 } from "./components/PermissionMenu";
 import type {
+  Conversation,
   ConversationMessage,
   ConversationSummary,
   ModelSelectionView,
@@ -111,6 +112,10 @@ export default function App() {
   // 对话分区（工作区）：列表 + 当前分区（侧边栏会话列表只显示当前分区）
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(null);
+  const [conversationWorkspaceId, setConversationWorkspaceId] = useState<string | null>(null);
+  const chatWorkspaceId = activeConversationId === null
+    ? activeWorkspaceId ?? DEFAULT_WORKSPACE_ID
+    : conversationWorkspaceId ?? DEFAULT_WORKSPACE_ID;
   // 会话右键菜单（Fork / 归档 / 删除）
   const [conversationMenu, setConversationMenu] = useState<ConversationMenuState | null>(null);
   const [menuBusy, setMenuBusy] = useState(false);
@@ -228,7 +233,7 @@ export default function App() {
         const archived = await deleteWorkspace(workspace.id);
         await loadWorkspaces();
         await loadConversations();
-        if (activeConversationId !== null && activeWorkspaceId === workspace.id) {
+        if (activeConversationId !== null && conversationWorkspaceId === workspace.id) {
           setActiveConversationId(null);
           setChatMessages([]);
           setChatRevision(0);
@@ -238,7 +243,7 @@ export default function App() {
         showToast("error", error instanceof Error ? error.message : "删除工作区失败");
       }
     },
-    [activeConversationId, activeWorkspaceId, loadConversations, loadWorkspaces, showToast],
+    [activeConversationId, conversationWorkspaceId, loadConversations, loadWorkspaces, showToast],
   );
 
   /** 拖拽工作区排序：先本地立即生效（拖拽手感），再把新顺序落库。 */
@@ -306,7 +311,10 @@ export default function App() {
     ): Promise<void> => {
       await loadConversations();
       await loadWorkspaces();
-      if (conversationId === activeConversationId) setActiveWorkspaceId(targetWorkspaceId);
+      if (conversationId === activeConversationId) {
+        setActiveWorkspaceId(targetWorkspaceId);
+        setConversationWorkspaceId(targetWorkspaceId);
+      }
 
       // PRD 5.4 末句：记录本次执行承接自哪一次 run（被停止的那次优先）。
       const stopped = outcome.stopped_run_ids ?? [];
@@ -581,10 +589,18 @@ export default function App() {
     setPermissionMode(defaults?.default_permission_mode ?? DEFAULT_PERMISSION_MODE);
     setReasoningLevel(defaults?.default_reasoning_level ?? DEFAULT_REASONING_LEVEL);
     setActiveConversationId(null);
+    setConversationWorkspaceId(null);
     setChatMessages([]);
     setChatRevision(0);
     setCitationPanel(null);
   };
+
+  const updateConversationTitle = useCallback(async (conversation: Conversation): Promise<void> => {
+    if (!["", "新对话"].includes(conversation.title)
+      || !conversation.messages.some((message) => message.role === "assistant")) return;
+    await generateConversationTitle(conversation.id);
+    loadConversations();
+  }, [loadConversations]);
 
   const handleSelectConversation = async (id: string): Promise<void> => {
     if (id === activeConversationId) return;
@@ -592,6 +608,7 @@ export default function App() {
     try {
       const conversation = await getConversation(id);
       setActiveConversationId(conversation.id);
+      setConversationWorkspaceId(conversation.workspace_id ?? DEFAULT_WORKSPACE_ID);
       setChatMessages(conversation.messages);
       setPermissionMode(conversation.permission_mode ?? DEFAULT_PERMISSION_MODE);
       setReasoningLevel(conversation.reasoning_level ?? DEFAULT_REASONING_LEVEL);
@@ -599,6 +616,7 @@ export default function App() {
       setCitationPanel(null);
       // 记住这条对话所属分区：后续「新对话」默认落在同一个文件夹里
       if (conversation.workspace_id) setActiveWorkspaceId(conversation.workspace_id);
+      void updateConversationTitle(conversation).catch((error) => showToast("error", error.message));
     } catch (error) {
       setStatusError(error instanceof Error ? error.message : String(error));
     } finally {
@@ -606,12 +624,7 @@ export default function App() {
     }
   };
 
-  /** 一轮问答完成后：刷新侧边栏与标题。
-   *
-   * V1.2 起消息落库由后端 run 的 `commit_answer` 在同一次事务里完成（用户消息在
-   * `POST /runs` 时写入），前端**不再**调用 `/messages` 追加 —— 否则同一轮会被
-   * 写两遍。这里只负责「首次交互生成标题 + 刷新列表」这些纯界面副作用。
-   */
+  /** 一轮问答完成后更新消息显示；持久消息由后端 commit_answer 保存。 */
   const handleExchangeComplete = useCallback(
     async (
       userContent: string,
@@ -641,28 +654,19 @@ export default function App() {
           created_at: new Date().toISOString(),
         },
       ];
-      const isFirst = chatMessages.length === 0;
-
       // 会话由 Chat 在创建 run 之前惰性建好（见 handleEnsureConversation）。
       const conversationId = activeConversationId;
       if (conversationId === null) return;
 
       setChatMessages((prev) => [...prev, ...newMessages]);
 
-      // 会话消息仍在异步装载中：跳过标题等副作用，避免与装载竞态。
+      // 会话消息正在装载时，由装载结果刷新列表。
       if (loadingConversationRef.current) return;
 
-      try {
-        if (isFirst) {
-          await generateConversationTitle(conversationId);
-        }
-        loadConversations();
-        void loadWorkspaces(); // 新会话会让所属工作区的计数变化
-      } catch (error) {
-        setStatusError(error instanceof Error ? error.message : String(error));
-      }
+      loadConversations();
+      void loadWorkspaces();
     },
-    [activeConversationId, chatMessages.length, loadConversations, loadWorkspaces],
+    [activeConversationId, loadConversations, loadWorkspaces],
   );
 
   /**
@@ -676,6 +680,7 @@ export default function App() {
     try {
       const conversation = await createConversation(activeWorkspaceId);
       setActiveConversationId(conversation.id);
+      setConversationWorkspaceId(conversation.workspace_id ?? DEFAULT_WORKSPACE_ID);
       setConversations((prev) => [conversation, ...prev]);
       void loadWorkspaces();
       return conversation.id;
@@ -702,6 +707,7 @@ export default function App() {
   const detachIfActive = useCallback((id: string): void => {
       if (activeConversationId !== id) return;
       setActiveConversationId(null);
+      setConversationWorkspaceId(null);
       setChatMessages([]);
       setChatRevision(0);
       setCitationPanel(null);
@@ -738,6 +744,7 @@ export default function App() {
         loadingConversationRef.current = true;
         const detail = await getConversation(branch.id);
         setActiveConversationId(detail.id);
+        setConversationWorkspaceId(detail.workspace_id ?? DEFAULT_WORKSPACE_ID);
         setChatMessages(detail.messages);
         setCitationPanel(null);
         setConversationMenu(null);
@@ -838,7 +845,7 @@ export default function App() {
         <Chat
           conversationId={activeConversationId}
           initialMessages={chatMessages}
-          workspaceId={activeWorkspaceId ?? DEFAULT_WORKSPACE_ID}
+          workspaceId={chatWorkspaceId}
           ensureConversation={handleEnsureConversation}
           revision={chatRevision}
           onExchangeComplete={handleExchangeComplete}
@@ -848,10 +855,11 @@ export default function App() {
             loadConversations();
             void loadWorkspaces();
             if (activeConversationId !== null) {
-              void getConversation(activeConversationId).then((conversation) => {
+              void getConversation(activeConversationId).then(async (conversation) => {
                 if (!loadingConversationRef.current && activeConversationRef.current === conversation.id) {
                   setChatMessages(conversation.messages);
                 }
+                await updateConversationTitle(conversation);
               }).catch((error) => showToast("error", error.message));
             }
           }}

@@ -136,7 +136,9 @@ def test_weak_catalog_match_does_not_trigger_internal_route() -> None:
     )
     outcome = evaluate_route_rules(_input("这个东西怎么做？", catalog_hits=[weak]))
     assert "R1" not in outcome.rule_ids
-    assert outcome.decision.needs_knowledge is False
+    # R11 兜底仍会查一次：词面没命中不等于本区没有资料
+    assert outcome.decision.needs_knowledge is True
+    assert "R11" in outcome.rule_ids
 
 
 def test_rule_r2_follow_up_resolves_reference_from_history() -> None:
@@ -276,11 +278,16 @@ def test_rule_r1_fires_on_document_lookup_question() -> None:
 
 
 def test_rule_r1_document_lookup_needs_both_intent_and_object() -> None:
-    assert _decide("怎么写一份用户手册？").decision.needs_knowledge is False
+    result = _decide("怎么写一份用户手册？")
+    assert "R1" not in result.scope.rules
+    # 不命中 R1，但 R11 默认检索兜底仍然查一次（查不到再退回通用作答）
+    assert result.decision.needs_knowledge is True
 
 
 def test_rule_descriptions_cover_nine_rules() -> None:
-    assert sorted(RULE_DESCRIPTIONS) == [f"R{index}" for index in range(1, 10)]
+    # R10（补充观点）与 R11（默认检索兜底）是后续追加的两条：编号连续即可
+    expected = [f"R{index}" for index in range(1, 12)]
+    assert sorted(RULE_DESCRIPTIONS, key=lambda key: int(key[1:])) == expected
     assert ROUTING_RULES_VERSION.startswith("routing-rules-v")
 
 
@@ -312,7 +319,9 @@ def test_rule_r6_term_branch_keeps_only_the_specific_expression() -> None:
 def test_rule_r6_term_branch_needs_concept_intent_and_non_empty_workspace() -> None:
     # 没有概念 / 场景意图时，不因为出现英文术语就强行检索资料
     plain = _decide("K8s 集群昨天扩容了")
-    assert plain.decision.needs_knowledge is False
+    # R6 术语分支不触发（不是概念/场景问法），但 R11 默认检索兜底仍查一次
+    assert "R6" not in plain.scope.rules
+    assert plain.decision.needs_knowledge is True
     # 空知识库时不产生知识任务（R9 口径不变）
     empty = _decide("有什么 AI Native 的使用场景吗？", file_count=0, chunk_count=0)
     assert empty.decision.needs_knowledge is False
@@ -321,7 +330,8 @@ def test_rule_r6_term_branch_needs_concept_intent_and_non_empty_workspace() -> N
 def test_rule_r6_keeps_plain_general_questions_general() -> None:
     result = _decide("数据库慢查询一般要怎么排查？")
     assert result.decision.needs_general is True
-    assert result.decision.needs_knowledge is False
+    # 仍是通用作答，但 R11 让它先查一次库
+    assert result.decision.needs_knowledge is True
 
 
 # ---------------------------------------------------------------------
@@ -520,7 +530,8 @@ def test_generic_document_question_without_article_name_searches_many_docs() -> 
 def test_action_on_document_does_not_trigger_document_research() -> None:
     result = _decide("帮我把这段总结写进文档中")
 
-    assert result.decision.needs_knowledge is False
+    # 不是文档检索需求，但 R11 默认检索兜底仍然查一次
+    assert result.decision.needs_knowledge is True
 
 
 def test_follow_up_keeps_agent_object_when_previous_turn_is_generic_scope() -> None:

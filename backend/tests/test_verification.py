@@ -10,7 +10,6 @@ from app.agent.verification import (
     collect_evidence,
     compute_answer_basis,
     publish_answer,
-    render_gap_section,
     synthesize_answer,
 )
 
@@ -70,7 +69,7 @@ class SynthesisTests(unittest.TestCase):
             "问题", [result], requirements={"R1": "耗时", "R2": "时间范围"}, model=placeholder_model
         )
         self.assertEqual(candidate.uncovered_requirements, ["R2"])
-        self.assertIn("缺少时间范围", render_gap_section(candidate.gaps, {"R2": "时间范围"}))
+        self.assertEqual(candidate.gaps[0].missing, "缺少时间范围")
 
     def test_extra_gaps_from_delivery_checks_land_in_the_candidate(self):
         """外部核查（如「要求官方来源但没有取得官方页面」）必须进入终态缺口（缺陷 F19）。"""

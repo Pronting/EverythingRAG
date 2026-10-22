@@ -279,14 +279,26 @@ export async function appendConversationMessages(
   return (await response.json()) as ConversationSummary;
 }
 
-/** 用对话模型生成会话标题，返回新标题。 */
+const titleRequests = new Map<string, Promise<string>>();
+
+/** 为缺少标题的会话生成标题，同一会话共用正在执行的请求。 */
 export async function generateConversationTitle(id: string): Promise<string> {
-  const response = await fetch(`${CONVERSATIONS_ENDPOINT}/${encodeURIComponent(id)}/generate-title`, {
-    method: "POST",
-  });
-  if (!response.ok) throw new Error(await readErrorDetail(response));
-  const data = (await response.json()) as { title: string };
-  return data.title;
+  const pending = titleRequests.get(id);
+  if (pending !== undefined) return pending;
+  const request = (async (): Promise<string> => {
+    const response = await fetch(`${CONVERSATIONS_ENDPOINT}/${encodeURIComponent(id)}/generate-title?if_untitled=true`, {
+      method: "POST",
+    });
+    if (!response.ok) throw new Error(await readErrorDetail(response));
+    const data = (await response.json()) as { title: string };
+    return data.title;
+  })();
+  titleRequests.set(id, request);
+  try {
+    return await request;
+  } finally {
+    if (titleRequests.get(id) === request) titleRequests.delete(id);
+  }
 }
 
 /** 删除会话。 */

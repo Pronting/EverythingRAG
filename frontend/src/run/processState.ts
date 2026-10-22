@@ -14,7 +14,7 @@ import type {
   ToolCompletedPayload,
   ToolStartedPayload,
 } from "../types";
-import { requiredActionText } from "../util/runError";
+import { requiredActionText } from "../util/runError.ts";
 
 /**
  * 过程区域归约器（PRD 14.2）。
@@ -303,7 +303,7 @@ export function terminalStatusText(status: RunStatus): string {
     case "completed":
       return "已完成";
     case "completed_with_gaps":
-      return "已完成，但部分资料不足（已在正文标明影响）";
+      return "已完成，资料不足";
     case "failed":
       return "执行失败（已完成的研究记录仍可查看，可从此处继续）";
     case "cancelled":
@@ -682,7 +682,6 @@ export function applyRunEvent(state: ProcessState, event: RunEventTyped): Proces
       base.entries = base.entries.map((item) =>
         item.status === "running" ? { ...item, status: "done" } : item,
       );
-      const gaps = payload.gaps ?? [];
       const text =
         payload.status === "completed_with_gaps"
           ? terminalStatusText("completed_with_gaps")
@@ -696,7 +695,6 @@ export function applyRunEvent(state: ProcessState, event: RunEventTyped): Proces
           status: "done",
           taskId: null,
           tag: payload.status,
-          details: gaps,
         }),
       );
     }
@@ -746,7 +744,7 @@ export function applyRunEvent(state: ProcessState, event: RunEventTyped): Proces
 
     case "answer.meta":
     case "answer.delta": {
-      // 正文与来源走答案通道，不产生过程条目（PRD 14.2 正文在核对完成后展示）。
+      // 正文与来源由答案区域显示。
       return base;
     }
 

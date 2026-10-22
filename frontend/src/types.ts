@@ -1010,6 +1010,8 @@ export interface AnswerDeltaPayload {
   answer_id: string;
   index: number;
   text: string;
+  draft?: boolean;
+  replace?: boolean;
 }
 
 export interface UsageInfo {

@@ -234,7 +234,7 @@ class VerificationUpdatedPayload(EventPayload):
 
 
 class AnswerMetaPayload(EventPayload):
-    """``answer.meta``：已核对答案的来源（正文之前先发来源，PRD 13.3）。"""
+    """``answer.meta``：同一答案的来源、内容摘要与完成状态。"""
 
     answer_id: str
     answer_basis: AnswerBasis
@@ -245,11 +245,13 @@ class AnswerMetaPayload(EventPayload):
 
 
 class AnswerDeltaPayload(EventPayload):
-    """``answer.delta``：已核对答案的正文片段（``index`` 用于去重追加）。"""
+    """``answer.delta``：最终正文增量；draft、replace 保留用于读取已有事件。"""
 
     answer_id: str
     index: int = Field(default=0, ge=0)
     text: str
+    draft: bool = False
+    replace: bool = False
 
 
 class UsagePayload(ContractModel):

@@ -737,7 +737,7 @@ export default function Chat({
         return;
       }
 
-      if (!replay && event.type === "model.reasoning") {
+      if (!replay && (event.type === "model.reasoning" || event.type === "answer.delta")) {
         if (current.renderTimer === null) {
           current.renderTimer = window.setTimeout(() => {
             current.renderTimer = null;
@@ -1481,7 +1481,7 @@ export default function Chat({
                     )
                   )}
 
-                {msg.role === "assistant" && msg.answerBasis !== null && (
+                {msg.role === "assistant" && msg.answerBasis !== null && msg.answerBasis !== "insufficient" && (
                   <span className={`answer-basis answer-basis-${msg.answerBasis}`}>
                     {BASIS_LABELS[msg.answerBasis]}
                   </span>
@@ -1547,32 +1547,12 @@ export default function Chat({
                   </p>
                 )}
 
-                {msg.role === "assistant" && msg.answerBasis === "insufficient"
-                  && !msg.content.includes("### 资料不足说明") && (
-                  <p className="message-gaps-note" data-testid="insufficient-note">
-                    现有资料不足以支持结论，已在正文标明缺少依据的部分。
-                  </p>
-                )}
-
                 {/* 筛选跑了但一条都没入选（PRD §8.2 的 empty 态）：必须说出来，
                     否则用户只看到「没有来源」而不知道这是相关性筛选的结果。 */}
                 {msg.role === "assistant" && msg.retrieval?.status === "empty" && (
                   <p className="message-relevance-note" data-testid="relevance-empty-note">
                     {relevanceEmptyNote(msg.retrieval)}
                   </p>
-                )}
-
-                {msg.role === "assistant" && msg.runStatus === "completed_with_gaps"
-                  && !msg.content.includes("### 资料不足说明") && (
-                  <div className="message-gaps" data-testid="gaps-note">
-                    <p className="message-gaps-title">已完成，但部分问题资料不足</p>
-                    <p className="message-gaps-line">
-                      缺少依据：{msg.gaps.length > 0 ? msg.gaps.join("；") : "未标注具体缺口"}
-                    </p>
-                    <p className="message-gaps-line">
-                      对结论的影响：正文中相关结论已标注为资料不足，未做无依据的综合。
-                    </p>
-                  </div>
                 )}
 
                 {msg.role === "assistant" && (msg.runStatus === "failed"

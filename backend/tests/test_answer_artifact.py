@@ -46,16 +46,16 @@ class AnswerArtifactTests(unittest.TestCase):
         with self.assertRaises(AnswerVersionError):
             answer_version(first.model_copy(update={"content_hash": ""}))
 
-    def test_research_gaps_are_published_once(self):
+    def test_research_gaps_preserve_answer_content(self):
         candidate = self.candidate()
         candidate.gaps = [MaterialGap(requirement_ids=["R2"], missing="日期", impact="日期未知")]
         candidate.uncovered_requirements = ["R2"]
         first = publish_answer(candidate, requirements={"R2": "适用日期"})
         self.assertEqual(first.status, RunStatus.COMPLETED_WITH_GAPS)
-        self.assertIn("日期未知", first.content)
+        self.assertEqual(first.content, candidate.content)
         candidate.content = first.content
         second = publish_answer(candidate, requirements={"R2": "适用日期"})
-        self.assertEqual(second.content.count("### 资料不足说明"), 1)
+        self.assertEqual(second.content, first.content)
 
     def test_invalid_reference_fails_at_publication(self):
         candidate = self.candidate()

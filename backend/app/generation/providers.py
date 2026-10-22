@@ -14,7 +14,7 @@ V1.2.0（PRD 9.1 / 9.2 / 7.4）：
 - 带 tools 的历史协议：保留并回传此前 assistant 消息的 ``reasoning_content``
   （含未调用工具的轮次），工具结果使用对应 ``tool_call_id``；
 - 独立子 Agent 上下文隔离：历史摘要作为参考数据，不伪造 assistant 工具调用；
-- 关闭 SDK 隐式重试（``max_retries=0``），重试由用户决定（PRD 7.4）。
+- SDK 隐式重试关闭，连接异常在请求预算内最多自动重试两次。
 """
 
 from __future__ import annotations
@@ -25,14 +25,17 @@ import threading
 from collections.abc import AsyncIterator, Mapping, Sequence
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
+from time import monotonic
 from typing import Any
 from urllib.parse import urlsplit
 
 from openai import AsyncOpenAI
+from tenacity import AsyncRetrying
 
 from app.agent.contracts import ModelCapabilities, ReasoningLevel, ToolCall
 from app.core.config import Settings
 from app.core.outbound import OutboundClient, OutboundEvent, outbound_client
+from app.core.provider_retry import connection_retry_options
 from app.core.settings_store import ChatModelConfig
 from app.generation.base import (
     ChatChunk,
@@ -184,9 +187,29 @@ class OpenAICompatChatModel:
         self._timeout = timeout
         self._api_key = api_key or "local"
         self._prompt_counter: PromptCounter | None = None
+        self._reuse_client = False
+        self._shared_client: AsyncOpenAI | None = None
+
+    def enable_client_reuse(self) -> None:
+        self._reuse_client = True
+
+    async def aclose(self) -> None:
+        if self._shared_client is not None:
+            await self._shared_client.close()
+            self._shared_client = None
+
+    @asynccontextmanager
+    async def _client_session(self) -> AsyncIterator[AsyncOpenAI]:
+        if self._reuse_client:
+            if self._shared_client is None:
+                self._shared_client = self._new_client()
+            yield self._shared_client
+        else:
+            async with self._new_client() as client:
+                yield client
 
     def _new_client(self) -> AsyncOpenAI:
-        # 每次调用拥有自己的客户端；共享模型与出网审计对象继续由调用者管理。
+        # 客户端由当前事件循环内的调用会话管理。
         return AsyncOpenAI(
             base_url=self._base_url, api_key=self._api_key,
             max_retries=0, timeout=self._timeout,
@@ -194,10 +217,20 @@ class OpenAICompatChatModel:
 
     @asynccontextmanager
     async def _stream_response(self, request: dict[str, Any]) -> AsyncIterator[Any]:
-        async with self._new_client() as client:
-            response = await client.chat.completions.create(**request)
+        async with self._client_session() as client:
+            response = await self._request_completion(client, request)
             async with response:
                 yield response
+
+    async def _request_completion(self, client: AsyncOpenAI, request: dict[str, Any]) -> Any:
+        deadline = monotonic() + self._timeout
+        async with asyncio.timeout(self._timeout):
+            async for attempt in AsyncRetrying(**connection_retry_options(self._timeout)):
+                with attempt:
+                    # 仅重试取得响应之前的请求，流式消费保持同一条响应。
+                    return await client.with_options(
+                        timeout=max(0.001, deadline - monotonic()),
+                    ).chat.completions.create(**request)
 
     # ------------------------------------------------------------ 能力
 
@@ -391,10 +424,8 @@ class OpenAICompatChatModel:
             and self._destination == "api.commandcode.ai"
             and self._model == "deepseek/deepseek-v4.1-flash"
         ):
-            # CommandCode 使用 low 限制服务端推理计算量，同时发送关闭思考的要求。
-            request["reasoning_effort"] = "low"
-            if max_tokens is None:
-                request["max_tokens"] = 4096
+            # CommandCode 使用 off 关闭推理，输出上限遵循本次调用的设置。
+            request["reasoning_effort"] = "off"
         return request
 
     # ------------------------------------------------------------ 流式
@@ -556,8 +587,8 @@ class OpenAICompatChatModel:
         await self._check_context_budget(request)
         started_at = _utcnow() if self._outbound is not None else None
         try:
-            async with self._new_client() as client:
-                raw = await client.chat.completions.create(**request)
+            async with self._client_session() as client:
+                raw = await self._request_completion(client, request)
         except BaseException:
             self._record_outbound(started_at, status=None)
             raise

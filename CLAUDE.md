@@ -107,6 +107,24 @@ scripts/            # 启动 / 安装脚本
 5. 提交用 conventional commits（feat/fix/refactor/docs/test/chore/perf/ci）。
 6. **测试命令**：后端 `(cd backend && .venv/Scripts/python -m pytest)`（Windows）或 `bin/python`（mac/linux）；前端 `cd frontend && npm test`（脚手架阶段暂无 test script，后续补）；E2E `npx playwright test`。**测试门钩子在写代码后自动用项目 venv 运行相关测试，无测试框架则跳过。**
 
+## 六点五、已知缺陷与评测（2026-10 实测）
+
+完整报告：`docs/tech/rag-agent-eval-2026-10-20.md`（26 题 / 30 次请求，已迭代四轮复测）。改动检索链前先读它的第九至十三节。
+
+四轮后的现状（`results_full_fixG.json`，30 次请求）：acc 均值 0.932、文档命中 22/27、有据率 20/27、wall 中位 15.2s / 均值 15.5s / P90 23.3s、ttft 中位 13.0s、负例 3/3 诚实拒答、ok 28 / failed 2。
+
+- **核验失败会吞掉已经生成的正文**（当前最该修的一条）：`runtime.py` 在 `answer_content` 非空时仍 `raise SynthesisUnavailable`，`cross_memory` / `cross_gateway` 两题正文完整（970 / 234 字）却对用户表现为空回答。
+- **核验规则对跨文档综合题偏严**：`verification.py` 的「引用区间不得跨 12 行」（`span.end_line - span.start_line >= 12`）与「引语必须落在所选行窗口内」，单段事实题没问题，需要拼多段的跨文档题命中率高。
+- **响应延迟**：基线 wall 均值 20.19s / ttft 中位 15s → 现 15.5s / 13s（−23%）。检索侧已不是瓶颈（`retrieve_sec` 均值 0.12s、`embed_sec` 1.51s），剩余成本是模型往返次数（路由 / 规划 / 子 agent 决策 / 核验 / 生成，每次固定 3–4s）。再压要靠减往返，不是换模型。
+- **检索门控是双刃剑**：`min_similarity=0.60` 会把中文长问句的 0.5x 分全判死；`_LONG_QUERY_MATCH_ESCAPE`、门控空结果降级、identifier 稀释判定三者互相牵制，任一动都要跑 `.tmp_probe/eval-20261020/probe_after_escape.py` + 门控单测（历史上一次收紧就误杀了 3 条 dense=0.50 的合法命中）。
+- **路由模型吐非法 JSON 曾打死整轮 run**：已由 `runtime.py` 的 `RouteParseError` 兜底到规则层，但同类「模型输出不可解析」的位置仍应逐个确认有无降级路径。
+- **语料覆盖率约 74.8%**（234/313 唯一内容），缺口 79 篇来自索引只登记过一次上传清单，目录级 `ingest(root)` 从未跑过；补库前先改切块参数，否则会嵌两遍。
+- **语料切块严重不均**：`cider-基建2023.md` 294KB 切出 789 块，`国家币种梳理.md` 46KB 只有 8 块。
+- **引用可信度字段存在但恒空**（`source_ref` 键空间不一致：`doc#read:offset` vs `doc#block_id`），`similarity` 普遍 null、`relevance_checked=false`。
+- **API key 明文存在 `config.json`**，违反隐私红线，待 DPAPI 封存。
+- **评测用的 `config.json` 有陷阱**：`chat` 段与 `model_selection` 并存时**实际生效的是 `model_selection`**，只改 `chat` 会白跑（曾出现 TTFT 87–104s、5 跑 3 failed）。
+- **单测基线**：全量 `pytest` 是 175 failed / 2342 passed / 114 skipped（既有问题，与检索链无关）；动检索链后比对「新增失败数」而非「绝对失败数」。
+
 ## 七、可观测指标（验收看这些，见 PRD 11 章）
 
 | 指标 | 目标（假设，需实测） | 验证方式 |

@@ -245,6 +245,10 @@ export function parseRunEvent(raw: unknown): EventParseOutcome {
   if (type === "answer.delta" && typeof payload.index !== "number") {
     return { ok: false, reason: "answer.delta 缺少 index" };
   }
+  if (type === "answer.delta" && (
+    typeof payload.text !== "string"
+    || ["draft", "replace"].some((field) => field in payload && typeof payload[field] !== "boolean")
+  )) return { ok: false, reason: "正文增量的字段类型错误" };
 
   return { ok: true, event: raw as unknown as RunEventTyped };
 }

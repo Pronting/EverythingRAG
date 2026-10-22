@@ -309,6 +309,14 @@ class StreamResult(BaseModel):
     def failure_reasons(self) -> list[str]:
         """未完整生成的原因（含工具参数问题），供运行层记录与展示。"""
         reasons = list(self.response.notes)
+        reason = {
+            ResponseStatus.TRUNCATED: "模型生成达到输出 token 上限，内容未完整返回（finish_reason=length）",
+            ResponseStatus.FILTERED: "模型输出被内容过滤中断（finish_reason=content_filter）",
+            ResponseStatus.ABORTED: "模型生成被终止（finish_reason=aborted）",
+            ResponseStatus.RESOURCE_EXHAUSTED: "模型服务资源不足，生成未完成（finish_reason=insufficient_system_resource）",
+        }.get(self.response.status)
+        if reason is not None:
+            reasons.insert(0, reason)
         if not self.tool_calls_complete and not reasons:
             reasons.append("工具调用参数未完整到达（不得执行、不得标成功）")
         if self.stream_status is StreamStatus.FAILED and not reasons:

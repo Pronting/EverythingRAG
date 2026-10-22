@@ -10,16 +10,16 @@ import type {
 /**
  * 答案通道归约器（PRD 14.2 / 8.3）。
  *
- * 事件顺序：`answer.meta`（正文之前先发来源）→ `answer.delta*` → `run.completed`。
+ * 生成期间接收最终正文片段；`answer.meta` 补充同一答案的来源及完成信息。
  *
  * 两条硬规则：
- * 1. **按片段位置更新**：`answer.delta.index` 决定落位，重复 `index` 覆盖而不是追加，
- *    因此重连补读、重复事件都不会让正文出现重复段落。
+ * 1. 按 `answer.delta.index` 更新片段，同一位置的重复事件覆盖原片段。
  * 2. **引用编号在最终候选答案形成时分配**（后端 `assign_citation_ids`），前端只按
  *    `label` 消费；同一来源复用同一 label，绝不重新编号。
  */
 
 export interface AnswerState {
+  lastSeq: number;
   answerId: string | null;
   basis: AnswerBasis | null;
   basisComponents: SourceType[];
@@ -34,6 +34,7 @@ export interface AnswerState {
 
 export function emptyAnswerState(): AnswerState {
   return {
+    lastSeq: 0,
     answerId: null,
     basis: null,
     basisComponents: [],
@@ -57,6 +58,8 @@ export function answerChunkCount(state: AnswerState): number {
 }
 
 export function applyAnswerEvent(state: AnswerState, event: RunEventTyped): AnswerState {
+  if (event.event_seq <= state.lastSeq) return state;
+  state = { ...state, lastSeq: event.event_seq };
   switch (event.type) {
     case "answer.meta": {
       const payload = event.payload;
@@ -64,6 +67,7 @@ export function applyAnswerEvent(state: AnswerState, event: RunEventTyped): Answ
       const carry = state.answerId === payload.answer_id ? state : emptyAnswerState();
       return {
         ...carry,
+        lastSeq: event.event_seq,
         answerId: payload.answer_id,
         basis: payload.answer_basis,
         basisComponents: payload.basis_components ?? [],
@@ -75,12 +79,13 @@ export function applyAnswerEvent(state: AnswerState, event: RunEventTyped): Answ
 
     case "answer.delta": {
       const payload = event.payload;
-      // 片段属于另一个答案：说明 meta 缺失，按新答案从该位置起收敛。
+      if (state.completed) return state;
+      // 新的生成结果或正文修正需要清空此前的片段。
       const base =
-        state.answerId !== null && state.answerId !== payload.answer_id
-          ? { ...emptyAnswerState(), answerId: payload.answer_id }
+        state.answerId !== payload.answer_id
+          ? { ...emptyAnswerState(), lastSeq: event.event_seq, answerId: payload.answer_id }
           : state;
-      const chunks = base.chunks.slice();
+      const chunks = payload.replace ? [] : base.chunks.slice();
       const index = Math.max(0, payload.index);
       while (chunks.length <= index) chunks.push("");
       // 同一位置重复到达 → 覆盖（幂等），不是追加。

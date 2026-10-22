@@ -2343,6 +2343,23 @@ class AppStore:
             raise ValueError("答案状态只能是 completed 或 completed_with_gaps（PRD 8.3）")
 
         contents = list(deltas) or [artifact.content]
+        first_index = 0
+        published = [
+            event.payload for event in await self.read_events(artifact.run_id)
+            if event.type is EventType.ANSWER_DELTA
+            and event.payload.get("answer_id") == artifact.answer_id
+        ]
+        if published:
+            if any(item.get("replace") or item.get("draft") for item in published):
+                raise ValueError("最终正文不能包含替换事件或候选内容")
+            if [item["index"] for item in published] != list(range(len(published))):
+                raise ValueError("已发布正文的片段顺序不完整")
+            streamed = "".join(item["text"] for item in published)
+            if not artifact.content.startswith(streamed):
+                raise ValueError("保存的答案与已发布正文不一致")
+            suffix = artifact.content[len(streamed):]
+            contents = [suffix] if suffix else []
+            first_index = len(published)
         async with self.transaction():
             stored = await self._insert_answer_artifact_locked(artifact)
             message = await self._append_message_locked(
@@ -2385,7 +2402,7 @@ class AppStore:
                     created_at=completed_at,
                 )
             )
-            for index, text in enumerate(contents):
+            for index, text in enumerate(contents, start=first_index):
                 events.append(
                     await self._append_event_locked(
                         run_id=run.id,

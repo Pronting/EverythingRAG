@@ -142,7 +142,7 @@ def test_history_cache_respects_queries_read_ranges_and_run_snapshot():
     asyncio.run(run())
 
 
-def test_recorded_history_time_and_count_claims_require_semantic_review():
+def test_recorded_history_time_and_count_claims_are_reviewed_when_requested():
     result = json.loads((RESULTS.parent / "results-repaired-history-final/H07.json").read_text(encoding="utf-8"))
     directory = Path.home() / ".everything-rag/workspaces/default/artifacts/synthesis" / result["run_id"]
     records = [json.loads(path.read_text(encoding="utf-8")) for path in directory.glob("review-*.json")]
@@ -150,6 +150,10 @@ def test_recorded_history_time_and_count_claims_require_semantic_review():
     evidence = [Evidence.model_validate(item) for item in record["evidence"]]
     request = SynthesisRequest(question=record["question"], requirements=record["requirements"], evidence=evidence)
     review = SynthesisReview.model_validate(record["review"])
+    assert semantic_review_decision(request, review, evidence) == (
+        False, "generation_with_citation_validation",
+    )
+    request = request.model_copy(update={"question": "请核对：" + request.question})
     assert semantic_review_decision(request, review, evidence) == (True, "history_time_or_count_claim")
 
 

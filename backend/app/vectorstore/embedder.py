@@ -13,6 +13,8 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+from collections import OrderedDict
+from concurrent.futures import Future
 from sys import exception
 from threading import BoundedSemaphore, Lock
 from time import monotonic
@@ -20,8 +22,10 @@ from typing import Protocol
 
 import httpx
 from openai import OpenAI
+from tenacity import Retrying
 
 from app.core.config import settings
+from app.core.provider_retry import connection_retry_options
 from app.core.settings_store import EmbedModelConfig
 
 logger = logging.getLogger(__name__)
@@ -107,6 +111,9 @@ class CloudEmbedder:
         self._client: OpenAI | None = None
         self._client_lock = Lock()
         self._request_slots = BoundedSemaphore(settings.ingest_embed_workers)
+        self._query_lock = Lock()
+        self._query_cache: OrderedDict[str, tuple[float, ...]] = OrderedDict()
+        self._query_inflight: dict[str, Future[list[float]]] = {}
 
     @property
     def fingerprint(self) -> str:
@@ -139,7 +146,40 @@ class CloudEmbedder:
         """Batch query embeddings, applying Qwen3 instructions to each query only."""
 
         formatted = [format_query_for_embedding(text, self._model) for text in texts]
-        return self._embed_inputs(formatted, query=True)
+        if not formatted:
+            return []
+        pending: dict[str, Future[list[float]]] = {}
+        owned: list[str] = []
+        cached: dict[str, list[float]] = {}
+        deadline = monotonic() + settings.query_embed_timeout_seconds
+        with self._query_lock:
+            for text in dict.fromkeys(formatted):
+                if text in self._query_cache:
+                    cached[text] = list(self._query_cache[text])
+                    self._query_cache.move_to_end(text)
+                    continue
+                if text not in self._query_inflight:
+                    self._query_inflight[text] = Future()
+                    owned.append(text)
+                pending[text] = self._query_inflight[text]
+        if owned:
+            try:
+                vectors = self._embed_inputs(owned, query=True)
+            except BaseException as error:
+                with self._query_lock:
+                    for text in owned:
+                        self._query_inflight.pop(text).set_exception(error)
+                raise
+            with self._query_lock:
+                for text, vector in zip(owned, vectors, strict=True):
+                    self._query_cache[text] = tuple(vector)
+                    self._query_cache.move_to_end(text)
+                    self._query_inflight.pop(text).set_result(list(vector))
+                while len(self._query_cache) > 128:
+                    self._query_cache.popitem(last=False)
+        for text, future in pending.items():
+            cached[text] = list(future.result(timeout=max(0.0, deadline - monotonic())))
+        return [list(cached[text]) for text in formatted]
 
     def embed_texts(self, texts: list[str]) -> list[list[float]]:
         """Backward-compatible alias for document ingestion callers."""
@@ -164,11 +204,18 @@ class CloudEmbedder:
                 remaining = settings.query_embed_timeout_seconds - (started_at - submitted_at)
                 if remaining <= 0:
                     raise TimeoutError("查询嵌入等待执行名额超时")
-                client = client.with_options(
-                    timeout=httpx.Timeout(remaining, connect=min(5.0, remaining)),
-                    max_retries=0,
-                )
-            response = client.embeddings.create(model=self._model, input=texts)
+                deadline = submitted_at + settings.query_embed_timeout_seconds
+                for attempt in Retrying(**connection_retry_options(remaining)):
+                    with attempt:
+                        remaining = deadline - monotonic()
+                        if remaining <= 0:
+                            raise TimeoutError("查询嵌入请求超时")
+                        response = client.with_options(
+                            timeout=httpx.Timeout(remaining, connect=min(5.0, remaining)),
+                            max_retries=0,
+                        ).embeddings.create(model=self._model, input=texts)
+            else:
+                response = client.embeddings.create(model=self._model, input=texts)
             succeeded = True
         finally:
             if acquired:

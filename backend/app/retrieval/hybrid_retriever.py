@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import re
+import threading
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -33,6 +34,39 @@ from app.retrieval.trace import (
 )
 from app.retrieval.vector_retriever import RetrievalError, RetrievedChunk, _get_str
 from app.vectorstore.base import VectorStore
+
+# BM25 索引是进程内最贵的一次性开销（4.7k 块约 2s），而每个工具调用都会重新装配
+# ToolContext。不共享就等于每次检索都重付一次构建成本，因此按「向量库实例 + 构造参数」
+# 缓存 retriever：键里持有实例引用，避免 id() 被回收后复用；集合规模变化时原地失效。
+_SHARED_RETRIEVERS: dict[
+    tuple[int, tuple[tuple[str, Any], ...]], tuple[Any, "HybridRetriever"]
+] = {}
+_SHARED_RETRIEVERS_LOCK = threading.Lock()
+_SHARED_RETRIEVERS_CAP = 8
+
+# A long Chinese sentence tokenizes into 20-40 single chars and bigrams, so raw term coverage
+# stays low even for a perfect topical match. Six or more independent informative matches are
+# treated as strong lexical evidence regardless of that ratio.
+_LONG_QUERY_MATCH_ESCAPE: Final[int] = 6
+
+
+def shared_retriever(vectorstore: VectorStore, **kwargs: Any) -> "HybridRetriever":
+    """Return the process-wide retriever for one store and configuration."""
+
+    try:
+        key = (id(vectorstore), tuple(sorted(kwargs.items(), key=lambda item: item[0])))
+        hash(key)
+    except TypeError:  # 不可哈希的构造参数：退化为一次性实例，与旧行为一致
+        return HybridRetriever(vectorstore, **kwargs)
+    with _SHARED_RETRIEVERS_LOCK:
+        cached = _SHARED_RETRIEVERS.get(key)
+        if cached is not None and cached[0] is vectorstore and cached[1].refresh_if_stale():
+            return cached[1]
+        retriever = HybridRetriever(vectorstore, **kwargs)
+        _SHARED_RETRIEVERS[key] = (vectorstore, retriever)
+        while len(_SHARED_RETRIEVERS) > _SHARED_RETRIEVERS_CAP:
+            _SHARED_RETRIEVERS.pop(next(iter(_SHARED_RETRIEVERS)))
+        return retriever
 
 
 @dataclass(frozen=True)
@@ -204,6 +238,8 @@ class HybridRetriever:
             self._short_context_target_chars, short_context_max_chars
         )
         self._bm25: BM25Index | None = None
+        self._bm25_count: int = -1
+        self._bm25_lock = threading.Lock()
         self._blocks: dict[str, tuple[str, dict[str, Any]]] = {}
         self._index_to_id: dict[int, str] = {}
         self._canonical_by_id: dict[str, str] = {}
@@ -520,7 +556,13 @@ class HybridRetriever:
                     route=route,
                     rank=rank,
                     hit=hit,
-                    rescue_eligible=self._is_lexical_rescue(route_kind, rank, hit),
+                    rescue_eligible=self._is_lexical_rescue(
+                        route_kind,
+                        rank,
+                        hit,
+                        has_dense=block_id in dense_sims,
+                        dense_similarity=dense_sims.get(block_id),
+                    ),
                 )
                 lexical.setdefault(block_id, []).append(evidence)
                 if include_trace:
@@ -553,7 +595,15 @@ class HybridRetriever:
             signals=signals,
         )
 
-    def _is_lexical_rescue(self, route_kind: str, rank: int, hit: BM25Hit) -> bool:
+    def _is_lexical_rescue(
+        self,
+        route_kind: str,
+        rank: int,
+        hit: BM25Hit,
+        *,
+        has_dense: bool = False,
+        dense_similarity: float | None = None,
+    ) -> bool:
         if rank > self._bm25_rescue_k:
             return False
         if hit.rarity < self._lexical_min_rarity:
@@ -571,13 +621,38 @@ class HybridRetriever:
             # insufficient: a troubleshooting note that merely mentions K8S is not an incident
             # record. Definition-only queries (“什么是 ADB”) have no additional term and retain
             # exact-identifier rescue.
-            return not non_identifier_query_terms or bool(non_identifier_matched_terms)
+            if not non_identifier_query_terms:
+                return True
+            if not non_identifier_matched_terms:
+                return False
+            # A long conversational question that merely mentions a product name (neg_benchmark:
+            # “bge-m3 在 CPU 上跑，首 token 延迟是多少”) still has to clear the dilution bar;
+            # otherwise every block that names the identifier is rescued with similarity 0.
+            # Only meaningful where dense evidence is missing or contradicts the match. A solid
+            # 0.50 cosine for the very block that names the identifier is not dilution, it is
+            # corroboration — tightening there only loses correct identifier hits.
+            if (
+                hit.informative_query_terms >= self._lexical_long_query_terms
+                and hit.informative_coverage < self._lexical_long_query_min_coverage
+                and hit.informative_matched_terms < _LONG_QUERY_MATCH_ESCAPE
+                and (
+                    dense_similarity is None
+                    or dense_similarity < self._lexical_override_min_similarity
+                )
+            ):
+                return False
+            return True
         # A long conversational query contains many generic bigrams ("公司/对比/详情"). Every
         # route must independently cover enough informative terms; a normalized copy does not
-        # receive a weaker gate than the original.
+        # receive a weaker gate than the original. Coverage alone is scale-blind though: a
+        # Chinese sentence tokenizes into 20-40 single chars/bigrams, so six or more independent
+        # informative matches stay strong evidence while the ratio can look low. The escape
+        # requires a dense signal for the same block: without one, a handful of common
+        # single-character matches is indistinguishable from incidental noise.
         if (
             hit.informative_query_terms >= self._lexical_long_query_terms
             and hit.informative_coverage < self._lexical_long_query_min_coverage
+            and not (has_dense and hit.informative_matched_terms >= _LONG_QUERY_MATCH_ESCAPE)
         ):
             return False
         if hit.informative_query_terms == 1 and hit.informative_matched_terms == 1:
@@ -610,7 +685,39 @@ class HybridRetriever:
                 anchors.append(block_id)
 
         if not anchors:
-            return [], decisions, {}
+            # 空结果降级（缺陷 D5）：dense 分低不等于证据无关——长口语问句会把相关块的
+            # cosine 稀释到 0.3 附近，门控于是把「词法强命中 + dense 低」判成矛盾证据，
+            # 一次性交出 0 条，最终变成「没有找到依据」。词法证据已经能独立成立时，宁可
+            # 给 1–3 条低置信证据让模型自己判断，也不要让它对着「零命中」瞎猜。
+            # 三重条件（rescure_eligible + 信息词 ≥3 + anchor ≥1 + BM25 前 5 名）保证只有
+            # 强词法巧合能通过；弱巧合仍然返回空，不替代「库里确实没有」的诚实结论。
+            hard_vetoes = {
+                "rejected_lexical_dense_contradiction",
+                "rejected_low_quality_lexical_fill",
+                "rejected_numeric_noise_below_threshold",
+            }
+            fallback = [
+                block_id
+                for block_id in fusion.ordered
+                if not (
+                    decisions.get(block_id) is not None
+                    and decisions[block_id].reason in hard_vetoes
+                )
+                and any(
+                    evidence.rescue_eligible
+                    and evidence.hit.informative_matched_terms >= 3
+                    and evidence.hit.anchor_matched_terms >= 1
+                    and evidence.rank <= 5
+                    for evidence in fusion.lexical.get(block_id, [])
+                )
+            ][: self._lexical_reserve_k]
+            if not fallback:
+                return [], decisions, {}
+            for block_id in fallback:
+                decisions[block_id] = _GateDecision(
+                    True, "accepted_lexical_fallback", None
+                )
+            anchors = fallback
 
         anchors, lexical_reserved, dense_reserved = self._prioritize_anchors(
             anchors, fusion, intent
@@ -1167,7 +1274,16 @@ class HybridRetriever:
         both dense and lexical retrieval from returning the same evidence more than once.
         """
 
-        if self._bm25 is None:
+        if self._bm25 is not None:
+            return self._bm25
+        with self._bm25_lock:
+            # 双重检查：并发首次检索只建一次索引，其余请求等这一次完成后直接复用。
+            if self._bm25 is not None:
+                return self._bm25
+            try:
+                observed_count = self._vectorstore.count()
+            except Exception:  # 统计失败不应阻断索引构建，只是失去失效判据
+                observed_count = -1
             texts: list[str] = []
             self._blocks = {}
             self._index_to_id = {}
@@ -1196,7 +1312,47 @@ class HybridRetriever:
                 self._blocks[block_id] = (text, metadata)
                 self._index_to_id[index] = block_id
             self._bm25 = BM25Index(texts)
+            self._bm25_count = observed_count
         return self._bm25
+
+    def ensure_index(self) -> bool:
+        """启动期预热入口：立即构建词法索引，返回是否已就绪。
+
+        进程启动后由后台线程调用一次，把 4.7k 块的 BM25 构建成本（实测 2–3.4s）
+        从「第一问」挪到「服务启动」。构建失败只返回 ``False``，不抛异常——预热
+        不该影响服务可用性，第一问会再试一次。
+        """
+
+        try:
+            self._ensure_bm25()
+        except Exception:  # noqa: BLE001 - 预热失败不阻断服务
+            return False
+        return self._bm25 is not None
+
+    def refresh_if_stale(self) -> bool:
+        """Drop the cached BM25 index when the collection size changed.
+
+        返回 ``True`` 表示这个实例仍可继续服务（需要时会就地重建索引）。集合规模是
+        ``VectorStore`` 协议里唯一便宜的探针；同规模的内容变更由再入库产生的新 collection
+        身份负责换实例，不在此处猜测。
+        """
+
+        if self._bm25 is None:
+            return True
+        try:
+            current = self._vectorstore.count()
+        except Exception:
+            current = -1
+        if current == self._bm25_count:
+            return True
+        with self._bm25_lock:
+            # 就地失效：下一次检索在锁内重建，避免多个并发请求各自建一份索引。
+            self._bm25 = None
+            self._bm25_count = -1
+            self._blocks = {}
+            self._index_to_id = {}
+            self._canonical_by_id = {}
+        return True
 
     @staticmethod
     def _validate_variants(
