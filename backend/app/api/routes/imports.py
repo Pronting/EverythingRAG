@@ -42,6 +42,7 @@ from app.ingestion.pipeline import IngestionPipeline, IngestReport
 from app.ingestion.scanner import discover_file
 from app.ingestion.state_store import DocumentStateStore
 from app.ingestion.sync import SyncProgress, SyncReport, SyncService
+from app.knowledge.maintenance import maintenance_guard
 from app.vectorstore.base import VectorStore
 
 router = APIRouter()
@@ -256,6 +257,22 @@ def _run_sync_all(
 
 
 def _run_upload(
+    task_id: str,
+    saved_paths: list[Path],
+    documents_root: Path,
+    mode: str,
+    sync: SyncService,
+    store: ImportTaskStore,
+    state_store: DocumentStateStore,
+) -> None:
+    try:
+        with maintenance_guard(sync._vectorstore, timeout_seconds=600):
+            _run_upload_locked(task_id, saved_paths, documents_root, mode, sync, store, state_store)
+    except Exception as exc:  # noqa: BLE001 -- 后台任务边界
+        store.fail(task_id, f"导入失败: {type(exc).__name__}")
+
+
+def _run_upload_locked(
     task_id: str,
     saved_paths: list[Path],
     documents_root: Path,

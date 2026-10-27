@@ -39,6 +39,7 @@ from app.ingestion.pipeline import (
 )
 from app.ingestion.scanner import DiscoveredFile, discover_file, scan_files
 from app.ingestion.state_store import DocFingerprint, DocumentStateStore
+from app.knowledge.maintenance import knowledge_mutation
 from app.models.schemas import BlockMetadata
 from app.vectorstore.base import VectorStore
 from app.vectorstore.embedder import Embedder
@@ -115,6 +116,7 @@ class SyncService:
         if worker is not None:
             self._pipeline.set_worker(worker)
 
+    @knowledge_mutation
     def ingest(
         self,
         root: Path,
@@ -206,6 +208,7 @@ class SyncService:
         self._state_store.register_source(root)
         return report
 
+    @knowledge_mutation
     def sync_upload(
         self,
         files: list[DiscoveredFile],
@@ -421,6 +424,7 @@ class SyncService:
             errors=tuple(errors),
         )
 
+    @knowledge_mutation
     def ingest_many(
         self,
         roots: list[Path],

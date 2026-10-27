@@ -12,6 +12,7 @@ D-KB（全局共享知识库）：知识只有一份，本模块的端点仍按 
 
 from __future__ import annotations
 
+import asyncio
 import io
 import re
 
@@ -32,6 +33,7 @@ from app.generation.knowledge_catalog import KnowledgeOverview, build_knowledge_
 from app.ingestion.image_state_store import ImageStateStore
 from app.ingestion.import_task import ImportTaskStore
 from app.ingestion.state_store import DocumentStateStore
+from app.knowledge.maintenance import maintenance_guard
 from app.vectorstore.base import VectorStore
 
 router = APIRouter()
@@ -106,14 +108,22 @@ async def delete_knowledge(
 
     if tasks.has_running() or images.count_status().get("pending", 0) > 0:
         raise HTTPException(status_code=409, detail="导入、同步或图片识别仍在进行，请完成后再删除")
-    blocks = vectorstore.list_blocks()
-    for offset in range(0, len(blocks), 1000):
-        vectorstore.delete_by_ids([block[0] for block in blocks[offset:offset + 1000]])
-    state.clear()
-    images.clear()
-    tasks.clear()
+    def clear_index():
+        with maintenance_guard(vectorstore):
+            blocks = vectorstore.list_blocks()
+            for offset in range(0, len(blocks), 1000):
+                vectorstore.delete_by_ids([block[0] for block in blocks[offset:offset + 1000]])
+            state.clear()
+            images.clear()
+            tasks.clear()
+            return len(blocks)
+
+    try:
+        deleted = await asyncio.to_thread(clear_index)
+    except TimeoutError:
+        raise HTTPException(status_code=409, detail="知识索引正在维护") from None
     # PRD 5.3.6（D-KB 口径）：删除**提交成功后**递增知识版本，使下一次工具调用读到
     # 更新后的索引（缓存键含 knowledge_revision）；共享知识 ⇒ **所有**工作区的版本
     # 一起递增（见 deps.knowledge_revision_bumped）。响应体保持原样，不改契约。
     await knowledge_revision_bumped(context.workspace_id)
-    return {"deleted_chunks": len(blocks)}
+    return {"deleted_chunks": deleted}

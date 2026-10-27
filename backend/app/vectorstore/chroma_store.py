@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import hashlib
 import math
+import threading
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -19,7 +21,7 @@ from app.ingestion.index_schema import INGESTION_SCHEMA_VERSION
 from app.models.schemas import BlockMetadata
 from app.vectorstore.embedder import Embedder
 from app.vectorstore.integrity import IndexIntegrityReport
-from app.vectorstore.write_lock import exclusive_write_lock
+from app.vectorstore.write_lock import exclusive_write_lock, local_read_lock
 
 
 def _serialize_metadata(metadata: BlockMetadata) -> dict[str, Any]:
@@ -50,6 +52,8 @@ class ChromaVectorStore:
         self._embedder = embedder
         self._image_description_by_source: dict[str, tuple[str, str]] | None = None
         self._write_lock_path = self._persist_dir / ".chroma-write.lock"
+        self.maintenance_lock_path = self._persist_dir / ".knowledge-maintenance.lock"
+        self._read_state = threading.local()
         with exclusive_write_lock(self._write_lock_path):
             self._client = chromadb.PersistentClient(
                 path=str(self._persist_dir),
@@ -69,6 +73,8 @@ class ChromaVectorStore:
         /api/status 等服务入口崩溃。读路径仅在需要自愈时获取跨进程写锁；写路径由
         调用方传入 ``write_lock_held=True``，复用外层锁，避免嵌套文件锁死锁。
         """
+        if getattr(self._read_state, "active", False):
+            return operation(self._collection)
         try:
             return operation(self._collection)
         except NotFoundError:
@@ -85,6 +91,20 @@ class ChromaVectorStore:
 
             with exclusive_write_lock(self._write_lock_path):
                 return recreate_and_retry()
+
+    @contextmanager
+    def read_guard(self):
+        with (
+            local_read_lock(self._persist_dir / ".knowledge-read.lock"),
+            exclusive_write_lock(self.maintenance_lock_path, timeout_seconds=0),
+            exclusive_write_lock(self._write_lock_path, timeout_seconds=0),
+        ):
+            previous = getattr(self._read_state, "active", False)
+            self._read_state.active = True
+            try:
+                yield
+            finally:
+                self._read_state.active = previous
 
     def upsert(
         self,

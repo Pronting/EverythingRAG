@@ -16,10 +16,14 @@ sys.path.insert(0, str(ROOT / "backend"))
 
 from app.api.deps import get_embedder
 from app.core.config import settings
-from app.ingestion.image_document import IMAGE_REPRESENTATION_VERSION, build_image_document
+from app.ingestion.image_document import (
+    IMAGE_REPRESENTATION_VERSION,
+    build_image_document,
+)
 from app.ingestion.index_schema import make_index_fingerprint
 from app.models.schemas import BlockMetadata
 from app.vectorstore.chroma_store import create_vector_store
+from app.vectorstore.write_lock import exclusive_write_lock
 
 
 def main() -> None:
@@ -119,4 +123,5 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    with exclusive_write_lock(settings.data_dir / ".knowledge-maintenance.lock", 600):
+        main()

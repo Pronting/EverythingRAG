@@ -36,6 +36,7 @@ from app.ingestion.markdown_parser import parse_markdown
 from app.ingestion.parallel import ordered_parallel_map
 from app.ingestion.scanner import DiscoveredFile, scan_directory
 from app.ingestion.state_store import DocumentStateStore
+from app.knowledge.maintenance import knowledge_mutation
 from app.models.schemas import BlockMetadata, SourceType
 from app.vectorstore.base import VectorStore
 from app.vectorstore.embedder import Embedder
@@ -251,6 +252,7 @@ class IngestionPipeline:
                 result.append(_make_sub_chunk(chunk, text, idx))
         return result
 
+    @knowledge_mutation
     def ingest(
         self,
         root_dir: Path,
@@ -360,6 +362,7 @@ class IngestionPipeline:
             errors=tuple(errors),
         )
 
+    @knowledge_mutation
     def ingest_file(self, file: DiscoveredFile) -> tuple[list[Chunk], int]:
         """单文件：读 → 解析 → 切块 → 批次嵌入 → upsert，返回 (chunks, upserted)。
 
@@ -583,6 +586,7 @@ class IngestionPipeline:
         )
         return (task.block_id, document.evidence_text, vector, metadata)
 
+    @knowledge_mutation
     def process_image_task_and_upsert(self, task: ImageTask) -> bool:
         """处理单个图片引用并 upsert（后台 worker 调用）；返回是否成功。"""
         block = self.process_image_task(task)

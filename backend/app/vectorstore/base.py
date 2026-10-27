@@ -6,6 +6,8 @@
 
 from __future__ import annotations
 
+from contextlib import AbstractContextManager
+from pathlib import Path
 from typing import Any, Protocol
 
 from app.models.schemas import BlockMetadata
@@ -18,6 +20,11 @@ class VectorStore(Protocol):
     - 元数据仅收标量(str/int/float/bool)，非标量放 state.db 双写；
     - 单一 collection（名称含嵌入模型指纹），余弦距离。
     """
+
+    maintenance_lock_path: Path
+
+    def read_guard(self) -> AbstractContextManager[None]:
+        ...
 
     def upsert(
         self,
