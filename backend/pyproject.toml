@@ -8,6 +8,7 @@ version = "0.1.0"
 description = "Everything RAG 个人知识第二大脑 —— 后端（纯本地）"
 requires-python = ">=3.11"
 dependencies = [
+    "mcp==2.3.0",
     # Web 服务
     "fastapi>=0.115",
     "uvicorn[standard]>=0.32",

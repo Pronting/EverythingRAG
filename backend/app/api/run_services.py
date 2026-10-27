@@ -25,6 +25,7 @@ from app.agent.memory import compose_agent_memory_context, ensure_conversation_s
 from app.agent.runtime import RunManager
 from app.agent.tools import build_default_registry
 from app.api import deps
+from app.api.knowledge_services import knowledge_service_for
 from app.api.run_images import LocalImageFetcher, persist_run_images
 from app.core.outbound import outbound_client
 from app.core.settings_store import (
@@ -38,7 +39,7 @@ from app.generation.vision import VisionProviderError, create_vision_model_from_
 from app.ingestion.image_fetch import ImageFetcher
 from app.ingestion.pipeline import IngestionPipeline
 from app.retrieval.evidence_view import RetrievalScope
-from app.retrieval.hybrid_retriever import HybridRetriever, shared_retriever
+from app.retrieval.hybrid_retriever import shared_retriever
 from app.retrieval.vector_retriever import DEFAULT_MIN_SIMILARITY
 
 logger = logging.getLogger(__name__)
@@ -153,6 +154,7 @@ def tool_services_for(context: Any) -> Mapping[str, Any]:
         # 集合规模变化时 retriever 自行失效重建，语义与「每次新建」一致，只是不再重复付费。
         "retriever": shared_retriever(vector_store, min_similarity=DEFAULT_MIN_SIMILARITY),
         "knowledge_area": knowledge_area,
+        "knowledge_service": knowledge_service_for(context),
         "search_provider": search_provider,
         "extract_provider": search_provider,
         "image_reader": KnowledgeImageReader(vision, image_store) if vision else None,

@@ -8,7 +8,7 @@ from __future__ import annotations
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import Field, SecretStr
+from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 APP_VERSION = "0.1.0"
@@ -27,6 +27,19 @@ class Settings(BaseSettings):
     # 本服务绑定（本地回环，不开放远程访问）
     host: str = "127.0.0.1"
     port: int = 9999  # 启动脚本固定使用 9999（见 scripts/run.py）
+    mcp_enabled: bool = False
+    mcp_token: SecretStr | None = None
+    mcp_max_concurrency: int = Field(default=4, ge=1, le=32)
+    mcp_timeout_seconds: float = Field(default=45, gt=0, le=600)
+    mcp_max_result_chars: int = Field(default=24000, ge=1024, le=24000)
+
+    @model_validator(mode="after")
+    def validate_mcp(self) -> Settings:
+        if self.mcp_enabled and (
+            self.mcp_token is None or len(self.mcp_token.get_secret_value()) < 32
+        ):
+            raise RuntimeError("启用 MCP 需要至少 32 个字符的 EVERYTHING_RAG_MCP_TOKEN")
+        return self
     # CORS：同源部署默认关闭，保留配置位
     enable_cors: bool = False
     cors_origins: list[str] = []

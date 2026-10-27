@@ -10,7 +10,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
@@ -27,6 +27,7 @@ from app.api.deps import (
     register_app_store,
     resume_pending_image_tasks,
 )
+from app.api.knowledge_services import knowledge_service_for
 from app.api.routes.approvals import router as approvals_router
 from app.api.routes.audit import router as audit_router
 from app.api.routes.avatars import router as avatars_router
@@ -47,10 +48,12 @@ from app.core.workspace_store import WORKSPACE_LAYOUT_VERSION
 from app.ingestion.import_task import ImportTaskStore
 from app.ingestion.index_schema import make_index_fingerprint
 from app.ingestion.state_store import DocumentStateStore
+from app.mcp_server.server import MCPMount, MCPRuntime
 from app.vectorstore.base import VectorStore
 from app.vectorstore.embedder import Embedder
 
 logger = logging.getLogger(__name__)
+mcp_mount = MCPMount()
 
 
 async def _initialize_history_indexes(store: AppStore) -> None:
@@ -148,7 +151,17 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
         resume_pending_image_tasks()
         # 后台预热词法索引：把 BM25 构建成本（4.7k 块约 2–3.4s）从第一问挪到启动期。
         warm_retrieval_indexes()
-        yield
+        if settings.mcp_enabled:
+            runtime = MCPRuntime(settings, knowledge_service_for)
+            async with runtime.server.session_manager.run():
+                mcp_mount.runtime = runtime
+                try:
+                    yield
+                finally:
+                    mcp_mount.runtime = None
+                    await runtime.aclose()
+        else:
+            yield
     finally:
         if manager is not None:
             try:
@@ -172,6 +185,21 @@ app = FastAPI(
 )
 
 # 业务路由
+app.mount("/mcp", mcp_mount, name="mcp")
+
+
+@app.api_route("/mcp", methods=["GET", "POST", "DELETE", "OPTIONS"])
+async def mcp_without_slash(request: Request):
+    from starlette.responses import JSONResponse, RedirectResponse
+
+    if not settings.mcp_enabled or mcp_mount.runtime is None:
+        return JSONResponse({"detail": "Not Found"}, status_code=404)
+    rejection = mcp_mount.runtime.app.rejection(request.scope)
+    if rejection is not None:
+        return rejection
+    return RedirectResponse("/mcp/", status_code=307)
+
+
 app.include_router(chat_router)
 app.include_router(audit_router)
 app.include_router(avatars_router)

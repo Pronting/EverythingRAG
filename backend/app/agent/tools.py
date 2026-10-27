@@ -350,6 +350,9 @@ class ReadDocumentParams(ContractModel):
     """``read_document`` 参数：读取指定文档的原文位置。"""
 
     document_id: str = Field(min_length=1, description="lookup_catalog 返回的 document_id。")
+    expected_document_revision: str | None = Field(
+        default=None, description="连续读取时传入上一页的 document_revision。",
+    )
     query: str | None = Field(default=None, description="在全文中定位本次研究关注的正文。")
     heading: str | None = Field(
         default=None,
@@ -628,6 +631,7 @@ class ToolContext:
     embedder: Any = None
     retriever: Any = None
     knowledge_area: Any = None
+    knowledge_service: Any = None
     vector_store: Any = None
     state_store: Any = None
     image_store: Any = None
@@ -1244,6 +1248,15 @@ async def _lookup_catalog(params: LookupCatalogParams, context: ToolContext) -> 
     """在本工作区目录（文档名 / 主题 / 标题）中查找线索，分页返回脱敏来源位置。"""
 
     tool = str(ToolName.LOOKUP_CATALOG)
+    if context.knowledge_service is not None:
+        result = await context.knowledge_service.catalog(params.query, params.limit, params.cursor)
+        data = result.model_dump()
+        data["documents"] = [dict(d, name=d["document_name"]) for d in data["documents"]]
+        data["returned"] = len(result.documents)
+        data["catalog_terms"] = sorted({h for d in result.documents for h in d.headings})[:20]
+        data["knowledge_revision"] = context.knowledge_revision
+        return ToolResult(tool=tool, status=ToolStatus.OK if result.documents else ToolStatus.EMPTY,
+                          data=data)
     vector_store = context.require_vector_store()
     blocks = await asyncio.to_thread(_list_blocks, vector_store)
     documents = _catalog_documents(blocks)
@@ -1334,7 +1347,11 @@ async def _get_workspace_overview(
     tool = str(ToolName.GET_WORKSPACE_OVERVIEW)
     categories = list(params.categories) or ["knowledge", "documents", "topics", "images", "tasks"]
     vector_store = context.require_vector_store()
-    overview = await asyncio.to_thread(_build_overview, vector_store)
+    if context.knowledge_service is not None:
+        snapshot = await asyncio.to_thread(context.knowledge_service.snapshot)
+        overview = await asyncio.to_thread(_build_overview, snapshot)
+    else:
+        overview = await asyncio.to_thread(_build_overview, vector_store)
 
     data: dict[str, Any] = {
         "workspace": {
@@ -1444,6 +1461,32 @@ async def _search_knowledge(params: SearchKnowledgeParams, context: ToolContext)
     """
 
     tool = str(ToolName.SEARCH_KNOWLEDGE)
+    if context.knowledge_service is not None:
+        document_scope = params.document_scope
+        if document_scope:
+            initial = await asyncio.to_thread(context.knowledge_service.snapshot)
+            _, resolved = document_scope_filter(initial.blocks, document_scope)
+            document_scope = sorted(resolved)
+        snapshot, chunks, outcome, raw_count = await context.knowledge_service.search_raw(
+            params.query, params.top_k, document_scope, params.min_similarity,
+            context.rerank_progress,
+        )
+        if outcome is not None:
+            await _report_rerank_outcome(context, outcome)
+        else:
+            await _report_disabled_sources(context, chunks)
+        data = {
+            "query": params.query, "chunks": [_chunk_payload(c) for c in chunks],
+            "count": len(chunks), "candidate_count": raw_count,
+            "knowledge_revision": context.knowledge_revision,
+            "index_revision": snapshot.index_revision,
+        }
+        if outcome is not None:
+            data["retrieval"] = outcome.to_dict()
+        status = ToolStatus.OK if chunks else (
+            ToolStatus.IRRELEVANT if raw_count else ToolStatus.EMPTY
+        )
+        return ToolResult(tool=tool, status=status, data=data)
     vector_store = context.require_vector_store()
     retriever = context.require_retriever()
     if context.embedder is None:
@@ -1760,6 +1803,15 @@ async def _read_document(params: ReadDocumentParams, context: ToolContext) -> To
     """读取指定文档的原文位置（标题 / 锚点 / 可继续读取的位置）。"""
 
     tool = str(ToolName.READ_DOCUMENT)
+    if context.knowledge_service is not None:
+        result, full = await context.knowledge_service.read_with_content(
+            params.document_id, params.heading, params.query, params.offset, params.limit,
+            params.expected_document_revision,
+        )
+        data = result.model_dump()
+        data["headings"] = list(dict.fromkeys(b.heading_path for b in result.blocks))
+        data["knowledge_revision"] = context.knowledge_revision
+        return ToolResult(tool=tool, status=ToolStatus.OK, data=data, read_document_content=full)
     vector_store = context.require_vector_store()
     blocks = await asyncio.to_thread(_list_blocks, vector_store)
     mine = [
@@ -2715,7 +2767,9 @@ class ToolRegistry:
                 task_id=context.task_id,
             )
             if reuse and existing.status is OperationStatus.SUCCEEDED:
-                cached = self._load_cached(context, spec, operation_id, args_hash)
+                cached = await asyncio.to_thread(
+                    self._load_cached, context, spec, operation_id, args_hash
+                )
                 if cached is not None:
                     return replace(cached, permission_checked=permission_checked)
             await store.start_operation_attempt(operation_id)
@@ -2845,6 +2899,10 @@ class ToolRegistry:
         cached = ToolResult.from_payload(
             str(spec.name), payload.get("result") or {}
         )
+        if spec.knowledge_scoped and context.knowledge_service is not None:
+            revision = context.knowledge_service.snapshot().index_revision
+            if cached.data.get("index_revision") != revision:
+                return None
         return replace(cached, operation_id=operation_id)
 
     async def _finish_failed(self, store: AppStore | None, operation_id: str) -> None:
@@ -2930,6 +2988,7 @@ def build_default_registry() -> ToolRegistry:
             description=(
                 "读取指定文档的原文位置。document_id=目录返回的 ID；heading=章节标题片段；"
                 "offset/limit=从哪读多少字符（续读用 next_offset）。"
+                "连续读取需要 expected_document_revision=上一页的 document_revision。"
                 "返回原文窗口、文档版本、标题清单与可继续读取的位置。"
             ),
             returns="text、document_revision、headings、next_offset",
