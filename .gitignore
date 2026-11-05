@@ -52,6 +52,9 @@ credentials.json
 config.local.*
 
 # ---- 个人/工具 ----
+/.workbuddy/memory/
+/Agent.md
+/CLAUDE.md
 .playwright-mcp/
 .playwright/
 .tmp_probe/
