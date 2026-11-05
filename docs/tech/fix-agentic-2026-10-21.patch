@@ -1,0 +1,598 @@
+diff --git a/backend/app/agent/contracts.py b/backend/app/agent/contracts.py
+index acc72a7..904aeac 100644
+--- a/backend/app/agent/contracts.py
++++ b/backend/app/agent/contracts.py
+@@ -214,6 +214,14 @@ class ReasoningLevel(StrEnum):
+     HIGH = "high"  # thinking.type=enabled, reasoning_effort=high
+     MAX = "max"  # thinking.type=enabled, reasoning_effort=max
+ 
++    @classmethod
++    def _missing_(cls, value: object) -> "ReasoningLevel | None":
++        """兼容旧 UI 的 medium：按 high 处理，不新增第四档。"""
++
++        if isinstance(value, str) and value.strip().casefold() in {"medium", "mid"}:
++            return cls.HIGH
++        return None
++
+ 
+ # =====================================================================
+ # t1 冻结区 · 4. 路由与 Agent 角色（PRD 6.2 / 4.2）
+diff --git a/backend/app/agent/graph.py b/backend/app/agent/graph.py
+index 9936a7e..5559625 100644
+--- a/backend/app/agent/graph.py
++++ b/backend/app/agent/graph.py
+@@ -177,6 +177,16 @@ def make_plan_node(services: GraphServices) -> Callable[[AgentState], Awaitable[
+     async def node(state: AgentState) -> dict[str, Any]:
+         plan: Plan = Plan.model_validate(await _maybe_await(services.plan(state)))
+         requirement_texts = {item.requirement_id: item.text for item in plan.requirements}
++        covered = sorted({
++            requirement_id
++            for task in plan.tasks
++            for requirement_id in task.requirement_ids
++            if requirement_id in requirement_texts
++        })
++        uncovered = [
++            text for requirement_id, text in requirement_texts.items()
++            if requirement_id not in covered
++        ]
+         await _emit(
+             services,
+             state,
+@@ -195,8 +205,10 @@ def make_plan_node(services: GraphServices) -> Callable[[AgentState], Awaitable[
+                     }
+                     for task in plan.tasks
+                 ],
+-                "covered_requirements": [],
+-                "uncovered_requirements": list(requirement_texts),
++                "covered_requirements": covered,
++                # 未覆盖项给要求文本：旧实现把 dict 的键（R1..Rn）当文本发出，
++                # 前端因此永远显示「全部未覆盖」。
++                "uncovered_requirements": uncovered,
+             },
+         )
+         return {
+diff --git a/backend/app/agent/planner.py b/backend/app/agent/planner.py
+index 1f29e17..e624a85 100644
+--- a/backend/app/agent/planner.py
++++ b/backend/app/agent/planner.py
+@@ -226,8 +226,8 @@ TASK_SOURCES: Final[dict[TaskSource, tuple[AgentKind, str]]] = {
+         "通用解释或设计建议（标记 general_knowledge / proposal，不生成文档引用编号）",
+     ),
+     TaskSource.PRODUCT: (
+-        AgentKind.RAG,
+-        "产品说明与结构化统计（get_workspace_overview / lookup_catalog）",
++        AgentKind.GENERAL,
++        "产品说明（内置产品事实，不检索用户文档）",
+     ),
+ }
+ 
+diff --git a/backend/app/agent/research.py b/backend/app/agent/research.py
+index fbbb6c8..0e59a72 100644
+--- a/backend/app/agent/research.py
++++ b/backend/app/agent/research.py
+@@ -29,6 +29,7 @@ from __future__ import annotations
+ import asyncio
+ import hashlib
+ import json
++import logging
+ import re
+ from collections.abc import Callable, Mapping, Sequence
+ from copy import deepcopy
+@@ -42,6 +43,8 @@ from zoneinfo import ZoneInfo
+ from markdown_it import MarkdownIt
+ from pydantic import Field, ValidationError
+ 
++logger = logging.getLogger(__name__)
++
+ from app.agent import query_plan
+ from app.agent import routing as _routing
+ from app.agent.contracts import (
+@@ -139,6 +142,15 @@ DEFAULT_TOP_K: Final[int] = DEFAULT_CONTEXT_TOP_K
+ #: 片段相关度门控（低于该值只作为弱候选，不作为依据；PRD 7.2 第 2 步）。
+ RAG_SIMILARITY_FLOOR: Final[float] = 0.35
+ 
++#: 生产装配的 0.60 门控会把中文口语问句整批判死；同一参数降到该值再试一次。
++GATE_FALLBACK_SIMILARITY: Final[float] = 0.35
++
++#: 「有哪几篇 / 哪些文章」类目录盘点问句：语义检索不可靠，先盘点目录。
++_CATALOG_LIST_PATTERN: Final[re.Pattern[str]] = re.compile(
++    r"(?:有哪(?:几)?篇|哪几篇|哪些(?:文章|文档|资料|篇)|"
++    r"列出[^。！？?]{0,20}(?:文章|文档|资料)|(?:文章|文档)(?:的)?列表)"
++)
++
+ #: 「要求文本 ↔ 证据正文」支持度阈值（用于 ``supported_requirements`` 判定）。
+ SUPPORT_RATIO: Final[float] = 0.2
+ 
+@@ -1605,6 +1617,19 @@ class RagResearcher(BaseResearcher):
+                 resumable=False,
+             )
+ 
++        # 「有哪几篇文章 / 哪些资料」：先盘点目录，再让语义检索补正文。
++        catalog_evidence = await self._catalog_listing(
++            request,
++            context,
++            workspace_id=workspace_id,
++            run_id=run_id,
++            task_id=task.task_id,
++            requirement_ids=requirement_ids,
++            notes=limitations,
++        )
++        if catalog_evidence:
++            evidences.extend(catalog_evidence)
++
+         while True:
+             if self.max_rounds is not None and progress.round >= self.max_rounds:
+                 stop_reason = "round_cap"
+@@ -1657,6 +1682,29 @@ class RagResearcher(BaseResearcher):
+                 else:
+                     retrieval_tools.append(f"{ToolName.SEARCH_KNOWLEDGE}:{query}")
+                     executed_queries += 1
++                if (
++                    result.status in {ToolStatus.EMPTY, ToolStatus.IRRELEVANT}
++                    and "min_similarity" not in arguments
++                    and not result.reused
++                ):
++                    retry_arguments = {**arguments, "min_similarity": GATE_FALLBACK_SIMILARITY}
++                    try:
++                        retried = (
++                            await run_shared.execute(
++                                self.registry, ToolName.SEARCH_KNOWLEDGE, retry_arguments, context
++                            )
++                            if run_shared is not None
++                            else await self.registry.execute(
++                                ToolName.SEARCH_KNOWLEDGE, retry_arguments, context
++                            )
++                        )
++                    except ToolError:
++                        retried = None
++                    if retried is not None and retried.status is ToolStatus.OK:
++                        retrieval_detail.append(
++                            f"查询「{query}」在 {GATE_FALLBACK_SIMILARITY:.2f} 门控下重试命中"
++                        )
++                        result = retried
+                 self._collect_retrieval(
+                     query,
+                     result,
+@@ -1730,6 +1778,20 @@ class RagResearcher(BaseResearcher):
+                         target for target in [*pending_reads, *selected] if target not in read_done
+                     ))
+                     selection_applied = True
++            if re.search(r"区别|差异|对比|相比|不同|各自|\bvs\b", request.task.question, re.IGNORECASE):
++                # 对比类问题：章节选择可能只挑中一侧文档。另一侧即使词面重叠低，
++                # 也要补读其最高分章节，否则整侧资料缺失、对比无法成立。
++                covered_documents = {document_id for document_id, _heading in [*merged_reads, *read_done]}
++                if len(covered_documents) < 2:
++                    for target in self._auto_read_targets(
++                        weak_chunks, documents_seen, focus=request.task.question, limit=3
++                    ):
++                        if target[0] in covered_documents:
++                            continue
++                        merged_reads.append(target)
++                        covered_documents.add(target[0])
++                        if len(covered_documents) >= 2:
++                            break
+             if len(request.document_scope) > 1:
+                 # 每份指定资料都保留相关阅读，防止全局候选排名覆盖其中一份。
+                 for scope in request.document_scope:
+@@ -1775,6 +1837,14 @@ class RagResearcher(BaseResearcher):
+             evidences = attribute_requirements(
+                 evidences, requirement_texts, task_question=task.question, named_terms=named_terms
+             )
++            if catalog_evidence:
++                # 目录条目本来就只回答「有哪些文档」，词面匹配会把它误判为无关证据。
++                for item in evidences:
++                    if (
++                        item.source_type is EvidenceSourceType.CATALOG
++                        and not item.supported_requirements
++                    ):
++                        item.supported_requirements = list(requirement_ids)
+             fingerprint = _material_fingerprint(evidences)
+             if fingerprint == previous_fingerprint and not round_evidence:
+                 progress.same_material_rounds += 1
+@@ -1943,6 +2013,74 @@ class RagResearcher(BaseResearcher):
+ 
+     # ---- 各步实现 ----
+ 
++    async def _catalog_listing(
++        self,
++        request: ResearchRequest,
++        context: ToolContext,
++        *,
++        workspace_id: str,
++        run_id: str,
++        task_id: str,
++        requirement_ids: Sequence[str],
++        notes: list[str],
++    ) -> list[Evidence]:
++        """目录盘点问句：用 ``lookup_catalog`` 列出匹配文档，而不是只做语义检索。"""
++
++        if request.document_scope:
++            return []
++        text = " ".join(
++            item for item in (request.task.question, request.original_question) if item
++        )
++        if not _CATALOG_LIST_PATTERN.search(text):
++            return []
++        topic = _CATALOG_LIST_PATTERN.sub(" ", text)
++        topic = re.sub(r"[《》\"'“”‘’？?。！!，,；;\s]+", " ", topic).strip()
++        core = re.sub(
++            r"(相关|有关|关于|的文章|文章|文档|资料|知识库|都有|哪些|哪几[篇个章节]?|列出|介绍|讲讲|的)",
++            " ",
++            topic,
++        )
++        core = re.sub(r"\s+", " ", core).strip()
++        result = None
++        for query in dict.fromkeys(item for item in (topic, core) if item):
++            try:
++                result = await self.registry.execute(
++                    ToolName.LOOKUP_CATALOG, {"query": query, "limit": 20}, context
++                )
++            except ToolError as exc:
++                notes.append(f"目录盘点失败（{exc}），改用语义检索")
++                return []
++            if result.status is ToolStatus.OK:
++                break
++        if result is None or result.status is not ToolStatus.OK:
++            notes.append("目录中没有匹配的文档名/标题")
++            return []
++        evidences: list[Evidence] = []
++        for document in result.data.get("documents", []):
++            name = str(document.get("name") or document.get("document_id") or "")
++            headings = "；".join(str(item) for item in (document.get("headings") or [])[:6])
++            content = f"目录条目《{name}》：{document.get('chunk_count', 0)} 个知识块"
++            if document.get("topic"):
++                content += f"；主题：{document['topic']}"
++            if headings:
++                content += f"；标题：{headings}"
++            evidences.append(
++                make_evidence(
++                    workspace_id=workspace_id,
++                    run_id=run_id,
++                    task_id=task_id,
++                    source_type=EvidenceSourceType.CATALOG,
++                    source_ref=f"{document.get('document_id', '')}#catalog",
++                    content=content,
++                    document_revision=str(document.get("document_revision") or ""),
++                    supported_requirements=list(requirement_ids),
++                    document_title=name,
++                    heading_path=headings,
++                )
++            )
++        notes.append(f"目录盘点命中 {len(evidences)} 篇文档（按标题/主题）")
++        return evidences
++
+     def _collect_retrieval(
+         self,
+         query: str,
+@@ -2219,10 +2357,18 @@ class RagResearcher(BaseResearcher):
+                           "candidates": [{"index": index, **candidate}
+                                          for index, candidate in enumerate(candidates.values())]}, ensure_ascii=False)
+         )
+-        raw = await asyncio.to_thread(self.section_model, prompt)
+-        selection = SectionSelection.model_validate_json(raw)
+-        if any(item.index >= len(keys) for item in selection.targets):
+-            raise ValueError("章节选择引用了候选范围之外的编号")
++        try:
++            raw = await asyncio.to_thread(self.section_model, prompt)
++        except Exception as exc:  # 模型失败不应打死整轮研究：退回默认阅读目标
++            logger.warning("章节选择模型不可用，退回默认阅读目标：%r", exc)
++            return None
++        try:
++            selection = SectionSelection.model_validate_json(raw)
++            if any(item.index >= len(keys) for item in selection.targets):
++                raise ValueError("章节选择引用了候选范围之外的编号")
++        except (ValidationError, ValueError) as exc:
++            logger.warning("章节选择输出不可解析，退回默认阅读目标：%r", exc)
++            return None
+         return _cover_named_document_sections(
+             candidates,
+             [keys[item.index] for item in selection.targets],
+@@ -2373,7 +2519,21 @@ class RagResearcher(BaseResearcher):
+             key=lambda item: (-item[0], item[1]),
+         )
+         positive = [item for item in ranked if item[0] > 0]
+-        return [(document_id, heading) for _score, document_id, heading in positive[:limit]]
++        pool = positive
++        if re.search(r"区别|差异|对比|相比|不同|各自|\bvs\b", focus or "", re.IGNORECASE):
++            # 对比类问题需要两侧各自的章节：检索已按相关性排序，即使某一侧与整句
++            # 问法的词面重叠为 0，也只补该文档的最高分章节，避免整侧缺失。
++            pool = positive + [item for item in ranked if item[0] <= 0]
++        selected: list[tuple[str, str]] = []
++        seen_documents: set[str] = set()
++        for _score, document_id, heading in pool:
++            if document_id in seen_documents:
++                continue
++            seen_documents.add(document_id)
++            selected.append((document_id, heading))
++            if len(selected) >= limit:
++                break
++        return selected
+ 
+     def _coverage(
+         self,
+@@ -3604,13 +3764,15 @@ def _web_evidence_supports(question: str, evidence: Evidence, *, task_question:
+     if not (text_supports(question, identity) or text_supports(task_question, identity)):
+         return False
+     if not re.search(r"范围|最小|最大|上限|下限|\b(?:range|bounds|minimum|maximum)\b", question, re.IGNORECASE):
+-        return _web_content_supports(question, evidence.content)
++        return _web_content_supports(question, evidence.content) or _web_identity_fallback(
++            question, evidence
++        )
+     # 参数名称必须能够对应任务中的完整英文用词，并在正文中给出上下界。
+     for parameter in _web_parameter_names(f"{question} {task_question}", evidence.content):
+         identifier = parameter[:1].lower() + parameter[1:]
+         if _web_content_supports(f"{identifier} {question}", evidence.content):
+             return True
+-    return False
++    return _web_identity_fallback(question, evidence)
+ 
+ 
+ def _web_parameter_names(question: str, content: str) -> list[str]:
+@@ -3627,6 +3789,32 @@ def _web_parameter_names(question: str, content: str) -> list[str]:
+     return matched
+ 
+ 
++_WEB_IDENTITY_STOPWORDS: frozenset[str] = frozenset(
++    {"the", "and", "for", "what", "how", "why", "which", "with", "from", "that",
++     "this", "are", "was", "does", "can", "you", "not", "http", "https", "www"}
++)
++
++
++def _web_identity_fallback(question: str, evidence: Evidence) -> bool:
++    """词面支持失败时，用来源身份确认研究对象。
++
++    中文问句与英文官方页常常没有共同词元（「最小的调度单位」vs
++    "smallest deployable unit"），旧逻辑因此把已读到的官方页整段丢弃，答案只能
++    改口「没有可核对来源」。这里用标题/URL 中的专有名词确认研究对象；正文用于
++    哪句陈述仍由合成阶段逐段引用约束，不因此放宽引用核验。
++    """
++
++    identity = f"{evidence.document_title}\n{evidence.source_ref}".casefold()
++    if not identity.strip():
++        return False
++    terms = {
++        term.casefold()
++        for term in re.findall(r"[A-Za-z][A-Za-z0-9_.-]{2,}", question)
++        if term.casefold() not in _WEB_IDENTITY_STOPWORDS
++    }
++    return bool(terms) and any(term in identity for term in terms)
++
++
+ def _web_content_supports(question: str, content: str) -> bool:
+     identifiers = re.findall(r"\b[a-zA-Z][a-z]+(?:[A-Z][a-zA-Z0-9]*)+\b", question)
+     if identifiers and not all(term.casefold() in content.casefold() for term in identifiers):
+diff --git a/backend/app/agent/routing.py b/backend/app/agent/routing.py
+index ce54566..3afb96e 100644
+--- a/backend/app/agent/routing.py
++++ b/backend/app/agent/routing.py
+@@ -982,13 +982,18 @@ def evaluate_route_rules(input: RoutingInput) -> RuleOutcome:
+         hit("R5", f"联网要求：{marker}")
+         decision.needs_web = True
+         decision.freshness = freshness
+-        if (official_web or product_web) and not (internal_marker or memory_marker):
++        if official_web and not (internal_marker or memory_marker):
+             decision.needs_knowledge = False
+-            notes.append("本轮从产品官方网页查询所问内容")
++            notes.append("用户指定官方来源，本轮以其官方网页为准")
++        elif product_web and input.knowledge_available:
++            # 产品/厂商名命中只代表「优先官方来源」，不能反过来禁掉本地检索：
++            # 联网被策略关闭（关闭思考）时，否则既不查库也不查网，只剩模型常识。
++            decision.needs_knowledge = True
++            notes.append("产品机制题同时查本工作区资料，官方网页作补充")
+         elif not decision.needs_knowledge and bool(explicit_web):
+             decision.needs_knowledge = True
+             notes.append("用户明确要求联网核实，同时也查本工作区资料作为对照")
+-        if not decision.needs_knowledge:
++        if not decision.needs_knowledge and bool(explicit_web or official_web):
+             decision.reason_summary = "根据请求联网查询公开资料"
+ 
+     # ---- R6：通用解释同时涉及已有内部方案 / 术语需要先理解再检索
+@@ -1010,7 +1015,7 @@ def evaluate_route_rules(input: RoutingInput) -> RuleOutcome:
+             "文档观点与案例仍需原文证据"
+         )
+ 
+-    if (official_web or product_web) and not (internal_marker or memory_marker):
++    if official_web and not (internal_marker or memory_marker):
+         decision.needs_knowledge = False
+ 
+     # ---- R9：知识库为空
+diff --git a/backend/app/agent/runtime.py b/backend/app/agent/runtime.py
+index 8b85791..732ecde 100644
+--- a/backend/app/agent/runtime.py
++++ b/backend/app/agent/runtime.py
+@@ -36,6 +36,7 @@ import hashlib
+ import inspect
+ import json
+ import logging
++import os
+ import re
+ import time
+ from collections.abc import AsyncIterator, Awaitable, Callable, Mapping, Sequence
+@@ -139,7 +140,9 @@ logger = logging.getLogger(__name__)
+ GENERAL_MODEL_TIMEOUT_SECONDS: Final[float] = 120.0
+ GENERAL_MODEL_TOTAL_TIMEOUT_SECONDS: Final[float] = 300.0
+ RUN_ACTIVE_TIMEOUT_SECONDS: Final[float] = 900.0
+-OFF_RUN_TIMEOUT_SECONDS: Final[float] = 30.0
++OFF_RUN_TIMEOUT_SECONDS: Final[float] = float(
++    os.environ.get("EVERYTHING_RAG_OFF_RUN_TIMEOUT_SECONDS", "90")
++)
+ _EXECUTION_DEADLINE: ContextVar[float | None] = ContextVar("execution_deadline", default=None)
+ 
+ 
+@@ -1433,6 +1436,9 @@ def synthesis_model_for_chat(
+             correction_budget = SynthesisCorrectionBudget()
+             correction_prompt = review_prompt
+             structure_correction_used = False
++            last_bound = ""
++            last_unbound = ""
++            review = None
+             for attempt in range(5):
+                 semantic_started = False
+                 parsing_correction = rejected_review is not None
+@@ -1475,6 +1481,7 @@ def synthesis_model_for_chat(
+                     )
+                     if not content.strip() or not _has_placeholders(content, citable):
+                         raise SynthesisUnavailable("核查后的答案缺少正文或有效来源引用")
++                    last_bound = content
+                     needs_semantic, semantic_reason = semantic_review_decision(
+                         request, review, citable
+                     )
+@@ -1526,13 +1533,57 @@ def synthesis_model_for_chat(
+                                    "raw": raw, "question": request.question,
+                                    "requirements": request.requirements,
+                                    "evidence": [item.model_dump(mode="json") for item in citable]})
++                    if not last_bound.strip() and review is not None:
++                        unbound = "\n\n".join(
++                            item.text.strip() for item in review.paragraphs if item.text.strip()
++                        )
++                        if unbound:
++                            last_unbound = unbound
++                    degraded = (last_bound or last_unbound).strip()
+                     if semantic_started and not isinstance(exc, ParagraphBindingError):
++                        if degraded:
++                            # 语义复核模型自身失败（如推理吃满输出额度、桥接超时）时，
++                            # 不应把已通过机械核验的整篇正文一起丢掉。
++                            note = (
++                                "\n\n> 说明：本轮语义复核模型未能返回结果，以下正文"
++                                "仅通过机械核验（数值/引用行匹配），"
++                                f"语义层面的支撑度未经二次确认（{exc}）。"
++                            )
++                            if on_review is not None:
++                                on_review({"attempt": attempt + 1, "accepted": True,
++                                           "degraded": True, "error": str(exc), "raw": raw,
++                                           "question": request.question, "review": None,
++                                           "requirements": request.requirements,
++                                           "evidence": [item.model_dump(mode="json") for item in citable]})
++                            return degraded + note
+                         raise SynthesisUnavailable("语义验收未返回有效结果：" + str(exc)) from exc
+                     if parsing_correction:
+                         if structure_correction_used:
+                             raise SynthesisUnavailable("答案修正结构未通过：" + str(exc)) from exc
+                         structure_correction_used = True
+                     elif not correction_budget.reserve_correction(semantic=semantic_started):
++                        if last_bound.strip() or last_unbound.strip():
++                            # 纠正额度用完仍未通过核验：保留已经写好的正文并明确标注
++                            # 「未通过核验」，而不是抛错吞掉整篇回答（用户实测 P0：
++                            # 正文完整却对用户表现为空回答）。引用仍指向真实证据行，
++                            # 读者可自行复核。
++                            note = (
++                                "\n\n> 说明：本回答的部分数值或引用未能通过来源核验"
++                                f"（{exc}）。请以引用原文为准，存疑之处不要直接采信。"
++                            )
++                            if on_review is not None:
++                                on_review({
++                                    "attempt": attempt + 1,
++                                    "accepted": True,
++                                    "degraded": True,
++                                    "error": str(exc),
++                                    "raw": raw,
++                                    "question": request.question,
++                                    "review": review.model_dump(mode="json"),
++                                    "requirements": request.requirements,
++                                    "evidence": [item.model_dump(mode="json") for item in citable],
++                                })
++                            return (last_bound or last_unbound).rstrip() + note
+                         raise SynthesisUnavailable("答案引用核验未通过：" + str(exc)) from exc
+                     if isinstance(exc, ParagraphBindingError):
+                         rejected_review = review
+diff --git a/backend/app/agent/verification.py b/backend/app/agent/verification.py
+index cc8afd9..aa60010 100644
+--- a/backend/app/agent/verification.py
++++ b/backend/app/agent/verification.py
+@@ -421,6 +421,48 @@ def _check_quoted_terms(text: str, quote: str, sources: Sequence[Evidence]) -> N
+             )
+ 
+ 
++def _decimals(value: str) -> int:
++    return len(value.split(".", 1)[1]) if "." in value else 0
++
++
++def _numbers_equal(answer: str, source: str) -> bool:
++    """答案数值与原文数值是否等价（含四舍五入、百分比与小数容差）。
++
++    旧实现按字符串集合严格求差，于是原文 96.1% 与正文 96%（模型四舍五入）
++    被判定为「陈述数值未出现在原文行」，整轮 run 失败且已流式输出的正文被吞掉。
++    """
++
++    if answer == source:
++        return True
++    try:
++        left = float(answer)
++        right = float(source)
++    except ValueError:
++        return False
++    if left == right:
++        return True
++    try:
++        if round(right, _decimals(answer)) == round(left, 10):
++            return True
++        if round(left, _decimals(source)) == round(right, 10):
++            return True
++    except (ValueError, OverflowError):
++        pass
++    if abs(left * 100 - right) <= 1e-6 or abs(left - right * 100) <= 1e-6:
++        return True
++    if ("." in answer or "." in source) and max(abs(left), abs(right)) < 1000:
++        return abs(left - right) <= 0.01 * max(abs(left), abs(right), 1e-9)
++    return False
++
++
++def _unsupported_numbers(numbers: set[str], supported: set[str]) -> list[str]:
++    return sorted(
++        number
++        for number in numbers
++        if not any(_numbers_equal(number, item) for item in supported)
++    )
++
++
+ def bind_review_paragraphs(
+     review: SynthesisReview,
+     evidence: Sequence[Evidence],
+@@ -496,8 +538,10 @@ def bind_review_paragraphs(
+                         evidence_id=selected[0], calculation=paragraph.calculation,
+                         inputs=paragraph.inputs, result=paragraph.result,
+                     ), question)
+-                elif not numbers <= quoted_numbers | verified_numbers:
+-                    missing = sorted(numbers - quoted_numbers - verified_numbers)
++                elif missing_numbers := _unsupported_numbers(
++                    numbers, quoted_numbers | verified_numbers
++                ):
++                    missing = missing_numbers
+                     ranges = ", ".join(f"{span.evidence_id}:L{span.start_line}-L{span.end_line}" for span in paragraph.citations)
+                     raise SynthesisUnavailable(
+                         f"陈述数值{missing!r}未出现在所选原文行{ranges}；这些行包含数值{sorted(quoted_numbers)!r}。"
+@@ -736,7 +780,20 @@ def synthesize_answer(
+         raise SynthesisUnavailable(
+             "没有可用的对话模型，无法综合答案（不再用确定性拼接冒充回答）"
+         )
+-    content = str(model(request) or "").strip()
++    content = ""
++    last_error: Exception | None = None
++    for _attempt in range(2):
++        try:
++            content = str(model(request) or "").strip()
++            if content:
++                break
++            last_error = SynthesisUnavailable("候选答案模型没有返回正文")
++        except Exception as exc:  # 模型往返失败（推理吃满输出额度、桥接超时）时重试一次
++            last_error = exc
++    if not content:
++        raise SynthesisUnavailable(
++            "候选答案模型调用失败：" + (str(last_error) if last_error else "未返回正文")
++        ) from last_error
+     # 缺口只报「没有被任何来源回答」的要求：同一项要求已由通用解释或其他任务回答时，
+     # 不能再列成「资料不足」（旧实现会因此反复输出资料不足说明，把正文挤满）。
+     gaps = [
+diff --git a/backend/app/main.py b/backend/app/main.py
+index 46a22fe..1c4d032 100644
+--- a/backend/app/main.py
++++ b/backend/app/main.py
+@@ -218,7 +218,7 @@ async def status(
+     if workspace_id:
+         context = api_deps.get_workspace_context(workspace_id)
+         active_workspace = context.workspace_id
+-        vectorstore = api_deps.workspace_vector_store(context)
++        vectorstore = api_deps.get_workspace_vector_store(context)
+         state_store = api_deps.workspace_state_store(context)
+         image_store = api_deps.workspace_image_state_store(context)
+     last_sync = task_store.last_success_at

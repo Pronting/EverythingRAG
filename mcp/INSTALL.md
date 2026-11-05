@@ -68,6 +68,19 @@ backend/.venv/bin/python mcp/manage.py check
 
 ## 后续启动
 
+完成项目依赖安装、知识库配置和 MCP 接入后，可以直接双击本目录中的启动文件：
+
+- Windows：[start-windows.bat](start-windows.bat)。
+- macOS：[start-macos.command](start-macos.command)。
+
+脚本会定位项目目录、准备启动脚本依赖，并在后台启动服务。已经运行时检查并复用连接。成功后可以关闭启动窗口，后台服务继续运行；失败时保留错误信息供检查。
+
+Windows 启动成功后会保留窗口，显示连接检查状态、服务地址及工具和文档数量。按任意键或关闭窗口即可退出启动脚本，后台服务继续运行。
+
+macOS 启动成功后也会保留窗口并显示连接检查结果。按回车或关闭窗口即可退出启动脚本，后台服务继续运行。
+
+macOS 文件在 Git 中带有可执行权限。如果通过下载 ZIP 或其他复制方式获取项目后丢失了权限，在项目根目录执行一次 `chmod +x mcp/start-macos.command`，之后即可双击运行。
+
 电脑重启后可以使用同一脚本启动后台服务：
 
 ```powershell

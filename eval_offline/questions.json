@@ -1,0 +1,316 @@
+{
+  "version": 1,
+  "corpus": "docs/ (34 markdown files)",
+  "notes": "evidence 为文档原文中的可检索片段（用于判定块相关性）；answer_points 为人工判分要点。answerable=false 表示文档中无依据，Agent 应说明资料不足而非编造。",
+  "questions": [
+    {
+      "id": "S01",
+      "type": "single_hop",
+      "question": "这个项目给自己定的 Top-5 检索命中率目标是多少？",
+      "answerable": true,
+      "answer_points": ["≥80%", "自建评测集", "标注为假设/需验证"],
+      "evidence": [{"doc": "PRD/PRD.md", "snippet": "自建评测集 Top-5 命中 ≥ 80%"}]
+    },
+    {
+      "id": "S02",
+      "type": "single_hop",
+      "question": "推荐的默认本地嵌入模型是什么？它的向量维度和上下文长度是多少？",
+      "answerable": true,
+      "answer_points": ["bge-m3", "1024 维", "8192 上下文", "稠密+稀疏+ColBERT 多向量"],
+      "evidence": [{"doc": "PRD/PRD.md", "snippet": "长文本 8192、多向量（稠密+稀疏+ColBERT）"}]
+    },
+    {
+      "id": "S03",
+      "type": "single_hop",
+      "question": "混合检索用什么方法融合两路结果？参数 k 取多少？",
+      "answerable": true,
+      "answer_points": ["RRF", "固定 k=60", "不依赖分数归一化"],
+      "evidence": [{"doc": "PRD/PRD.md", "snippet": "固定 k=60"}]
+    },
+    {
+      "id": "S04",
+      "type": "single_hop",
+      "question": "流式问答的 SSE 定义了哪几种命名事件帧？",
+      "answerable": true,
+      "answer_points": ["meta", "token", "done", "error", "四类"],
+      "evidence": [{"doc": "tech/T3-流式输出SSE.md", "snippet": "自定义命名事件帧（`meta`/`token`/`done`/`error`）"}]
+    },
+    {
+      "id": "S05",
+      "type": "single_hop",
+      "question": "D-KB 决策后，工作区还保留哪些私有文件或目录？",
+      "answerable": true,
+      "answer_points": ["memory.json", "checkpoints.db", "artifacts/", "cache/jieba/"],
+      "evidence": [{"doc": "tech/v1.2.0-architecture.md", "snippet": "工作区只保留**私有件**"}]
+    },
+    {
+      "id": "S06",
+      "type": "single_hop",
+      "question": "Chroma 的 collection 如何命名？举例说明。",
+      "answerable": true,
+      "answer_points": ["chunks__<embed_model>__v<schema>", "示例 chunks__bge-m3__v1", "单一 collection"],
+      "evidence": [{"doc": "tech/00-技术选型决策文档.md", "snippet": "chunks__bge-m3__v1"}]
+    },
+    {
+      "id": "S07",
+      "type": "single_hop",
+      "question": "常驻内存的目标上限是多少？这个数字包含本地大模型进程吗？",
+      "answerable": true,
+      "answer_points": ["≤2GB", "不含本地大模型进程"],
+      "evidence": [{"doc": "PRD/PRD.md", "snippet": "常驻内存（不含本地大模型进程）"}]
+    },
+    {
+      "id": "S08",
+      "type": "single_hop",
+      "question": "v0.2 的流式首 token 延迟目标是多少？是否包含检索耗时？",
+      "answerable": true,
+      "answer_points": ["<5s", "含检索"],
+      "evidence": [{"doc": "PRD/PRD.md", "snippet": "首 token（含检索）"}]
+    },
+    {
+      "id": "S09",
+      "type": "single_hop",
+      "question": "MVP 阶段支持导入哪些文档格式？",
+      "answerable": true,
+      "answer_points": ["只支持 Markdown", "外部链接只存元数据不抓取"],
+      "evidence": [{"doc": "PRD/PRD.md", "snippet": "MVP 只认 MD"}]
+    },
+    {
+      "id": "S10",
+      "type": "single_hop",
+      "question": "图片方案 B 的具体处理流程是什么？问答时默认会调用识图模型吗？",
+      "answerable": true,
+      "answer_points": ["入库识图转文字描述", "描述进向量库作为检索主干", "原图路径存元数据", "问答默认不调识图"],
+      "evidence": [{"doc": "PRD/PRD.md", "snippet": "入库时识图模型把图转文字描述"}]
+    },
+    {
+      "id": "S11",
+      "type": "single_hop",
+      "question": "为什么在向量检索之外还要引入 BM25？",
+      "answerable": true,
+      "answer_points": ["向量对专有名词/编号/精确短语召回弱", "BM25 补字面命中"],
+      "evidence": [{"doc": "PRD/PRD.md", "snippet": "向量检索对专有名词/编号/精确短语召回弱"}]
+    },
+    {
+      "id": "S12",
+      "type": "single_hop",
+      "question": "D-KB 是什么时候、由谁拍板的？它取代了原来的什么设计？",
+      "answerable": true,
+      "answer_points": ["D-KB", "2026-09-20", "用户拍板", "取代每工作区知识库/6.2c 迁移"],
+      "evidence": [{"doc": "PRD/PRD.md", "snippet": "知识库全局共享（D-KB，2026-09-20 用户拍板）"}]
+    },
+    {
+      "id": "S13",
+      "type": "single_hop",
+      "question": "对话级去重键由什么组成？为什么不用文件 hash？",
+      "answerable": true,
+      "answer_points": ["来源平台 + 规范化后的对话内容", "不是文件 hash", "防止编辑导出文件导致重复入库"],
+      "evidence": [{"doc": "PRD/PRD.md", "snippet": "来源平台 + 对话内容（规范化后）"}]
+    },
+    {
+      "id": "S14",
+      "type": "single_hop",
+      "question": "1000 个 Markdown 文件、约 50 万 token 的冷启动全量导入目标是多少？",
+      "answerable": true,
+      "answer_points": ["<5 分钟", "数值为假设", "自测基准"],
+      "evidence": [{"doc": "PRD/PRD.md", "snippet": "1000 个 MD 文件 / ~50 万 token 语料"}]
+    },
+    {
+      "id": "S15",
+      "type": "single_hop",
+      "question": "首次导入 100 个 Markdown（10-50MB）的嵌入耗时目标是多少？",
+      "answerable": true,
+      "answer_points": ["≤5-10 分钟", "取决于设备与嵌入模型", "后台异步+进度条"],
+      "evidence": [{"doc": "PRD/PRD.md", "snippet": "首次导入 100 个 MD（10-50MB）"}]
+    },
+    {
+      "id": "S16",
+      "type": "single_hop",
+      "question": "增量同步时，指纹比对扫描 1000 个文件的目标耗时是多少？",
+      "answerable": true,
+      "answer_points": ["<1 秒", "无变化零重嵌入"],
+      "evidence": [{"doc": "PRD/PRD.md", "snippet": "指纹比对扫描 1000 文件 < 1 秒"}]
+    },
+    {
+      "id": "S17",
+      "type": "single_hop",
+      "question": "v1.2.0 的三种权限模式分别是什么，默认用哪种？",
+      "answerable": true,
+      "answer_points": ["ask/auto/full", "ask=联网前暂停等待批准", "auto=审核节点自动批准", "full=自动执行", "默认 ask"],
+      "evidence": [{"doc": "PRD/v1.2.0-PRD.md", "snippet": "`full` | 完全访问权限"}]
+    },
+    {
+      "id": "S18",
+      "type": "single_hop",
+      "question": "批准请求 ApprovalRequest 有哪几个状态？",
+      "answerable": true,
+      "answer_points": ["pending", "approved", "denied", "superseded"],
+      "evidence": [{"doc": "PRD/v1.2.0-PRD.md", "snippet": "pending/approved/denied/superseded"}]
+    },
+    {
+      "id": "S19",
+      "type": "table",
+      "question": "按 float32 计算，2048 维向量在 10,000 条记录时占多少存储空间？1024 维和 2560 维呢？",
+      "answerable": true,
+      "answer_points": ["1024 维 39.06 MiB", "2048 维 78.13 MiB", "2560 维 97.66 MiB", "仅向量数值，不含 HNSW/正文等"],
+      "evidence": [{"doc": "PRD/v1.2.0-multimodal-quality-PRD.md", "snippet": "39.06 MiB"}]
+    },
+    {
+      "id": "S20",
+      "type": "single_hop",
+      "question": "为什么 MVP 不采用 CLIP 图像向量？",
+      "answerable": true,
+      "answer_points": ["方案 B 已验证为主流务实做法", "增加模型体积/算力/多模态复杂度", "MVP 收益不成立", "v1.0 后评估"],
+      "evidence": [{"doc": "PRD/PRD.md", "snippet": "方案 B（识图→文字→文本嵌入）已被调研验证为主流务实做法"}]
+    },
+    {
+      "id": "T01",
+      "type": "terminology",
+      "question": "RRF 的全称是什么？它为什么不需要分数归一化？",
+      "answerable": true,
+      "answer_points": ["Reciprocal Rank Fusion", "按排名而非分数融合", "固定 k=60"],
+      "evidence": [{"doc": "PRD/PRD.md", "snippet": "Reciprocal Rank Fusion"}]
+    },
+    {
+      "id": "T02",
+      "type": "terminology",
+      "question": "项目里 Chroma 用的 HNSW 是什么？默认参数需要调整吗？",
+      "answerable": true,
+      "answer_points": ["HNSW 是近似最近邻索引", "个人规模默认参数足够", "余弦距离"],
+      "evidence": [{"doc": "tech/T4-向量库与嵌入.md", "snippet": "HNSW 默认参数"}]
+    },
+    {
+      "id": "T03",
+      "type": "terminology",
+      "question": "文档里的「块」「指纹」「去重键」分别怎么定义？",
+      "answerable": true,
+      "answer_points": ["块=向量库最小检索单元", "指纹=判断文件是否变化的标识", "去重键=判定内容是否同源的键"],
+      "evidence": [{"doc": "PRD/PRD.md", "snippet": "块（chunk）= 向量库最小检索单元"}]
+    },
+    {
+      "id": "M01",
+      "type": "multi_hop",
+      "question": "项目对 LangChain / LlamaIndex 的态度在 v1.1.0 和 v1.2.0 之间发生了什么变化？依据是什么？",
+      "answerable": true,
+      "answer_points": ["v1.1.0 明确否，理由是绕过 OutboundClient、破坏审计", "v1.2.0 采用 LangGraph StateGraph", "LangGraph 会引入 langchain-core 传递依赖", "属于决策反转/需说明边界"],
+      "evidence": [
+        {"doc": "PRD/v1.1.0-PRD.md", "snippet": "绕过 `OutboundClient`"},
+        {"doc": "PRD/v1.2.0-PRD.md", "snippet": "LangGraph 会引入 `langchain-core` 等传递依赖"}
+      ]
+    },
+    {
+      "id": "M02",
+      "type": "multi_hop",
+      "question": "「记忆摘要/用户画像」在主 PRD 的路线图里处于什么阶段？v1.2.0 实际交付了什么记忆能力？",
+      "answerable": true,
+      "answer_points": ["主 PRD 将其列为 v0.1 不做/Won't Have", "v1.2.0 已交付工作区记忆 memory.json", "会话开始固定快照、可纠正"],
+      "evidence": [
+        {"doc": "PRD/PRD.md", "snippet": "记忆摘要/用户画像"},
+        {"doc": "PRD/v1.2.0-PRD.md", "snippet": "工作区记忆 | 本地 `memory.json`"}
+      ]
+    },
+    {
+      "id": "M03",
+      "type": "cross_doc",
+      "question": "知识库到底按工作区隔离还是全局共享？请对照 v1.2.0 PRD 和后续决策说明。",
+      "answerable": true,
+      "answer_points": ["v1.2.0 PRD 写的是工作区隔离知识库", "D-KB 改为全局共享", "工作区只隔离对话/私有件", "D-KB 取代前者"],
+      "evidence": [
+        {"doc": "PRD/v1.2.0-PRD.md", "snippet": "工作区隔离知识库"},
+        {"doc": "PRD/PRD.md", "snippet": "所有工作区读写同一份文档"}
+      ]
+    },
+    {
+      "id": "M04",
+      "type": "table",
+      "question": "导入性能目标是否自洽？1000 个文件 <5 分钟与 100 个文件 5-10 分钟两个数字怎么解释？",
+      "answerable": true,
+      "answer_points": ["PRD 11 章写 1000 MD <5 分钟", "验收章写 100 MD ≤5-10 分钟", "两处口径冲突/规模差 10 倍而时间反了", "均为假设待实测"],
+      "evidence": [
+        {"doc": "PRD/PRD.md", "snippet": "1000 个 MD 文件 / ~50 万 token 语料"},
+        {"doc": "PRD/PRD.md", "snippet": "首次导入 100 个 MD（10-50MB）"}
+      ]
+    },
+    {
+      "id": "M05",
+      "type": "multi_hop",
+      "question": "诊断报告认为检索质量的主根因有哪些？它举了哪个具体的相似度数字说明缺少门控？",
+      "answerable": true,
+      "answer_points": ["切块碎片化（49.6% <100 字）", "检索无相关度门控", "0.34 相似度仍塞进 top-5", "提示词过度约束"],
+      "evidence": [
+        {"doc": "诊断报告-检索质量与生成行为.md", "snippet": "切块碎片化是检索质量的主根因"},
+        {"doc": "诊断报告-检索质量与生成行为.md", "snippet": "无论相似度多低（0.34）都硬塞 top-5 进上下文"}
+      ]
+    },
+    {
+      "id": "M06",
+      "type": "cross_doc",
+      "question": "主 PRD 对嵌入模型出网是什么要求？v1.2.0 多模态专题又选定了什么嵌入配置？两者是否一致？",
+      "answerable": true,
+      "answer_points": ["PRD 明确嵌入模型无云端分支", "即使将来加也必须默认关", "出网只允许 ChatModel/VisionModel", "多模态 PRD 却选定硅基流动 Qwen3-Embedding-8B 云端 2048 维", "两者冲突"],
+      "evidence": [
+        {"doc": "PRD/PRD.md", "snippet": "嵌入模型无云端分支"},
+        {"doc": "PRD/v1.2.0-multimodal-quality-PRD.md", "snippet": "当前保存配置使用硅基流动"}
+      ]
+    },
+    {
+      "id": "M07",
+      "type": "cross_doc",
+      "question": "文档要求 API Key 如何存储？允许明文写进 config.json 吗？",
+      "answerable": true,
+      "answer_points": ["API Key 不入 config.json 明文", "环境变量/内存持有+掩码", "config 权限 0600", "T6 要求落盘零密钥/只存引用"],
+      "evidence": [
+        {"doc": "PRD/PRD.md", "snippet": "API Key 不入 `config.json` 明文"},
+        {"doc": "tech/T6-配置隐私部署.md", "snippet": "落盘零密钥"}
+      ]
+    },
+    {
+      "id": "TB01",
+      "type": "table",
+      "question": "三模型配置的既定决策是什么？哪些必配、哪个是条件性配置？",
+      "answerable": true,
+      "answer_points": ["嵌入/对话必配", "识图条件性配置", "功能开关联动"],
+      "evidence": [{"doc": "PRD/PRD.md", "snippet": "三模型配置（嵌入/对话必配、识图条件配）"}]
+    },
+    {
+      "id": "X01",
+      "type": "cross_doc",
+      "question": "本地服务绑定哪个地址和端口？为什么不用 0.0.0.0？",
+      "answerable": true,
+      "answer_points": ["127.0.0.1", "随机端口", "拒绝外部访问/隐私", "MVP 不做远程访问"],
+      "evidence": [{"doc": "PRD/PRD.md", "snippet": "默认绑定 `127.0.0.1:<随机端口>`"}]
+    },
+    {
+      "id": "N01",
+      "type": "no_answer",
+      "question": "Everything RAG 是否提供 iOS 客户端？支持哪些移动端功能？",
+      "answerable": false,
+      "answer_points": ["文档未提及 iOS/移动客户端", "应说明资料不足", "不得编造功能或发布时间"],
+      "evidence": []
+    },
+    {
+      "id": "N02",
+      "type": "no_answer",
+      "question": "每次问答的 API 成本是多少人民币？按月估算多少钱？",
+      "answerable": false,
+      "answer_points": ["文档无定价/成本数据", "应说明无法计算", "不得编造单价"],
+      "evidence": []
+    },
+    {
+      "id": "N03",
+      "type": "negative_evidence",
+      "question": "能直接导入 Excel（xlsx）文件吗？",
+      "answerable": true,
+      "answer_points": ["不能，MVP 只认 Markdown", "xlsx 在明确不做清单", "v0.2 先做 TXT/HTML"],
+      "evidence": [{"doc": "PRD/PRD.md", "snippet": "**PDF/结构化数据**（docx/xlsx/EPUB 等）"}]
+    },
+    {
+      "id": "N04",
+      "type": "negative_evidence",
+      "question": "支持云同步或多设备同步吗？",
+      "answerable": true,
+      "answer_points": ["MVP 不做多设备同步", "不做云账号/云端存储", "纯本地是信任分水岭"],
+      "evidence": [{"doc": "PRD/PRD.md", "snippet": "MVP 不做多设备同步、不做云账号、不做云端存储"}]
+    }
+  ]
+}

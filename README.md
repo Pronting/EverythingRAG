@@ -144,9 +144,15 @@ Acceptance and evaluation: `docs/tech/v1.2.0-acceptance-report.md` (A01–A32 it
 - The routing evaluation M1–M6 fully meets targets (155 cases = 87 real + 68 constructed, reproducible artifacts).
 - **Not met / not executed (no sugar-coating)**: session moves (A27) **meet the target at the backend endpoint level but not on the real frontend path** (the frontend does not send `confirm` / `expected_context_epoch` / `origin_run_id`, so a session carrying history receives a 409 in the UI; separately, the legacy drag-and-drop move entry bypasses the state machine). The four live items (real news, real four-level Q&A, real multi-turn tool calls, real data migration) and the PRD 16.4 answer-quality / thinking-level evaluations are **not executed** (pending user authorization, see `docs/tech/v1.2.0-live-eval-plan.md`). Enable with: `EVERYTHING_RAG_LIVE_EVAL=1` (A tier) / `EVERYTHING_RAG_RUN_LIVE_EVAL=1` (real-index recall gates).
 
+## MCP 文档检索
+
+项目支持通过 `http://127.0.0.1:9999/mcp/` 接入 Agent，提供知识概览、目录查询、正文检索与连续阅读四个只读工具。
+
+配置、Codex 接入和验证命令见 [MCP 使用说明](docs/tech/mcp-server-usage.md)，实现依据见 [MCP 设计文档](docs/tech/mcp-server-design.md)。
+
 ## Roadmap
 
-* MCP and Skills support
+* Skills support
 * Support for more data sources
 * More accurate chunking strategies
 * ...
